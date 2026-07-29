@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+app.db
+*.db-journal
+venv/
+.venv/
+test_output.mp3
+test_input.wav

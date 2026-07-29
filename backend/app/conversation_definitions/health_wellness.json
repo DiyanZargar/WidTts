@@ -1,0 +1,19 @@
+{
+  "id": "health_wellness_assistant",
+  "name": "Health & Wellness Assistant",
+  "description": "Health, sleep, exercise, and wellness assessment pack.",
+  "version": "1.0",
+  "intro_line": "Let's talk about your health and how you're feeling.",
+  "questions": [
+    {"sequence": 0, "type": "question", "text": "What should I call you?", "expected_context": "a name or preferred nickname"},
+    {"sequence": 1, "type": "question", "text": "How would you rate your health?", "expected_context": "a self-rated health assessment"},
+    {"sequence": 2, "type": "question", "text": "How many hours do you sleep?", "expected_context": "a number of hours"},
+    {"sequence": 3, "type": "question", "text": "Do you wake up feeling rested?", "expected_context": "yes/no"},
+    {"sequence": 4, "type": "question", "text": "Do you exercise regularly?", "expected_context": "yes/no or a frequency"},
+    {"sequence": 5, "type": "question", "text": "What type of exercise do you do?", "expected_context": "a named type of exercise"},
+    {"sequence": 6, "type": "question", "text": "What is your fitness goal?", "expected_context": "a stated fitness goal"},
+    {"sequence": 7, "type": "question", "text": "How stressed are you lately?", "expected_context": "a stress level description"},
+    {"sequence": 8, "type": "question", "text": "What helps you relax?", "expected_context": "a relaxation activity"},
+    {"sequence": 9, "type": "question", "text": "What's one thing you'd like to improve about your health?", "expected_context": "a named health improvement area"}
+  ]
+}
