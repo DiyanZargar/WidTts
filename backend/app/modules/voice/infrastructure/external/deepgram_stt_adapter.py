@@ -54,10 +54,13 @@ class DeepgramSTTAdapter(STTProviderInterface):
 
             # Log ALL received messages for debugging (not just transcripts)
             msg_type = data.get("type", "unknown")
-            channel = data.get("channel") if isinstance(data.get("channel"), dict) else {}
-            alt = channel.get("alternatives", [{}])[0] if channel else {}
-            text = alt.get("transcript", "")
-            is_final = data.get("is_final", False)
+            text = ""
+            if "channel" in data and isinstance(data["channel"], dict):
+                alt = data["channel"].get("alternatives", [{}])[0]
+                text = alt.get("transcript", "")
+            if not text:
+                text = data.get("transcript", "") or data.get("text", "")
+            is_final = data.get("is_final", False) or msg_type in ("TurnEnded", "UtteranceEnd")
             if text:
                 logger.info(
                     f"[STT RECEIVED] {'FINAL' if is_final else 'PARTIAL'} transcript: "
@@ -132,7 +135,11 @@ class DeepgramSTTAdapter(STTProviderInterface):
                 f"reader={'done' if (self._reader_task and self._reader_task.done()) else 'running' if self._reader_task else 'None'} "
                 f"— reconnecting"
             )
-            await self.connect()
+            try:
+                await self.connect()
+            except Exception as e:
+                logger.error(f"[STT RECONNECT ERROR] Failed to connect to Deepgram STT: {e}")
+                return
 
         _t0 = time.monotonic()
         try:
@@ -193,12 +200,33 @@ class DeepgramSTTAdapter(STTProviderInterface):
             logger.info(f"[STT DRAIN EPOCH] Discarded {discarded} items before epoch={epoch}")
         return discarded
 
+    @staticmethod
+    def parse_stt_message(raw: dict) -> tuple[str, bool]:
+        """
+        Extracts transcript text and finality flag from a raw Deepgram STT message.
+        Supports both v1 (nova-2) and v2 (flux-general-en) message structures.
+        """
+        text = ""
+        if "channel" in raw and isinstance(raw["channel"], dict):
+            alt = raw["channel"].get("alternatives", [{}])[0]
+            text = alt.get("transcript", "")
+        if not text:
+            text = raw.get("transcript", "") or raw.get("text", "")
+            
+        msg_type = raw.get("type", "")
+        msg_event = raw.get("event", "")
+        
+        is_final = bool(
+            raw.get("is_final", False)
+            or msg_type in ("TurnEnded", "UtteranceEnd")
+            or msg_event == "TurnEnded"
+        )
+        return text.strip(), is_final
+
     async def receive_transcript(self) -> Optional[str]:
         data = await self.receive_any()
-        channel = data.get("channel") if isinstance(data.get("channel"), dict) else {}
-        alt = channel.get("alternatives", [{}])[0] if channel else {}
-        transcript = alt.get("transcript", "")
-        return transcript if data.get("is_final") and transcript else None
+        text, is_final = self.parse_stt_message(data)
+        return text if is_final and text else None
 
     async def close(self) -> None:
         if self._reader_task and not self._reader_task.done():

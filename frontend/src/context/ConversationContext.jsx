@@ -15,7 +15,7 @@ function reducer(state, action) {
     case "OPEN_WIDGET":
       return { ...state, isOpen: true };
     case "CLOSE_WIDGET":
-      return { ...state, isOpen: false };
+      return { ...initialState, isOpen: false };
     case "SESSION_STARTED":
       return { ...state, status: "active", sessionId: action.sessionId, isListening: true };
     case "SET_LISTENING":

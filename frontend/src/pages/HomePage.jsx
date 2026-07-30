@@ -36,11 +36,18 @@ export default function HomePage() {
     disconnect();
     sessionStorage.removeItem("widget_session_id");
     dispatch({ type: "CLOSE_WIDGET" });
+    setIsMuted(false);
+  };
+
+  // Restarts session after completion or upon user request
+  const handleRestartSession = () => {
+    disconnect();
+    sessionStorage.removeItem("widget_session_id");
+    dispatch({ type: "RESET_FOR_NEW_SESSION" });
+    setIsMuted(false);
     setTimeout(() => {
-      dispatch({ type: "RESET_FOR_NEW_SESSION" });
-      dispatch({ type: "CLOSE_WIDGET" }); // Ensure isOpen goes back to false
-      setIsMuted(false);
-    }, 100);
+      connect();
+    }, 50);
   };
 
   // Change conversation pack ID and trigger clean session re-handshake
@@ -127,7 +134,11 @@ export default function HomePage() {
 
       {/* 4. Central Hero Experience (Holographic Orb & Subtitles) */}
       <main className="flex-1 flex flex-col items-center justify-center w-full max-w-4xl z-10 gap-2">
-        <HolographicOrb onOpenSession={handleOpenSession} />
+        <HolographicOrb
+          onOpenSession={handleOpenSession}
+          onCloseSession={handleCloseSession}
+          onRestartSession={handleRestartSession}
+        />
         <TranscriptOverlay />
       </main>
 

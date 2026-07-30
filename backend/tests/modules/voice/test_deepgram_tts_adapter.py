@@ -36,6 +36,7 @@ def _make_mocks():
     mock_conn = AsyncMock()
 
     mock_client.speak.v1.connect = MagicMock(return_value=mock_ctx)
+    mock_client.speak.v2.connect = MagicMock(return_value=mock_ctx)
     mock_ctx.__aenter__ = AsyncMock(return_value=mock_conn)
     mock_ctx.__aexit__ = AsyncMock(return_value=False)
     return mock_client, mock_ctx, mock_conn
@@ -171,7 +172,10 @@ async def test_synthesize_stream_sends_text_and_yields_chunks(mock_client_cls):
         chunks.append(chunk)
 
     assert chunks == [b"chunk_1", b"chunk_2"]
-    mock_conn.send_text.assert_called_once()
+    if adapter._is_v2:
+        mock_conn.send_speak.assert_called_once()
+    else:
+        mock_conn.send_text.assert_called_once()
     mock_conn.send_flush.assert_called_once()
 
     await adapter.close()

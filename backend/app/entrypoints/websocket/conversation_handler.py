@@ -29,6 +29,7 @@ from app.modules.conversation.domain.interfaces.response_repository_interface im
 from app.modules.conversation.domain.interfaces.validation_provider_interface import ValidationProviderInterface
 from app.modules.interruption.domain.interfaces.interruption_repository_interface import InterruptionRepositoryInterface
 from app.modules.voice.domain.interfaces.stt_provider_interface import STTProviderInterface
+from app.modules.voice.infrastructure.external.deepgram_stt_adapter import DeepgramSTTAdapter
 from app.modules.voice.domain.interfaces.tts_provider_interface import TTSProviderInterface
 from app.modules.session.application.use_cases.create_session import CreateSession
 from app.modules.session.application.use_cases.get_session import GetSession
@@ -437,9 +438,7 @@ async def conversation_socket(
                     if current_turn and item_epoch < current_turn.listening_epoch:
                         pl.stt_stale_discarded(session_id, current_turn.turn_id, item_epoch, current_turn.listening_epoch)
                         continue
-                    alt = raw.get("channel", {}).get("alternatives", [{}])[0]
-                    text = alt.get("transcript", "")
-                    is_final = raw.get("is_final", False)
+                    text, is_final = DeepgramSTTAdapter.parse_stt_message(raw)
                     if text and not is_final:
                         if current_turn and not current_turn.is_destroyed:
                             pl.stt_partial_transcript(session_id, current_turn.turn_id, item_epoch, text)

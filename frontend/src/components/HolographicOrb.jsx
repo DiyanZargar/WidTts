@@ -2,7 +2,11 @@ import React, { useContext, useEffect, useRef, useState } from "react";
 import { ConversationContext } from "../context/ConversationContext";
 import { audioVolumeTracker } from "../utils/audioUtils";
 
-export default function HolographicOrb({ onOpenSession }) {
+export default function HolographicOrb({
+  onOpenSession,
+  onCloseSession,
+  onRestartSession,
+}) {
   const { state } = useContext(ConversationContext);
   const containerRef = useRef(null);
   const coreRef = useRef(null);
@@ -25,6 +29,16 @@ export default function HolographicOrb({ onOpenSession }) {
   };
 
   const orbState = getOrbState();
+
+  const handleOrbClick = () => {
+    if (!state.isOpen) {
+      onOpenSession?.();
+    } else if (state.status === "completed" || state.status === "cancelled") {
+      onRestartSession?.();
+    } else {
+      onCloseSession?.();
+    }
+  };
 
   // Mouse tilt parallax effect
   const handleMouseMove = (e) => {
@@ -143,13 +157,20 @@ export default function HolographicOrb({ onOpenSession }) {
       ref={containerRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 ease-out select-none"
+      className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 ease-out select-none group"
       style={{
         width: "420px",
         height: "420px",
         transform: `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
       }}
-      onClick={!state.isOpen ? onOpenSession : undefined}
+      onClick={handleOrbClick}
+      title={
+        !state.isOpen
+          ? "Initialize Core"
+          : state.status === "completed" || state.status === "cancelled"
+          ? "Restart Core"
+          : "Terminate Core"
+      }
     >
       {/* 1. Large ambient background glow behind the widget */}
       <div 
@@ -211,13 +232,27 @@ export default function HolographicOrb({ onOpenSession }) {
 
       </div>
 
-      {/* Resting state "Click to interact" floating prompt */}
-      {!state.isOpen && (
-        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-          <span className="text-zinc-500 text-xs font-semibold tracking-[0.2em] uppercase transition-all hover:text-zinc-400">
+      {/* Interaction floating prompt */}
+      {!state.isOpen ? (
+        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-center pointer-events-none transition-all duration-300">
+          <span className="text-zinc-500 text-xs font-semibold tracking-[0.2em] uppercase transition-all group-hover:text-zinc-300">
             Initialize Core
           </span>
           <div className="w-1.5 h-1.5 rounded-full bg-zinc-500/40 mx-auto mt-2 animate-ping" />
+        </div>
+      ) : state.status === "completed" || state.status === "cancelled" ? (
+        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-center pointer-events-none transition-all duration-300">
+          <span className="text-emerald-400/90 text-xs font-semibold tracking-[0.2em] uppercase transition-all group-hover:text-emerald-300">
+            Restart Core
+          </span>
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50 mx-auto mt-2 animate-ping" />
+        </div>
+      ) : (
+        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <span className="text-red-400/80 text-xs font-semibold tracking-[0.2em] uppercase transition-all group-hover:text-red-300">
+            Terminate Core
+          </span>
+          <div className="w-1.5 h-1.5 rounded-full bg-red-500/40 mx-auto mt-2 animate-ping" />
         </div>
       )}
     </div>

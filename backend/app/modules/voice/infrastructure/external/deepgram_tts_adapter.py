@@ -5,6 +5,7 @@ import httpx
 from deepgram import AsyncDeepgramClient
 from deepgram.core.events import EventType
 from deepgram.speak.v1.types import SpeakV1Text
+from deepgram.speak.v2.types import SpeakV2Speak
 from app.shared.config.settings import settings
 from app.shared.logging.logger import logger
 from app.modules.voice.domain.interfaces.tts_provider_interface import TTSProviderInterface
@@ -13,6 +14,8 @@ from app.modules.voice.domain.interfaces.tts_provider_interface import TTSProvid
 class DeepgramTTSAdapter(TTSProviderInterface):
     """
     Deepgram TTS adapter using official SDK (deepgram-sdk v7.x).
+
+    Supports both v1 (Aura/Aura-2 models) and v2 (Flux models like flux-alexis-en).
 
     Follows the official template pattern:
         1. connect_stream()  – opens persistent WebSocket via async context manager
@@ -26,11 +29,17 @@ class DeepgramTTSAdapter(TTSProviderInterface):
         self._client: Optional[AsyncDeepgramClient] = None
         self._http_client: Optional[httpx.AsyncClient] = None
         self._ctx = None           # async context manager handle
-        self._conn = None          # AsyncV1SocketClient
+        self._conn = None          # AsyncV1SocketClient or AsyncV2SocketClient
         self._tts_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
         self._stream_connected: bool = False
         self._listen_task: Optional[asyncio.Task] = None
         self._closed: bool = False
+        self._is_v2: bool = False
+
+    @staticmethod
+    def _is_v2_model(model_name: str) -> bool:
+        m = model_name.lower().strip()
+        return m.startswith("flux-") or "v2" in m
 
     # ── REST fallback (backward compatible) ──
 
@@ -43,7 +52,9 @@ class DeepgramTTSAdapter(TTSProviderInterface):
         return self._http_client
 
     async def synthesize(self, text: str) -> bytes:
-        tts_url = f"https://api.deepgram.com/v1/speak?model={settings.deepgram_tts_model}"
+        model_name = settings.deepgram_tts_model
+        version = "v2" if self._is_v2_model(model_name) else "v1"
+        tts_url = f"https://api.deepgram.com/{version}/speak?model={model_name}"
         client = self._get_http_client()
         resp = await client.post(
             tts_url,
@@ -87,16 +98,26 @@ class DeepgramTTSAdapter(TTSProviderInterface):
 
         logger.info(f"[TTS MSG] Received control message type={msg_type}")
 
-        if msg_type in ("Flushed", "Cleared"):
+        is_eos = False
+        if getattr(self, "_is_v2", False):
+            # In v2 (Flux), 'Flushed' arrives BEFORE audio bytes. 'SpeechMetadata' marks completion.
+            if msg_type in ("SpeechMetadata", "SpeakV2SpeechMetadata", "Cleared", "SpeakV2Cleared"):
+                is_eos = True
+        else:
+            # In v1 (Aura), 'Flushed' arrives AFTER audio bytes.
+            if msg_type in ("Flushed", "Cleared"):
+                is_eos = True
+
+        if is_eos:
             try:
                 self._tts_queue.put_nowait(None)  # end-of-stream sentinel
                 logger.info(f"[TTS MSG] Enqueued EOS sentinel ({msg_type})")
             except asyncio.QueueFull:
                 logger.warning(f"[TTS MSG] Queue full — dropping {msg_type} sentinel")
-        elif msg_type in ("Warning", "Error"):
+        elif msg_type in ("Warning", "Error", "SpeakV2Warning", "SpeakV2Error"):
             logger.warning(f"[TTS MSG] Warning/Error: {message}")
-        elif msg_type == "Metadata":
-            logger.info(f"[TTS MSG] Metadata: {message}")
+        elif msg_type in ("Metadata", "SpeakV2SessionMetadata", "SpeakV2SpeechMetadata", "Flushed", "SpeakV2Flushed"):
+            logger.info(f"[TTS MSG] Control message: {msg_type}")
 
     def _on_close(self) -> None:
         logger.info("[TTS CONNECT] Deepgram TTS WebSocket closed by server")
@@ -148,18 +169,28 @@ class DeepgramTTSAdapter(TTSProviderInterface):
         self._drain_queue()
         self._closed = False
 
-        model_name = settings.deepgram_tts_model  # e.g. "aura-2-thalia-en"
-        self._ctx = self._client.speak.v1.connect(
-            model=model_name,
-            encoding="linear16",
-            sample_rate="48000",
-        )
+        model_name = settings.deepgram_tts_model
+        self._is_v2 = self._is_v2_model(model_name)
+
+        if self._is_v2:
+            self._ctx = self._client.speak.v2.connect(
+                model=model_name,
+                encoding="linear16",
+                sample_rate="48000",
+            )
+        else:
+            self._ctx = self._client.speak.v1.connect(
+                model=model_name,
+                encoding="linear16",
+                sample_rate="48000",
+            )
+
         self._conn = await self._ctx.__aenter__()
 
         # Register event handlers BEFORE start_listening (template pattern)
         self._conn.on(EventType.MESSAGE, self._on_message)
         self._conn.on(EventType.OPEN, lambda _: logger.info(
-            f"[TTS CONNECT] Deepgram TTS WebSocket opened (model={model_name})"))
+            f"[TTS CONNECT] Deepgram TTS WebSocket opened (model={model_name}, version={'v2' if self._is_v2 else 'v1'})"))
         self._conn.on(EventType.CLOSE, lambda _: self._on_close())
         self._conn.on(EventType.ERROR, lambda error: logger.error(
             f"[TTS CONNECT] Error: {error}"))
@@ -167,7 +198,7 @@ class DeepgramTTSAdapter(TTSProviderInterface):
         # start_listening() enters an infinite async for loop — run as background task
         self._listen_task = asyncio.create_task(self._conn.start_listening())
         self._stream_connected = True
-        logger.info(f"[TTS CONNECT] Deepgram TTS WebSocket connected (model={model_name})")
+        logger.info(f"[TTS CONNECT] Deepgram TTS WebSocket connected (model={model_name}, version={'v2' if self._is_v2 else 'v1'})")
 
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
         """
@@ -179,8 +210,12 @@ class DeepgramTTSAdapter(TTSProviderInterface):
             await self.connect_stream()
         self._drain_queue()
 
-        await self._conn.send_text(SpeakV1Text(text=text))
-        await self._conn.send_flush()
+        if getattr(self, "_is_v2", False):
+            await self._conn.send_speak(SpeakV2Speak(text=text))
+            await self._conn.send_flush()
+        else:
+            await self._conn.send_text(SpeakV1Text(text=text))
+            await self._conn.send_flush()
         logger.info(f"[TTS STREAM] Sent text ({len(text)} chars) + flush. Yielding chunks...")
 
         chunk_count = 0
