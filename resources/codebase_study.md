@@ -1238,6 +1238,15 @@ Singleton via `getAudioConfig()`. Supports runtime updates with listener notific
 ### File:
 `frontend/src/audio/AudioPipeline.js`
 
+## LESSON 83: Audio Preprocessing Pipeline & Worklets
+
+### Files:
+- `frontend/src/audio/AudioPipeline.js`
+- `frontend/public/audio-worklet/rnnoise-processor.js`
+- `frontend/public/audio-worklet/high-pass-processor.js`
+- `frontend/public/audio-worklet/noise-gate-processor.js`
+- `frontend/public/audio-worklet/pcm-player-processor.js`
+
 Chains AudioWorklet processors for enterprise-grade audio preprocessing:
 
 ```
@@ -1252,6 +1261,12 @@ class AudioPipeline {
   stop()                           // Tear down all nodes
 }
 ```
+
+#### AudioWorklet Processors (`frontend/public/audio-worklet/`):
+1. **`rnnoise-processor.js`**: Deep learning neural network noise suppression worklet operating on audio frames to reduce background ambient noise.
+2. **`high-pass-processor.js`**: IIR high-pass filter with configurable cutoff frequency (default 80Hz). Attenuates sub-audible low-frequency mechanical rumble, wind noise, and microphone handling thumps.
+3. **`noise-gate-processor.js`**: Adaptive noise gate maintaining a dynamic noise floor estimate (`_noiseFloor`), an envelope follower with configurable attack/release parameters (`attack=0.01s`, `release=0.1s`), hold-time counter (`holdTime=0.15s`), and smooth multiplier transitions (`1.0` open to `0.0` closed). Continuously reports gate state to the main thread.
+4. **`pcm-player-processor.js`**: Low-latency PCM audio buffer playback worklet for rendering raw streaming audio frames.
 
 Each module is independently replaceable. Worklet load failures are graceful (warns and skips). The pipeline runs entirely on the client before audio is transmitted over WebSocket.
 
@@ -1377,47 +1392,114 @@ Singleton via `getAudioMetrics()`.
 ### File:
 `frontend/src/utils/audioUtils.js`
 
-Contains functions for Web Audio API management and real-time audio volume analysis:
-- **`audioVolumeTracker`**: Shared object storing normalized `mic` and `speaker` volume levels, plus `isTTSPlaying` flag.
-- **`setTTSPlaying(bool)`**: Updates the TTS playing state for volume-based interruption detection.
-- **`trackMicVolume(stream)`**: Connects microphone stream to `AnalyserNode` (`fftSize = 256`) and updates `audioVolumeTracker.mic` on every animation frame.
-- **`createMicStream(onChunk)`**: Initializes `MediaRecorder` for `audio/webm;codecs=opus` with 100ms time slices. Returns `{stream, stop}`.
-- **`playAudioBuffer(arrayBuffer, audioContext)`**: Decodes and plays raw TTS audio through speaker `AnalyserNode`.
+Contains core utilities for Web Audio API stream management, real-time volume analysis, and gapless streaming audio playback:
+
+#### 1. Streaming Audio Player (`StreamingAudioPlayer`)
+Continuous, gapless audio playback engine for streaming TTS chunks:
+- **Gapless Scheduling (`_nextPlayTime`)**: Each chunk is scheduled via `AudioBufferSourceNode.start(time)` at the precise sample duration completion of the previous chunk (`_nextPlayTime += buf.duration`), eliminating audible click or drop micro-gaps between chunks.
+- **Int16 to Float32 Conversion**: Converts 16-bit signed PCM byte buffers (`Int16Array`) to 32-bit floating point Web Audio buffers (`int16[i] / 32768.0`) at 48kHz.
+- **Speaker Volume Analytics**: Integrates a Web Audio `AnalyserNode` (`fftSize = 256`) to track output speaker volume in real-time, updating `audioVolumeTracker.speaker`.
+- **Initialization Buffer (`_pendingChunks`)**: Buffers incoming audio bytes arriving while `AudioContext` resumes or initializes, flushing them seamlessly upon readiness.
+- **End-of-Stream Callbacks (`endStream()`)**: Schedules an `ended` event listener on the final source node to trigger completion callbacks once all queued audio has finished playing.
+
+#### 2. Volume Tracker (`audioVolumeTracker`)
+Global reactive state object storing real-time normalized levels:
+- `mic`: Microphone volume level (0 to 255).
+- `speaker`: Speaker output volume level (0 to 255).
+- `isTTSPlaying`: Boolean flag signaling active TTS audio synthesis playback.
+
+#### 3. Microphone Management (`createMicStream` & `stopMicStream`)
+- **`createMicStream(onChunk, options)`**: Requests browser microphone stream with constraints (`echoCancellation: true`, `noiseSuppression: true`, `autoGainControl: true`, `sampleRate: 48000`), initializes `AudioPipeline`, attaches `MediaRecorder` with Opus codec (`audio/webm;codecs=opus`) at 100ms time slices, and begins volume tracking.
+- **`stopMicStream(micState)`**: Gracefully stops MediaRecorder, tears down `AudioPipeline`, stops all MediaStream tracks, and terminates animation frame volume polling.
+
+#### 4. Single-Buffer Playback Fallback (`playAudioBuffer`)
+Fallback decoder that accepts raw ArrayBuffers, decodes audio asynchronously via `audioContext.decodeAudioData()`, attaches volume analytics, and handles timeout guards.
 
 ---
 
-## LESSON 90: VAD Hook — Voice Activity Detection
+## LESSON 90: Hybrid VAD Engine & Web Worker Pipeline
 
-### File:
-`frontend/src/hooks/useVAD.js`
+### Files:
+- Interface: `frontend/src/vad/interfaces/VADProvider.ts`
+- Neural Engine: `frontend/src/vad/engines/SileroVAD.ts`
+- Fast Pre-Filter: `frontend/src/vad/engines/WebRTCVAD.ts`
+- State Machine: `frontend/src/vad/VADStateMachine.ts`
+- Adaptive Thresholds: `frontend/src/vad/AdaptiveThreshold.ts`
+- Ring Buffer: `frontend/src/vad/buffers/PreRollBuffer.ts`
+- Web Worker: `frontend/src/vad/worker/vad.worker.ts`
+- AudioWorklet: `frontend/src/vad/audio-worklet/vad-processor.js`
+- React Hook: `frontend/src/hooks/useVAD.js`
 
-Hybrid VAD hook using `@ricky0123/vad-web` (Silero V5 ONNX model):
+The VAD subsystem provides multi-layered, zero-latency voice activity detection and interruption handling by offloading neural and energy inference to a Web Worker.
 
-```javascript
-function useVAD({ onSpeechStart, onSpeechEnd, onInterruption, onFrameProcessed }) {
-  return {
-    start(stream),     // Initialize MicVAD on MediaStream
-    stop(),            // Destroy VAD instance
-    setTTSPlaying(bool), // Track TTS state for interruption detection
-    isReady(),         // VAD initialized successfully
-    isFallback(),      // VAD failed, using fallback
-  }
+```
+Browser Mic → AudioWorklet (16kHz Resample) ──(Transferred ArrayBuffer)──> Web Worker
+                                                                                 │
+ ┌───────────────────────────────────────────────────────────────────────────────┘
+ │
+ ├── 1. WebRTCVAD (Energy + ZCR Pre-Filter, <1ms)
+ ├── 2. SileroVAD (Silero v5 ONNX Neural Inference, ~15ms)
+ ├── 3. AdaptiveThreshold (EMA Noise Floor Tracking)
+ ├── 4. PreRollBuffer (150ms Ring Buffer - Prevents Consonant Clipping)
+ └── 5. VADStateMachine (6-State FSM) ──(PostMessage Event)──> useVAD (React UI)
+```
+
+#### 1. Provider Interface (`VADProvider.ts`)
+Standard interface for all VAD engines:
+```typescript
+export interface VADProvider {
+  readonly name: string;
+  initialize(config?: Record<string, unknown>): Promise<boolean>;
+  processFrame(frame: Float32Array): number;
+  reset(): void;
+  dispose(): void;
 }
 ```
 
-**Interruption detection**: When `ttsPlayingRef.current` is true and VAD detects speech start, fires `onInterruption` callback instead of `onSpeechStart`. This triggers TTS stop + `tts_interrupt` message to backend.
+#### 2. Silero V5 ONNX Neural Engine (`SileroVAD.ts`)
+- Loads Silero V5 ONNX model (`/models/silero_vad_v5.onnx`) using `@ricky0123/vad-web` and `onnxruntime-web` with WASM execution provider.
+- Maintains recurrent LSTM state tensors: `_h` (`[2, 1, 64]`) and `_c` (`[2, 1, 64]`).
+- Performs asynchronous model inference (`processFrameAsync`), returning speech probability in range `[0.0, 1.0]`.
 
-**Graceful fallback**: If VAD initialization fails (e.g., ONNX WASM not available), sets `fallbackRef` and continues without speech detection. The legacy volume-polling mechanism in `useWebSocket` acts as safety-net fallback.
+#### 3. WebRTC Fast Energy Pre-Filter (`WebRTCVAD.ts`)
+- Low-latency pre-filter combining RMS audio energy calculation with Zero-Crossing Rate (ZCR) analysis.
+- Detects speech onset in sub-millisecond time: passes if `rms > 0.01` and `0.05 < normalizedZCR < 0.60` (filtering out music tones and white noise).
 
-### VAD AudioWorklet
+#### 4. Noise-Floor Adaptive Thresholding (`AdaptiveThreshold.ts`)
+- Dynamically adjusts detection thresholds based on ambient background noise using an Exponential Moving Average (EMA, `alpha=0.95`).
+- `startThreshold`: Scales dynamically (`0.75` base + `0.5 * noiseFloor`) up to `0.95` max in noisy rooms.
+- `continueThreshold`: Applies hysteresis (`startThreshold - 0.15`, min `0.30`) to prevent speech fragmentation during pauses.
 
-#### File: `frontend/src/vad/audio-worklet/vad-processor.js`
+#### 5. Pre-Roll Ring Buffer (`PreRollBuffer.ts`)
+- Circular buffer maintaining ~150ms of PCM audio frames (5 frames of 30ms each).
+- Flushed immediately upon confirmed speech detection to ensure initial consonants/phonemes are not clipped before VAD triggers.
 
-AudioWorklet processor for real-time PCM capture:
-- Downmixes multi-channel input to mono.
-- Resamples from browser sample rate to 16kHz (linear interpolation).
-- Sends 30ms frames (480 samples at 16kHz) to Web Worker via `postMessage` with ArrayBuffer transfer.
-- Audio passes through unchanged to output.
+#### 6. Dual-Engine VAD State Machine (`VADStateMachine.ts`)
+Six-state FSM managing speech detection lifecycle:
+- **`IDLE`**: Waiting for speech candidate.
+- **`SPEECH_START_CANDIDATE`**: WebRTC energy pre-filter triggered. Waits up to 150ms for Silero ONNX confirmation.
+- **`SPEECH_CONFIRMED`**: Silero probability exceeds `startThreshold`. Fires `onSpeechStart()` or `onInterruption()`.
+- **`SPEECH_ONGOING`**: Speech active for minimum duration (default 250ms).
+- **`SPEECH_END_CANDIDATE`**: Energy/Silero drops below `continueThreshold`. Sustains for 300ms silence.
+- **`COOLDOWN`**: Speech end confirmed. Fires `onSpeechEnd()`, enters 50ms cooldown before returning to `IDLE`.
+
+#### 7. VAD Web Worker (`vad.worker.ts`)
+- Executes off main UI thread to eliminate main-thread stuttering.
+- Orchestrates `WebRTCVAD`, `SileroVAD`, `PreRollBuffer`, and `VADStateMachine`.
+- Handles message protocol: `init`, `frame` (transferred PCM ArrayBuffer), `config`, `set_tts_playing`, `reset`, `dispose`.
+- Emits structured events: `speech_start`, `speech_end`, `interruption`, `vad_ready`, `fallback`, `metrics`.
+
+#### 8. AudioWorklet Resampler (`vad-processor.js`)
+- Runs directly on Web Audio rendering thread.
+- Downmixes multi-channel microphone input to mono.
+- Linear-interpolates browser sample rate (48kHz) down to 16kHz VAD sample rate.
+- Packages audio into 30ms frames (480 samples) and transfers ArrayBuffer ownership zero-copy to the Web Worker.
+
+#### 9. React Integration Hook (`useVAD.js`)
+- Instantiates and manages Web Worker connection.
+- Synchronizes `isTTSPlaying` state with the VAD engine for voice barge-in interruption detection.
+- Dispatches `onSpeechStart`, `onSpeechEnd`, and `onInterruption` callbacks to update React state and send `tts_interrupt` to the backend.
+- Provides fallback handling if WebGL/ONNX WASM fails to load.
 
 ---
 

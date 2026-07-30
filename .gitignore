@@ -1,0 +1,20 @@
+# Resources directory
+resources/
+
+# Environments & Keys
+.env
+*.env
+
+# Dependencies & Build outputs
+node_modules/
+dist/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Databases & Runtime Output
+*.db
+*.db-journal
+test_output.mp3
+test_input.wav
