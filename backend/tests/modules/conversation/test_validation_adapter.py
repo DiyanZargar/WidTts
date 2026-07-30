@@ -222,7 +222,7 @@ async def test_llm_off_topic_brushed_teeth_rejected():
 
 @pytest.mark.asyncio
 async def test_llm_dont_know_accepted():
-    """'I don't know' now advances — the system moves on instead of retrying."""
+    """'I don't know' does not advance — question must be answered."""
     adapter = LiteLLMValidationAdapter()
     mock_create = AsyncMock(return_value=_mock_llm_response(
         _user_does_not_know_json()
@@ -232,13 +232,13 @@ async def test_llm_dont_know_accepted():
         res = await adapter.validate(
             "question", "What city do you live in?", "city or location name", "I don't know."
         )
-    assert res["should_advance"] is True
-    assert res["valid"] is True
+    assert res["should_advance"] is False
+    assert res["valid"] is False
 
 
 @pytest.mark.asyncio
 async def test_llm_yes_no_to_open_ended_accepted():
-    """'Yes' to 'What did you eat?' now advances — voice answers are brief."""
+    """'Yes' to 'What did you eat?' does not advance — needs clarification."""
     adapter = LiteLLMValidationAdapter()
     mock_create = AsyncMock(return_value=_mock_llm_response(
         _needs_clarification_json("What did you eat?")
@@ -248,8 +248,8 @@ async def test_llm_yes_no_to_open_ended_accepted():
         res = await adapter.validate(
             "question", "What did you eat?", "food or meal items", "Yes"
         )
-    assert res["should_advance"] is True
-    assert res["valid"] is True
+    assert res["should_advance"] is False
+    assert res["valid"] is False
 
 
 @pytest.mark.asyncio

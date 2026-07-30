@@ -36,7 +36,7 @@ class ConversationPolicy:
     _CONTINUE_COMMANDS = {"continue", "go on", "proceed", "keep going"}
     _FORGET_COMMANDS = {"forget that", "never mind", "disregard", "ignore that"}
 
-    def __init__(self, max_retries: int = 3):
+    def __init__(self, max_retries: Optional[int] = None):
         self.max_retries = max_retries
 
     def resolve_action(
@@ -110,7 +110,7 @@ class ConversationPolicy:
                 "retry_increment": 0,
             }
 
-        if current_retry_count >= self.max_retries:
+        if self.max_retries is not None and current_retry_count >= self.max_retries:
             return {
                 "action": PolicyAction.ANSWER,
                 "should_advance": True,

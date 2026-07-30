@@ -562,28 +562,16 @@ async def conversation_socket(
                         current_turn.fsm.transition_to(ConversationState.RETRY, reason="Corrected answer needs follow-up")
                         retries += 1
                         update_pointer.execute(session_id, index, "repeating", retries)
-                        if retries >= limits.max_retries_per_item:
-                            await speak("Let's move on to the next one.")
-                            index += 1
-                            retries = 0
-                            update_pointer.execute(session_id, index, "asking", retries)
-                            if not await ask_current():
-                                break
-                        else:
-                            if current_turn and not current_turn.is_destroyed:
-                                # Drain stale STT transcripts to prevent replaying old answers
-                                new_epoch = stt_adapter.advance_epoch()
-                                runtime_state.advance_epoch(session_id)
-                                current_turn.listening_epoch = new_epoch
-                                await stt_adapter.drain_before(new_epoch)
-                                pl.stt_epoch_advance(session_id, bound_turn_id, new_epoch)
-                                # Re-ask the original question from the backend
-                                # speak() transitions FSM to LISTENING internally
-                                retry_item = conversation_engine.get_current(conversation_type, index)
-                                if retry_item:
-                                    await speak(retry_item["text"])
-                                elif current_turn and not current_turn.is_destroyed:
-                                    current_turn.fsm.transition_to(ConversationState.LISTENING, reason="Follow-up spoken — listening for answer")
+                        # The LLM's streaming response already spoke the follow-up/clarification.
+                        # Just drain stale STT and wait for the user's next answer.
+                        if current_turn and not current_turn.is_destroyed:
+                            new_epoch = stt_adapter.advance_epoch()
+                            runtime_state.advance_epoch(session_id)
+                            current_turn.listening_epoch = new_epoch
+                            await stt_adapter.drain_before(new_epoch)
+                            pl.stt_epoch_advance(session_id, bound_turn_id, new_epoch)
+                            if current_turn.fsm.current_state != ConversationState.LISTENING:
+                                current_turn.fsm.transition_to(ConversationState.LISTENING, reason="LLM follow-up spoken — listening for answer")
                 continue
 
             if action == PolicyAction.ANSWER or not classification.get("interrupt", False):
@@ -625,28 +613,16 @@ async def conversation_socket(
                     current_turn.fsm.transition_to(ConversationState.RETRY, reason="Follow-up / retry required")
                     retries += 1
                     update_pointer.execute(session_id, index, "repeating", retries)
-                    if retries >= limits.max_retries_per_item:
-                        await speak("Let's move on to the next one.")
-                        index += 1
-                        retries = 0
-                        update_pointer.execute(session_id, index, "asking", retries)
-                        if not await ask_current():
-                            break
-                    else:
-                        if current_turn and not current_turn.is_destroyed:
-                            # Drain stale STT transcripts to prevent replaying old answers
-                            new_epoch = stt_adapter.advance_epoch()
-                            runtime_state.advance_epoch(session_id)
-                            current_turn.listening_epoch = new_epoch
-                            await stt_adapter.drain_before(new_epoch)
-                            pl.stt_epoch_advance(session_id, bound_turn_id, new_epoch)
-                            # Re-ask the original question from the backend
-                            # speak() transitions FSM to LISTENING internally
-                            retry_item = conversation_engine.get_current(conversation_type, index)
-                            if retry_item:
-                                await speak(retry_item["text"])
-                            elif current_turn and not current_turn.is_destroyed:
-                                current_turn.fsm.transition_to(ConversationState.LISTENING, reason="Follow-up spoken — listening for answer")
+                    # The LLM's streaming response already spoke the follow-up/clarification.
+                    # Just drain stale STT and wait for the user's next answer.
+                    if current_turn and not current_turn.is_destroyed:
+                        new_epoch = stt_adapter.advance_epoch()
+                        runtime_state.advance_epoch(session_id)
+                        current_turn.listening_epoch = new_epoch
+                        await stt_adapter.drain_before(new_epoch)
+                        pl.stt_epoch_advance(session_id, bound_turn_id, new_epoch)
+                        if current_turn.fsm.current_state != ConversationState.LISTENING:
+                            current_turn.fsm.transition_to(ConversationState.LISTENING, reason="LLM follow-up spoken — listening for answer")
                 continue
 
             logger.info(f"[INTERRUPT NONE] Discarding unintelligible utterance: '{transcript[:60]}'")

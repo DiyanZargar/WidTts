@@ -135,7 +135,7 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
             # Voice answers are naturally brief. Accept everything except
             # clearly irrelevant, refused, or empty responses.
             # The LLM's spoken feedback handles the conversational flow.
-            _REJECT_CLASSES = {"IRRELEVANT", "OFF_TOPIC", "USER_REFUSED", "SYSTEM_ERROR"}
+            _REJECT_CLASSES = {"IRRELEVANT", "OFF_TOPIC", "USER_REFUSED", "SYSTEM_ERROR", "NEEDS_CLARIFICATION", "USER_DID_NOT_UNDERSTAND", "USER_DOES_NOT_KNOW"}
             should_advance = classification not in _REJECT_CLASSES
 
             # Determine human-like follow-up or clarification reason:

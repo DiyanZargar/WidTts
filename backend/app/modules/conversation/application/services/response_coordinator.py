@@ -133,7 +133,7 @@ class ResponseCoordinator:
                         if "should_advance" in parsed:
                             result.should_advance = bool(parsed.get("should_advance"))
                         else:
-                            _REJECT = {"IRRELEVANT", "OFF_TOPIC", "USER_REFUSED", "SYSTEM_ERROR"}
+                            _REJECT = {"IRRELEVANT", "OFF_TOPIC", "USER_REFUSED", "SYSTEM_ERROR", "NEEDS_CLARIFICATION", "USER_DID_NOT_UNDERSTAND", "USER_DOES_NOT_KNOW"}
                             result.should_advance = parsed.get("classification", "") not in _REJECT
                         result.reason = parsed.get("reason") or parsed.get("reasoning", "")
                         result.token_count = token_count
@@ -158,7 +158,9 @@ class ResponseCoordinator:
                     flush_now = token.endswith((".", "!", "?", "\n")) or len(sentence_text) >= 80
                     if flush_now:
                         text_to_speak = sentence_text.strip()
-                        if text_to_speak:
+                        # Skip trivial/empty sentences (just punctuation, single chars, etc.)
+                        stripped_alpha = ''.join(c for c in text_to_speak if c.isalnum())
+                        if text_to_speak and stripped_alpha:
                             if first_audio_time is None:
                                 first_audio_time = time.monotonic()
                             await self._tts_flush(text_to_speak, session_id, turn_id)

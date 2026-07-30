@@ -12,7 +12,7 @@ from app.shared.config.settings import settings
 class RuntimeLimits:
     # Context / conversation
     max_context_tokens: int = 4000
-    max_retries_per_item: int = 3
+    max_retries_per_item: int | None = None
 
     # Audio
     max_playback_queue_size: int = 200
@@ -44,7 +44,7 @@ class RuntimeLimits:
     def from_settings(cls) -> "RuntimeLimits":
         return cls(
             max_context_tokens=getattr(settings, "max_context_tokens", 4000),
-            max_retries_per_item=getattr(settings, "max_retries_per_item", 3),
+            max_retries_per_item=getattr(settings, "max_retries_per_item", None),
         )
 
 
