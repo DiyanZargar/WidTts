@@ -25,7 +25,7 @@ Configure your local credentials in both the backend and frontend configurations
   DEEPGRAM_STT_URL=wss://api.deepgram.com/v1/listen?punctuate=true&interim_results=true
   
   OPENAI_API_KEY=your_openai_api_key_here
-  OPENAI_BASE_URL=https://llm.app.emlylabs.com/v1
+  OPENAI_BASE_URL=https://api.openai.com/v1
   AI_VALIDATION_MODEL=gemini/gemini-2.5-flash
   
   DATABASE_PATH=app.db
