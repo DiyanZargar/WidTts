@@ -6,5 +6,5 @@ class AddMessage:
     def __init__(self, message_repository: MessageRepositoryInterface):
         self._message_repository = message_repository
 
-    def execute(self, session_id: str, sender: str, text: str) -> None:
-        self._message_repository.add(session_id, sender, text)
+    async def execute(self, session_id: str, sender: str, text: str) -> None:
+        await self._message_repository.add(session_id, sender, text)

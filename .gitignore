@@ -16,5 +16,6 @@ venv/
 # Databases & Runtime Output
 *.db
 *.db-journal
+*.zip
 test_output.mp3
 test_input.wav

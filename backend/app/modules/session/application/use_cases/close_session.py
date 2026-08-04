@@ -6,5 +6,5 @@ class CloseSession:
     def __init__(self, session_repository: SessionRepositoryInterface):
         self._session_repository = session_repository
 
-    def execute(self, session_id: str, status: str) -> None:
-        self._session_repository.close(session_id, status)
+    async def execute(self, session_id: str, status: str) -> None:
+        await self._session_repository.close(session_id, status)

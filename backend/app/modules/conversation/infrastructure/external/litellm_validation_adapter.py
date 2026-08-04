@@ -2,9 +2,8 @@ import json
 import re
 import time
 import asyncio
-from typing import Dict, Any, AsyncGenerator
+from typing import Dict, Any, AsyncGenerator, Optional
 from openai import AsyncOpenAI
-from app.shared.config.settings import settings
 from app.shared.logging.logger import logger
 from app.modules.conversation.domain.interfaces.validation_provider_interface import ValidationProviderInterface
 from app.modules.conversation.infrastructure.external.prompts import (
@@ -25,14 +24,28 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
 
     def __init__(self):
         self._client = None
+        self._llm_config: Optional[Dict[str, Any]] = None
+
+    def set_llm_config(self, config: Dict[str, Any]) -> None:
+        """Inject LLM config from bot at session startup."""
+        self._llm_config = config
+        # Reset client so it picks up new config
+        self._client = None
 
     def _get_client(self) -> AsyncOpenAI:
         if not self._client:
-            self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key or "dummy_key",
-                base_url=settings.openai_base_url or "https://api.openai.com/v1"
-            )
+            api_key = "dummy_key"
+            base_url = "https://api.openai.com/v1"
+            if self._llm_config:
+                api_key = self._llm_config.get("api_key", api_key)
+                base_url = self._llm_config.get("base_url", base_url) or base_url
+            self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         return self._client
+
+    def _get_model(self) -> str:
+        if self._llm_config:
+            return self._llm_config.get("model", "gpt-4o-mini")
+        return "gpt-4o-mini"
 
     async def validate(
         self, item_type: str, item_text: str, expected_context: str, user_response: str
@@ -57,13 +70,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
         cleaned_resp = user_response.strip().lower()
         stripped = re.sub(r'[^a-z0-9 ]', '', cleaned_resp).strip()
 
-        # Only reject truly empty. Everything else goes to the LLM.
-        # Voice answers are naturally brief — "I", "7", "yes", "because" are all valid.
-
-        # ── Layer 2: LLM Semantic Validation ──
-        # All semantic reasoning is delegated to the LLM.
-        # No keyword matching, digit lists, color lists, or heuristics.
-
         user_content = build_validation_user_message(item_type, item_text, expected_context, user_response)
         client = self._get_client()
 
@@ -71,7 +77,7 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
         try:
             response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model=settings.ai_validation_model,
+                    model=self._get_model(),
                     messages=[
                         {"role": "system", "content": VALIDATION_SYSTEM_PROMPT},
                         {"role": "user", "content": user_content},
@@ -79,23 +85,18 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
                     max_tokens=2048,
                     timeout=12,
                 ),
-                timeout=15.0,  # Hard asyncio timeout — guarantees cancellation
+                timeout=15.0,
             )
             choice = response.choices[0]
             msg = choice.message
 
-            # Extract content — reasoning models (DeepSeek) may put output
-            # in reasoning_content instead of content.
             text = msg.content or ""
             if not text.strip():
-                # Try direct attribute (some clients expose it)
                 text = getattr(msg, "reasoning_content", "") or ""
             if not text.strip():
-                # Try model_extra (OpenAI client stores non-standard fields here)
                 extras = getattr(msg, "model_extra", {}) or {}
                 text = extras.get("reasoning_content", "") or ""
             if not text.strip():
-                # Try provider_specific_fields nested dict
                 psf = getattr(msg, "provider_specific_fields", {}) or {}
                 if not psf:
                     psf = (getattr(msg, "model_extra", {}) or {}).get("provider_specific_fields", {}) or {}
@@ -110,7 +111,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
                     lines = lines[:-1]
                 text = "\n".join(lines).strip()
 
-            # Extract JSON from the text (may be embedded in reasoning)
             match = re.search(r"\{.*\}", text, re.DOTALL)
             if match:
                 text = match.group(0)
@@ -131,14 +131,9 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
             llm_advance = bool(parsed.get("should_advance", False))
             reasoning = str(parsed.get("reasoning", ""))
 
-            # Human Understanding Engine Advancement Rule:
-            # Voice answers are naturally brief. Accept everything except
-            # clearly irrelevant, refused, or empty responses.
-            # The LLM's spoken feedback handles the conversational flow.
             _REJECT_CLASSES = {"IRRELEVANT", "OFF_TOPIC", "USER_REFUSED", "SYSTEM_ERROR", "NEEDS_CLARIFICATION", "USER_DID_NOT_UNDERSTAND", "USER_DOES_NOT_KNOW"}
             should_advance = classification not in _REJECT_CLASSES
 
-            # Determine human-like follow-up or clarification reason:
             if should_follow_up and follow_up_q:
                 spoken_reason = str(follow_up_q)
             elif should_repeat:
@@ -166,9 +161,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
             }
 
         except (asyncio.TimeoutError, Exception) as e:
-            # ── Layer 3: Graceful Degradation ──
-            # LLM unreachable. The transcript already passed all deterministic guards
-            # (not empty, not single-char, not dangling). Make a best-effort decision.
             is_timeout = isinstance(e, asyncio.TimeoutError)
             logger.warning(
                 f"[VALIDATION {'TIMEOUT' if is_timeout else 'ERROR'}] "
@@ -178,7 +170,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
 
             words = stripped.split()
             if len(words) >= 2:
-                # Multi-word response that passed all guards → accept and advance
                 return {
                     "understood_intent": f"User provided response: {user_response} (LLM unavailable, accepted by fallback)",
                     "answered": True,
@@ -196,7 +187,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
                     "advance": True,
                 }
             else:
-                # Single-word response without LLM — ask for a bit more
                 return {
                     "understood_intent": f"User said: {user_response} (LLM unavailable)",
                     "answered": False,
@@ -219,12 +209,7 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
     async def validate_stream(
         self, item_type: str, item_text: str, expected_context: str, user_response: str
     ) -> AsyncGenerator[str, None]:
-        """Streaming LLM validation yielding natural-language tokens + JSON metadata.
-
-        Yields:
-            - Raw tokens from the LLM's natural-language response (first output).
-            - After ###METADATA### delimiter, the JSON block as a single string.
-        """
+        """Streaming LLM validation yielding natural-language tokens + JSON metadata."""
         user_content = build_validation_user_message(item_type, item_text, expected_context, user_response)
         client = self._get_client()
 
@@ -232,7 +217,7 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
         try:
             response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model=settings.ai_validation_model,
+                    model=self._get_model(),
                     messages=[
                         {"role": "system", "content": VALIDATION_SYSTEM_PROMPT},
                         {"role": "user", "content": user_content},
@@ -244,7 +229,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
                 timeout=30.0,
             )
 
-            # Stream established — iterate chunks
             logger.info(f"[VALIDATION STREAM] LLM connection established. Awaiting chunks...")
             chunk_count = 0
             content_count = 0
@@ -274,7 +258,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
                     content_count += 1
                     yield token
 
-            # Stream finished — nothing more to yield
             _llm_ms = int((time.monotonic() - _llm_t0) * 1000)
             logger.info(f"[VALIDATION STREAM] LLM stream completed in {_llm_ms}ms | chunks={chunk_count} content_chunks={content_count} reasoning_chunks={reasoning_count}")
 
@@ -284,7 +267,6 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
                 f"[VALIDATION STREAM {'TIMEOUT' if is_timeout else 'ERROR'}] "
                 f"LLM stream failed: {e}. Emitting fallback."
             )
-            # Emit fallback token + metadata if LLM call fails
             yield "I didn't quite catch that. Could you say that again?"
             yield "###METADATA###"
             yield json.dumps({
@@ -303,4 +285,3 @@ class LiteLLMValidationAdapter(ValidationProviderInterface):
                 "valid": False,
                 "advance": False,
             })
-

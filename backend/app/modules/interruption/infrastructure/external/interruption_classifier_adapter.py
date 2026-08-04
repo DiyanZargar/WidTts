@@ -3,7 +3,6 @@ import re
 import asyncio
 from typing import Dict, Any, Optional
 from openai import AsyncOpenAI
-from app.shared.config.settings import settings
 from app.shared.logging.logger import logger
 from app.modules.interruption.infrastructure.external.prompts import (
     INTERRUPTION_SYSTEM_PROMPT,
@@ -22,14 +21,27 @@ class InterruptionClassifierAdapter:
 
     def __init__(self):
         self._client: Optional[AsyncOpenAI] = None
+        self._llm_config: Optional[Dict[str, Any]] = None
+
+    def set_llm_config(self, config: Dict[str, Any]) -> None:
+        """Inject LLM config from bot at session startup."""
+        self._llm_config = config
+        self._client = None
 
     def _get_client(self) -> AsyncOpenAI:
         if not self._client:
-            self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key or "dummy_key",
-                base_url=settings.openai_base_url or "https://api.openai.com/v1",
-            )
+            api_key = "dummy_key"
+            base_url = "https://api.openai.com/v1"
+            if self._llm_config:
+                api_key = self._llm_config.get("api_key", api_key)
+                base_url = self._llm_config.get("base_url", base_url) or base_url
+            self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         return self._client
+
+    def _get_model(self) -> str:
+        if self._llm_config:
+            return self._llm_config.get("model", "gpt-4o-mini")
+        return "gpt-4o-mini"
 
     async def classify(
         self,
@@ -59,7 +71,7 @@ class InterruptionClassifierAdapter:
         try:
             response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model=settings.ai_validation_model,
+                    model=self._get_model(),
                     messages=[
                         {"role": "system", "content": INTERRUPTION_SYSTEM_PROMPT},
                         {"role": "user", "content": user_content},

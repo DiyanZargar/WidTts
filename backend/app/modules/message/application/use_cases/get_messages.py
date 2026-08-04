@@ -7,5 +7,5 @@ class GetMessages:
     def __init__(self, message_repository: MessageRepositoryInterface):
         self._message_repository = message_repository
 
-    def execute(self, session_id: str) -> List[Dict[str, Any]]:
-        return self._message_repository.get_by_session(session_id)
+    async def execute(self, session_id: str) -> List[Dict[str, Any]]:
+        return await self._message_repository.get_by_session(session_id)

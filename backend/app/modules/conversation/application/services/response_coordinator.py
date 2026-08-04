@@ -258,3 +258,94 @@ class ResponseCoordinator:
             "reason": "I didn't catch that. Could you say that again?",
             "reasoning": "LLM stream ended without metadata delimiter.", "valid": False, "advance": False,
         }
+
+    async def stream_bot_response(self, transcript, session_id, turn_id,
+                                   system_prompt, llm_config, context=None,
+                                   turn_context=None) -> Dict[str, Any]:
+        """
+        Bot-driven conversation: stream LLM response directly to TTS.
+
+        Unlike stream_response(), there's no metadata delimiter.
+        The system prompt IS the conversation logic — the LLM just generates
+        a natural response that gets spoken directly.
+        """
+        import litellm
+
+        full_response: list[str] = []
+        spoken_sentences: list[str] = []
+        current_sentence: list[str] = []
+        token_count = 0
+        first_token_time: Optional[float] = None
+        _llm_t0 = time.monotonic()
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        # Add conversation context if available
+        if context:
+            for msg in context:
+                messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+
+        # Add current user message
+        messages.append({"role": "user", "content": transcript})
+
+        model = llm_config.get("model", "gpt-4o-mini")
+        api_key = llm_config.get("api_key", "")
+        base_url = llm_config.get("base_url", "")
+
+        try:
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                api_key=api_key,
+                api_base=base_url if base_url else None,
+                stream=True,
+            )
+
+            async for chunk in response:
+                if self._token and self._token.is_cancelled:
+                    raise asyncio.CancelledError(f"CancellationToken: {self._token.reason}")
+                if turn_context is not None and getattr(turn_context, "is_destroyed", False):
+                    break
+
+                delta = chunk.choices[0].delta
+                token = getattr(delta, "content", None)
+                if not token:
+                    continue
+
+                token_count += 1
+                if first_token_time is None:
+                    first_token_time = time.monotonic()
+
+                full_response.append(token)
+                current_sentence.append(token)
+                sentence_text = "".join(current_sentence)
+
+                # Flush at sentence boundaries for natural TTS pacing
+                flush_now = token.endswith((".", "!", "?", "\n")) or len(sentence_text) >= 80
+                if flush_now:
+                    text_to_speak = sentence_text.strip()
+                    stripped_alpha = ''.join(c for c in text_to_speak if c.isalnum())
+                    if text_to_speak and stripped_alpha:
+                        await self._tts_flush(text_to_speak, session_id, turn_id)
+                        spoken_sentences.append(text_to_speak)
+                    current_sentence = []
+
+            # Flush remaining text
+            remaining = "".join(current_sentence).strip()
+            if remaining:
+                await self._tts_flush(remaining, session_id, turn_id)
+                spoken_sentences.append(remaining)
+
+            await self._bus.publish_raw(
+                "tts_stream_end", {"text": "", "chunks": 0, "bytes": 0}, session_id
+            )
+
+            return {"text": "".join(full_response).strip(), "token_count": token_count}
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"[BOT_RESPONSE] LLM error: {e}")
+            return {"text": "", "error": str(e)}

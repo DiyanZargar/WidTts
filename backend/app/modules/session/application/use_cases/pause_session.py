@@ -6,5 +6,5 @@ class PauseSession:
     def __init__(self, session_repository: SessionRepositoryInterface):
         self._session_repository = session_repository
 
-    def execute(self, session_id: str) -> None:
-        self._session_repository.pause(session_id)
+    async def execute(self, session_id: str) -> None:
+        await self._session_repository.pause(session_id)

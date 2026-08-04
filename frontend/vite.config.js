@@ -9,6 +9,7 @@ export default defineConfig({
     proxy: {
       "/ws": { target: "ws://localhost:8000", changeOrigin: true, ws: true },
       "/health": { target: "http://localhost:8000", changeOrigin: true },
+      "/admin/api": { target: "http://localhost:8000", changeOrigin: true },
     },
   },
   worker: {

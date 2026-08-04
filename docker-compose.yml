@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: widtts-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: widtts
+      POSTGRES_PASSWORD: widtts_dev_password
+      POSTGRES_DB: widtts
+    ports:
+      - "5432:5432"
+    volumes:
+      - widtts_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U widtts"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  widtts_pgdata:

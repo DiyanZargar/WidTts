@@ -6,5 +6,9 @@ python-dotenv
 websockets
 httpx
 litellm
+asyncpg
+cryptography
+deepgram-sdk
+openai
 pytest
 pytest-asyncio

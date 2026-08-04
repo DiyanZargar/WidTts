@@ -7,5 +7,5 @@ class GetSession:
     def __init__(self, session_repository: SessionRepositoryInterface):
         self._session_repository = session_repository
 
-    def execute(self, session_id: str) -> Optional[Dict[str, Any]]:
-        return self._session_repository.get_by_id(session_id)
+    async def execute(self, session_id: str) -> Optional[Dict[str, Any]]:
+        return await self._session_repository.get_by_id(session_id)
