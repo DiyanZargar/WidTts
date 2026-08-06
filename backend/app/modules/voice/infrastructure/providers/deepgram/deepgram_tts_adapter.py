@@ -180,31 +180,54 @@ class DeepgramTTSAdapter(TTSProviderInterface):
         self._drain_queue()
         self._closed = False
 
-        if self._is_v2:
-            self._ctx = self._client.speak.v2.connect(
-                model=self._tts_model,
-                encoding="linear16",
-                sample_rate="48000",
-            )
-        else:
-            self._ctx = self._client.speak.v1.connect(
-                model=self._tts_model,
-                encoding="linear16",
-                sample_rate="48000",
-            )
+        models_to_try = [
+            (self._is_v2, self._tts_model),
+            (not self._is_v2, self._tts_model),
+        ]
+        if self._tts_model.lower().startswith("flux-"):
+            models_to_try.append((False, "aura-" + self._tts_model[5:]))
+            models_to_try.append((True, "flux-rufus-en"))
+        elif self._tts_model.lower().startswith("aura-"):
+            models_to_try.append((True, "flux-" + self._tts_model[5:]))
+            models_to_try.append((False, "aura-asteria-en"))
 
-        self._conn = await self._ctx.__aenter__()
+        last_err = None
+        for is_v2, m_name in models_to_try:
+            try:
+                if is_v2:
+                    self._ctx = self._client.speak.v2.connect(
+                        model=m_name,
+                        encoding="linear16",
+                        sample_rate="48000",
+                    )
+                else:
+                    self._ctx = self._client.speak.v1.connect(
+                        model=m_name,
+                        encoding="linear16",
+                        sample_rate="48000",
+                    )
 
-        self._conn.on(EventType.MESSAGE, self._on_message)
-        self._conn.on(EventType.OPEN, lambda _: logger.info(
-            f"[TTS CONNECT] Deepgram TTS WebSocket opened (model={self._tts_model})"))
-        self._conn.on(EventType.CLOSE, lambda _: self._on_close())
-        self._conn.on(EventType.ERROR, lambda error: logger.error(
-            f"[TTS CONNECT] Error: {error}"))
+                self._conn = await self._ctx.__aenter__()
 
-        self._listen_task = asyncio.create_task(self._conn.start_listening())
-        self._stream_connected = True
-        logger.info(f"[TTS CONNECT] Deepgram TTS WebSocket connected (model={self._tts_model})")
+                self._conn.on(EventType.MESSAGE, self._on_message)
+                self._conn.on(EventType.OPEN, lambda _: logger.info(
+                    f"[TTS CONNECT] Deepgram TTS WebSocket opened (model={m_name})"))
+                self._conn.on(EventType.CLOSE, lambda _: self._on_close())
+                self._conn.on(EventType.ERROR, lambda error: logger.error(
+                    f"[TTS CONNECT] Error: {error}"))
+
+                self._listen_task = asyncio.create_task(self._conn.start_listening())
+                self._stream_connected = True
+                self._is_v2 = is_v2
+                logger.info(f"[TTS CONNECT] Deepgram TTS WebSocket connected (model={m_name})")
+                return
+            except Exception as e:
+                last_err = e
+                await self._cleanup_connection()
+                continue
+
+        if last_err:
+            raise last_err
 
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
         try:

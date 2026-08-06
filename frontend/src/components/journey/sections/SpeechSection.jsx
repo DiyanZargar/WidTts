@@ -180,8 +180,12 @@ export function SpeechSection({ onProviderCreated }) {
       abortControllerRef.current = null;
     }
     if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current.src = '';
+      if (typeof currentAudioRef.current.stop === 'function') {
+        currentAudioRef.current.stop();
+      } else if (typeof currentAudioRef.current.pause === 'function') {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.src = '';
+      }
       currentAudioRef.current = null;
     }
     if ('speechSynthesis' in window) {
@@ -227,7 +231,34 @@ export function SpeechSection({ onProviderCreated }) {
       });
 
       if (res.ok) {
-        const blob = await res.blob();
+        const arrayBuffer = await res.arrayBuffer();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          try {
+            const ctx = new AudioCtx();
+            if (ctx.state === 'suspended') {
+              await ctx.resume();
+            }
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+            currentAudioRef.current = { stop: () => { try { source.stop(); } catch(e){} } };
+
+            source.onended = () => {
+              setPlayingAudio(false);
+              currentAudioRef.current = null;
+            };
+
+            source.start(0);
+            setTestResult({ success: true, message: `Playing live API neural voice from ${form.provider_type}!` });
+            return;
+          } catch (decodeErr) {
+            console.warn('[SpeechSection] Web Audio decode failed, falling back to HTMLAudio:', decodeErr);
+          }
+        }
+
+        const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
         const audioUrl = URL.createObjectURL(blob);
         const audio = new Audio(audioUrl);
         currentAudioRef.current = audio;

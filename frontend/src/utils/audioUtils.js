@@ -101,11 +101,15 @@ export class StreamingAudioPlayer {
 
   _appendRaw(chunk) {
     const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-    const numSamples = bytes.byteLength / 2;
+    const validLength = bytes.byteLength - (bytes.byteLength % 2);
+    if (validLength <= 0) return;
+
+    const numSamples = validLength / 2;
     this._totalSamples += numSamples;
 
-    // Convert Int16 → Float32
-    const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, numSamples);
+    // Use sliced buffer to guarantee 2-byte alignment for Int16Array
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + validLength);
+    const int16 = new Int16Array(buffer);
     const float32 = new Float32Array(numSamples);
     for (let i = 0; i < numSamples; i++) float32[i] = int16[i] / 32768.0;
 
