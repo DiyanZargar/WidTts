@@ -1,4 +1,4 @@
-import { useRef, useContext, useCallback, useEffect } from "react";
+import { useRef, useContext, useCallback, useEffect, useState } from "react";
 import { ConversationContext } from "../context/ConversationContext";
 import { createConversationSocket } from "../services/websocketService";
 import { useDeepgramAudio } from "./useDeepgramAudio";
@@ -224,6 +224,7 @@ export function useWebSocket(conversationType) {
       connRef.current?.sendAudioChunk(chunk);
     }).then((micState) => {
       if (micState?.stream) {
+        setMicStream(micState.stream);
         // Start hybrid VAD on same MediaStream (runs parallel to MediaRecorder)
         startVAD(micState.stream).catch((e) => {
           console.warn("[useWebSocket] VAD start failed:", e.message);
@@ -232,7 +233,24 @@ export function useWebSocket(conversationType) {
     });
   }, [conversationType, dispatch, playTTS, startMic, stopMic, stopTTS, startStreamingTTS, startVAD]);
 
+  const [micStream, setMicStream] = useState(null);
+  const [muted, setMutedState] = useState(false);
+
+  const setMuted = useCallback((isMuted) => {
+    setMutedState(isMuted);
+    if (micStream) {
+      micStream.getAudioTracks().forEach((track) => {
+        track.enabled = !isMuted;
+      });
+    }
+  }, [micStream]);
+
+  // Inside connect, save micState.stream to micStream
+  // (We'll update connect below)
+  
   const disconnect = useCallback(() => {
+    setMicStream(null);
+    setMutedState(false);
     stopMic();
     stopTTS();
     setTTSPlaying(false);
@@ -244,5 +262,5 @@ export function useWebSocket(conversationType) {
     }
   }, [stopMic, stopTTS]);
 
-  return { connect, disconnect };
+  return { connect, disconnect, micStream, muted, setMuted };
 }

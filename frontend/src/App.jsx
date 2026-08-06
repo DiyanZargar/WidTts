@@ -1,17 +1,13 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ConversationProvider } from "./context/ConversationContext";
 import HomePage from "./pages/HomePage";
-import LoginPage from "./pages/LoginPage";
-import AdminLayout from "./pages/admin/AdminLayout";
+import { AdminJourney } from "./components/journey/AdminJourney";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Login */}
-        <Route path="/login" element={<LoginPage />} />
-
-        {/* User portal — existing voice UI */}
+        {/* User portal — redesigned single-screen voice experience */}
         <Route
           path="/user"
           element={
@@ -21,12 +17,8 @@ export default function App() {
           }
         />
 
-        {/* Admin portal */}
-        <Route path="/admin/*" element={<AdminLayout />} />
-
-        {/* Default redirect → user portal */}
-        <Route path="/" element={<Navigate to="/user" replace />} />
-        <Route path="*" element={<Navigate to="/user" replace />} />
+        {/* Everything else → the journey (gate + admin scroll experience) */}
+        <Route path="*" element={<AdminJourney />} />
       </Routes>
     </BrowserRouter>
   );

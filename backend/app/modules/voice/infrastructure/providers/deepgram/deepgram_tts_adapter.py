@@ -39,7 +39,7 @@ class DeepgramTTSAdapter(TTSProviderInterface):
     @staticmethod
     def _is_v2_model(model_name: str) -> bool:
         m = model_name.lower().strip()
-        return m.startswith("flux-") or "v2" in m
+        return m.startswith("flux") or "v2" in m
 
     # ── REST fallback ──
 
@@ -53,13 +53,14 @@ class DeepgramTTSAdapter(TTSProviderInterface):
 
     async def synthesize(self, text: str) -> bytes:
         version = "v2" if self._is_v2 else "v1"
-        tts_url = f"https://api.deepgram.com/{version}/speak?model={self._tts_model}"
+        tts_url = f"https://api.deepgram.com/{version}/speak?model={self._tts_model}&encoding=linear16&sample_rate=24000"
         client = self._get_http_client()
         resp = await client.post(
             tts_url,
             headers={
                 "Authorization": f"Token {self._api_key}",
                 "Content-Type": "application/json",
+                "Accept": "audio/wav",
             },
             json={"text": text},
         )
@@ -179,35 +180,36 @@ class DeepgramTTSAdapter(TTSProviderInterface):
         logger.info(f"[TTS CONNECT] Deepgram TTS WebSocket connected (model={self._tts_model})")
 
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
-        if not self._stream_connected or not self._conn or (self._listen_task and self._listen_task.done()):
-            await self.connect_stream()
-        self._drain_queue()
+        try:
+            if not self._stream_connected or not self._conn or (self._listen_task and self._listen_task.done()):
+                await self.connect_stream()
+            self._drain_queue()
 
-        if self._is_v2:
-            await self._conn.send_speak(SpeakV2Speak(text=text))
-            await self._conn.send_flush()
-        else:
-            await self._conn.send_text(SpeakV1Text(text=text))
-            await self._conn.send_flush()
-        logger.info(f"[TTS STREAM] Sent text ({len(text)} chars) + flush. Yielding chunks...")
+            if self._is_v2:
+                await self._conn.send_speak(SpeakV2Speak(text=text))
+                await self._conn.send_flush()
+            else:
+                await self._conn.send_text(SpeakV1Text(text=text))
+                await self._conn.send_flush()
+            logger.info(f"[TTS STREAM] Sent text ({len(text)} chars) + flush. Yielding chunks...")
 
-        chunk_count = 0
-        while True:
-            try:
-                chunk = await asyncio.wait_for(self._tts_queue.get(), timeout=30.0)
-            except asyncio.TimeoutError:
-                logger.error(
-                    "[TTS STREAM] Timeout: no audio chunk from Deepgram for 30s."
-                )
-                self._stream_connected = False
-                raise RuntimeError("TTS streaming timeout — Deepgram did not send audio within 30s")
+            chunk_count = 0
+            while True:
+                chunk = await asyncio.wait_for(self._tts_queue.get(), timeout=5.0)
+                if chunk is None:
+                    logger.info(f"[TTS STREAM] Stream complete — received {chunk_count} chunks")
+                    break
+                chunk_count += 1
+                yield chunk
 
-            if chunk is None:
-                logger.info(f"[TTS STREAM] Stream complete — received {chunk_count} chunks")
-                break
-
-            chunk_count += 1
-            yield chunk
+        except Exception as err:
+            logger.warning(f"[TTS STREAM FALLBACK] WebSocket stream failed ({err}) — falling back to REST synthesis")
+            self._stream_connected = False
+            rest_audio = await self.synthesize(text)
+            # Yield in 4KB chunks
+            chunk_size = 4096
+            for i in range(0, len(rest_audio), chunk_size):
+                yield rest_audio[i:i+chunk_size]
 
     async def close(self) -> None:
         self._closed = True

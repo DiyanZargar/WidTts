@@ -18,18 +18,16 @@ A premium, immersive real-time voice assistant experience using Clean Architectu
 
 Configure your local credentials in both the backend and frontend configurations.
 
-* **Backend `.env`**: Make sure `backend/.env` is populated with the following fields:
+* **Backend `.env`**: Make sure `backend/.env` is populated:
   ```env
-  DEEPGRAM_API_KEY=your_deepgram_api_key_here
-  DEEPGRAM_TTS_MODEL=aura-2-thalia-en
-  DEEPGRAM_STT_URL=wss://api.deepgram.com/v1/listen?punctuate=true&interim_results=true
-  
-  OPENAI_API_KEY=your_openai_api_key_here
-  OPENAI_BASE_URL=https://api.openai.com/v1
-  AI_VALIDATION_MODEL=gemini/gemini-2.5-flash
-  
-  DATABASE_PATH=app.db
-  CONVERSATION_DEFINITIONS_DIR=app/conversation_definitions
+  POSTGRES_USER=widtts
+  POSTGRES_PASSWORD=widtts_dev_password
+  POSTGRES_HOST=localhost
+  POSTGRES_PORT=5432
+  POSTGRES_DB=widtts
+
+  DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+  MASTER_ENCRYPTION_KEY=PGe4qntNrj9RGqhna1JwmRfjm7WPr2e2njV6fT3r8PM=
   ```
 
 * **Frontend `.env`**: Make sure `frontend/.env` is populated:

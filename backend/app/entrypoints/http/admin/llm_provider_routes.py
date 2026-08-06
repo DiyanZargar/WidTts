@@ -1,11 +1,14 @@
 """LLM provider management endpoints."""
 
+import json
+import urllib.request
+import urllib.error
+import asyncio
+from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
 from app.modules.provider.infrastructure.persistence.postgres_llm_provider_repository import PostgresLLMProviderRepository
-from app.shared.security.envelope_encryption import encrypt_and_store
-from app.shared.security.credential_masking import mask_dict
+from app.shared.security.envelope_encryption import encrypt_and_store, load_and_decrypt
 
 router = APIRouter(prefix="/llm-providers", tags=["llm-providers"])
 _repo = PostgresLLMProviderRepository()
@@ -27,13 +30,154 @@ class LLMProviderUpdateRequest(BaseModel):
     is_default: Optional[bool] = None
 
 
+class LLMModelFetchRequest(BaseModel):
+    provider_id: Optional[str] = None
+    provider_type: Optional[str] = "openai_compatible"
+    base_url: Optional[str] = ""
+    api_key: Optional[str] = ""
+
+
+FALLBACK_MODELS = {
+    "openai": [
+        {"id": "gpt-4o", "name": "gpt-4o"},
+        {"id": "gpt-4o-mini", "name": "gpt-4o-mini"},
+        {"id": "o1", "name": "o1"},
+        {"id": "o1-mini", "name": "o1-mini"},
+        {"id": "gpt-4-turbo", "name": "gpt-4-turbo"},
+    ],
+    "anthropic": [
+        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
+        {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku"},
+        {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus"},
+    ],
+    "google": [
+        {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"},
+        {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
+        {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"},
+    ],
+    "mistral": [
+        {"id": "mistral-large-latest", "name": "Mistral Large"},
+        {"id": "mistral-small-latest", "name": "Mistral Small"},
+    ],
+    "moonshot": [
+        {"id": "moonshot-v1-8k", "name": "Moonshot v1 8k"},
+        {"id": "moonshot-v1-32k", "name": "Moonshot v1 32k"},
+    ],
+    "ollama": [
+        {"id": "llama3.2", "name": "Llama 3.2"},
+        {"id": "mistral", "name": "Mistral"},
+        {"id": "qwen2.5", "name": "Qwen 2.5"},
+    ],
+    "openai_compatible": [
+        {"id": "gpt-4o-mini", "name": "gpt-4o-mini"},
+        {"id": "gpt-4o", "name": "gpt-4o"},
+        {"id": "claude-3-5-sonnet", "name": "claude-3-5-sonnet"},
+        {"id": "deepseek-chat", "name": "deepseek-chat"},
+    ],
+}
+
+
+def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[Dict[str, str]]:
+    url = (base_url or "").strip().rstrip("/")
+    if not url:
+        if provider_type == "openai":
+            url = "https://api.openai.com/v1"
+        elif provider_type == "anthropic":
+            url = "https://api.anthropic.com/v1"
+        elif provider_type == "mistral":
+            url = "https://api.mistral.ai/v1"
+        elif provider_type == "moonshot":
+            url = "https://api.moonshot.cn/v1"
+        elif provider_type == "openrouter":
+            url = "https://openrouter.ai/api/v1"
+        elif provider_type == "ollama":
+            url = "http://localhost:11434/v1"
+
+    if provider_type == "anthropic":
+        endpoint = "https://api.anthropic.com/v1/models"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Accept": "application/json",
+        }
+    elif provider_type == "google":
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+        headers = {"Accept": "application/json"}
+    else:
+        # Standard OpenAI / OpenAI-compatible / Groq / OpenRouter / Ollama
+        if not url.endswith("/models"):
+            if not url.endswith("/v1") and not url.endswith("/v1/"):
+                endpoint = f"{url}/v1/models"
+            else:
+                endpoint = f"{url}/models"
+        else:
+            endpoint = url
+
+        headers = {"Accept": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+    req = urllib.request.Request(endpoint, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            models = []
+            if isinstance(data, dict):
+                raw_list = data.get("data") or data.get("models") or []
+            elif isinstance(data, list):
+                raw_list = data
+            else:
+                raw_list = []
+
+            for item in raw_list:
+                if isinstance(item, dict):
+                    mid = item.get("id") or item.get("name") or ""
+                    # For Gemini "models/gemini-1.5-pro" -> "gemini-1.5-pro"
+                    if mid.startswith("models/"):
+                        mid = mid.replace("models/", "")
+                    if mid:
+                        models.append({"id": mid, "name": item.get("display_name") or mid})
+                elif isinstance(item, str):
+                    models.append({"id": item, "name": item})
+
+            return models
+    except Exception as e:
+        print(f"[LLM_MODELS] Failed to fetch models from {endpoint}: {e}")
+        return []
+
+
 @router.get("")
 async def list_llm_providers():
     providers = await _repo.list_all()
-    # Mask credentials in response
     for p in providers:
         p["credentials_enc"] = {"encrypted": True}
     return providers
+
+
+@router.post("/fetch-models")
+async def fetch_llm_models(req: LLMModelFetchRequest):
+    base_url = req.base_url or ""
+    api_key = req.api_key or ""
+    provider_type = req.provider_type or "openai_compatible"
+
+    if req.provider_id:
+        p = await _repo.get_by_id(req.provider_id)
+        if p and p.get("credentials_enc") and p.get("key_version"):
+            creds = await load_and_decrypt(p["credentials_enc"], p["key_version"])
+            if not api_key:
+                api_key = creds.get("api_key", "")
+            if not base_url:
+                base_url = p.get("base_url", "")
+            if not req.provider_type:
+                provider_type = p.get("provider_type", "openai_compatible")
+
+    models = await asyncio.to_thread(_fetch_models_sync, base_url, api_key, provider_type)
+
+    if not models:
+        fallback = FALLBACK_MODELS.get(provider_type, FALLBACK_MODELS["openai_compatible"])
+        return {"models": fallback, "fetched": False}
+
+    return {"models": models, "fetched": True}
 
 
 @router.post("")

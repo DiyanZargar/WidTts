@@ -158,42 +158,59 @@ class ElevenLabsTTSAdapter(TTSProviderInterface):
         logger.info(f"[EL-TTS CONNECT] Connected (voice={self._voice_id}, model={self._model_id})")
 
     async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
-        """Send text and yield audio chunks as they arrive."""
-        if not self._stream_connected or not self._ws or (self._reader_task and self._reader_task.done()):
-            await self.connect_stream()
+        """Send text and yield audio chunks as they arrive, with REST fallback on error."""
+        try:
+            if not self._stream_connected or not self._ws or (self._reader_task and self._reader_task.done()):
+                await self.connect_stream()
 
-        self._drain_queue()
+            self._drain_queue()
 
-        # Send text
-        await self._ws.send(json.dumps({"text": text}))
+            # Send text
+            await self._ws.send(json.dumps({"text": text}))
 
-        # Send flush (empty text signals end of this input)
-        await self._ws.send(json.dumps({"text": "", "flush": True}))
+            # Send flush (empty text signals end of this input)
+            await self._ws.send(json.dumps({"text": "", "flush": True}))
 
-        logger.info(f"[EL-TTS STREAM] Sent text ({len(text)} chars). Yielding chunks...")
+            logger.info(f"[EL-TTS STREAM] Sent text ({len(text)} chars). Yielding chunks...")
 
-        chunk_count = 0
-        while True:
-            try:
-                chunk = await asyncio.wait_for(self._audio_queue.get(), timeout=30.0)
-            except asyncio.TimeoutError:
-                logger.error("[EL-TTS STREAM] Timeout: no audio for 30s")
-                self._stream_connected = False
-                raise RuntimeError("TTS streaming timeout — ElevenLabs did not send audio within 30s")
+            chunk_count = 0
+            while True:
+                chunk = await asyncio.wait_for(self._audio_queue.get(), timeout=5.0)
+                if chunk is None:
+                    logger.info(f"[EL-TTS STREAM] Complete — {chunk_count} chunks")
+                    break
+                chunk_count += 1
+                yield chunk
 
-            if chunk is None:
-                logger.info(f"[EL-TTS STREAM] Complete — {chunk_count} chunks")
-                break
-
-            chunk_count += 1
-            yield chunk
+        except Exception as err:
+            logger.warning(f"[EL-TTS STREAM FALLBACK] WebSocket stream failed ({err}) — falling back to REST synthesis")
+            self._stream_connected = False
+            rest_audio = await self.synthesize(text)
+            chunk_size = 4096
+            for i in range(0, len(rest_audio), chunk_size):
+                yield rest_audio[i:i+chunk_size]
 
     async def synthesize(self, text: str) -> bytes:
-        """Collect all streamed chunks into a single buffer."""
-        chunks = []
-        async for chunk in self.synthesize_stream(text):
-            chunks.append(chunk)
-        return b"".join(chunks)
+        """HTTP REST synthesis fallback."""
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{self._voice_id}"
+        headers = {
+            "xi-api-key": self._api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+        payload = {
+            "text": text,
+            "model_id": self._model_id,
+            "voice_settings": {
+                "stability": self._stability,
+                "similarity_boost": self._similarity_boost,
+            },
+        }
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            return resp.content
 
     async def _cleanup_connection(self) -> None:
         if self._reader_task and not self._reader_task.done():

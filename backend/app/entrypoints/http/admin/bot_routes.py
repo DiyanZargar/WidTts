@@ -37,6 +37,7 @@ async def list_bots():
 @router.post("")
 async def create_bot(req: BotCreateRequest):
     bot_id = await _repo.create(req.model_dump())
+    await _repo.activate(bot_id)
     return {"id": bot_id, "status": "created"}
 
 
@@ -63,6 +64,7 @@ async def update_bot(bot_id: str, req: BotUpdateRequest):
         raise HTTPException(status_code=404, detail="Bot not found")
     updates = {k: v for k, v in req.model_dump().items() if v is not None}
     await _repo.update(bot_id, updates)
+    await _repo.activate(bot_id)
     return {"status": "updated"}
 
 

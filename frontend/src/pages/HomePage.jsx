@@ -1,164 +1,409 @@
-import React, { useContext, useEffect, useState } from "react";
-import { ConversationContext } from "../context/ConversationContext";
-import { useWebSocket } from "../hooks/useWebSocket";
-import HolographicOrb from "../components/HolographicOrb";
-import ControlBar from "../components/ControlBar";
-import TranscriptOverlay from "../components/TranscriptOverlay";
-import SettingsPanel from "../components/SettingsPanel";
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Canvas } from '@react-three/fiber';
+import { Core } from '../components/three/Core';
+import { UserParticleVoid } from '../components/journey/ParticleVoid';
+import { useVoiceSession } from '../hooks/useVoiceSession';
+import { useMicLevel } from '../hooks/useMicLevel';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { tokens, userPalette } from '../design/tokens';
+import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
 
+/**
+ * HomePage — User Portal (`/user`)
+ *
+ * Full-viewport vibrant radiant emerald energy sphere + edge-to-edge floating particle void.
+ * - Real-time Voice Reactivity (STT user mic input + TTS bot audio output drive orb distortion & pulse).
+ * - Full conversation transcript feed & real-time assistant responses.
+ * - Automatic greeting audio upon session initialization.
+ * - Clean top-right EXIT navigation.
+ */
 export default function HomePage() {
-  const { state, dispatch } = useContext(ConversationContext);
-  const [conversationType, setConversationType] = useState("daily_life_companion");
-  const [isMuted, setIsMuted] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const navigate = useNavigate();
+  const { status, audioLevel, transcript, begin, end, restart, micStream, muted, setMuted, isActive } = useVoiceSession();
+  const listenLevel = useMicLevel(micStream);
+  const reducedMotion = useReducedMotion();
+  const [started, setStarted] = useState(false);
 
-  // Sync React mute state to the window level checked by useWebSocket mic stream
+  // Fetch active bot runtime info from API
+  const [bot, setBot] = useState({
+    name: 'Voice Assistant',
+    description: 'Real-time Conversational Assistant',
+    llmModel: '',
+    speechModel: '',
+  });
+
   useEffect(() => {
-    window.widgetIsMuted = isMuted;
-  }, [isMuted]);
+    fetch('/admin/api/runtime/stats')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.active_bot) {
+          const ab = data.active_bot;
+          const sp = ab.speech_provider;
+          setBot({
+            name: ab.name || 'Voice Assistant',
+            description: ab.description || ab.system_prompt || 'Real-time Conversational Assistant',
+            llmModel: ab.llm_model || '',
+            speechModel: sp ? `${sp.provider_type?.toUpperCase()} (${sp.stt_model || sp.tts_model})` : '',
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  const { connect, disconnect } = useWebSocket(conversationType);
+  const handleStart = useCallback(() => {
+    // Explicitly resume browser AudioContext on user gesture to guarantee sound output
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const tempCtx = new AudioCtx();
+        tempCtx.resume().then(() => tempCtx.close());
+      }
+    } catch (e) {}
 
-  // Connection manager lifecycle sync: connect when open, disconnect when closed
+    setStarted(true);
+    begin();
+  }, [begin]);
+
+  const handleStop = useCallback(() => {
+    end();
+    setStarted(false);
+  }, [end]);
+
+  const handleExit = useCallback(() => {
+    if (isActive) end();
+    navigate('/');
+  }, [end, isActive, navigate]);
+
+  // Keep started state in sync with session activity
   useEffect(() => {
-    if (state.isOpen) {
-      connect();
-    } else {
-      disconnect();
+    if (isActive) {
+      setStarted(true);
+    } else if (status === 'idle') {
+      setStarted(false);
     }
-    return () => {
-      disconnect();
-    };
-  }, [state.isOpen, connect, disconnect]);
+  }, [isActive, status]);
 
-  // Restores core back to sleeping state
-  const handleCloseSession = () => {
-    disconnect();
-    sessionStorage.removeItem("widget_session_id");
-    dispatch({ type: "CLOSE_WIDGET" });
-    setIsMuted(false);
+  // Status badge label
+  const getStatusBadge = () => {
+    if (status === 'speaking') return { label: '🔊 Speaking...', color: userPalette.bright };
+    if (status === 'listening') return { label: '🎙 Listening...', color: 'hsl(160, 90%, 45%)' };
+    if (status === 'thinking') return { label: '🧠 Thinking...', color: 'hsl(45, 95%, 60%)' };
+    if (status === 'connecting') return { label: '⏳ Connecting...', color: tokens.color.ink60 };
+    return { label: '● Ready', color: userPalette.bright };
   };
 
-  // Restarts session after completion or upon user request
-  const handleRestartSession = () => {
-    disconnect();
-    sessionStorage.removeItem("widget_session_id");
-    dispatch({ type: "RESET_FOR_NEW_SESSION" });
-    setIsMuted(false);
-    setTimeout(() => {
-      connect();
-    }, 50);
-  };
-
-  // Change conversation pack ID and trigger clean session re-handshake
-  const handleChangeType = (newType) => {
-    setConversationType(newType);
-    disconnect();
-    sessionStorage.removeItem("widget_session_id");
-    dispatch({ type: "RESET_FOR_NEW_SESSION" });
-  };
-
-  const handleOpenSession = () => {
-    dispatch({ type: "OPEN_WIDGET" });
-  };
-
-  // Get human readable active pack name
-  const getPackName = () => {
-    switch (conversationType) {
-      case "daily_life_companion":
-        return "Daily Life Companion";
-      case "career_life_advisor":
-        return "Career & Life Advisor";
-      case "health_wellness_assistant":
-        return "Health & Wellness Matrix";
-      case "travel_planner":
-        return "Travel Planner";
-      default:
-        return "Custom Core";
-    }
-  };
-
-  // Static properties for background cinematic dust drift
-  const particles = Array.from({ length: 25 }).map((_, i) => ({
-    id: i,
-    left: `${Math.random() * 100}%`,
-    delay: `${Math.random() * 20}s`,
-    size: `${Math.random() * 3 + 1}px`,
-    duration: `${Math.random() * 15 + 20}s`,
-  }));
+  const statusBadge = getStatusBadge();
 
   return (
-    <div className="relative w-full h-full min-h-screen bg-[#09090B] flex flex-col justify-between items-center py-8 px-6 overflow-hidden">
-      
-      {/* 1. Ambient Volumetric Glow spots */}
-      <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-cyan-600/5 filter blur-[100px] pointer-events-none bg-glow-1" />
-      <div className="absolute bottom-1/4 right-1/4 w-[450px] h-[450px] rounded-full bg-purple-600/5 filter blur-[120px] pointer-events-none bg-glow-2" />
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: tokens.color.void,
+        display: 'grid',
+        placeItems: 'center',
+        overflow: 'hidden',
+        userSelect: 'none',
+      }}
+    >
+      {/* Viewport border glow lines */}
+      <div className="viewport-border viewport-border--top viewport-border--user" />
+      <div className="viewport-border viewport-border--bottom viewport-border--user" />
+      <div className="viewport-border viewport-border--left viewport-border--user" />
+      <div className="viewport-border viewport-border--right viewport-border--user" />
 
-      {/* 2. Floating dust particle layer */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {particles.map((p) => (
-          <div
-            key={p.id}
-            className="particle"
-            style={{
-              left: p.left,
-              width: p.size,
-              height: p.size,
-              animationDelay: p.delay,
-              animationDuration: p.duration,
-            }}
+      {/* FULL-SCREEN 3D Canvas */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100vw',
+          height: '100vh',
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      >
+        <Canvas
+          camera={{ fov: 45, position: [0, 0, 8] }}
+          gl={{ alpha: true, antialias: true }}
+          style={{ background: 'transparent', width: '100%', height: '100%' }}
+        >
+          {/* Particles across full viewport */}
+          <UserParticleVoid />
+
+          {/* Central Radiant Emerald Energy Orb */}
+          <Core
+            status={reducedMotion ? 'idle' : status}
+            audioLevel={audioLevel}
+            listenLevel={listenLevel}
+            radius={1.35}
           />
-        ))}
+        </Canvas>
       </div>
 
-      {/* 3. Header HUD minimal tags */}
-      <header className="w-full flex justify-between items-center max-w-6xl z-10 select-none">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-bold tracking-[0.4em] text-white/40 uppercase">
-            Aether AI Link
-          </span>
-          <span className="text-[8px] tracking-[0.2em] text-zinc-600 uppercase">
-            System V2.9.4
+      {/* Top Navigation Bar */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '60px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '0 32px',
+          zIndex: 20,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: statusBadge.color,
+              boxShadow: `0 0 10px ${statusBadge.color}`,
+            }}
+          />
+          <span className="type-micro" style={{ color: tokens.color.ink60, fontSize: '11px' }}>
+            {statusBadge.label}
           </span>
         </div>
 
-        <div className="flex flex-col items-end gap-0.5">
-          <span className="text-[10px] font-semibold tracking-widest text-zinc-400 uppercase">
-            {getPackName()}
-          </span>
-          <span className="text-[8px] tracking-wider text-zinc-600 uppercase">
-            Matrix Loaded
-          </span>
+        <button
+          onClick={handleExit}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${tokens.color.ink35}`,
+            color: tokens.color.ink100,
+            fontFamily: tokens.font.body,
+            fontWeight: 600,
+            fontSize: '11px',
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+            padding: '8px 18px',
+            borderRadius: '4px',
+            boxShadow: '0 0 12px rgba(255,255,255,0.15)',
+            transition: `all ${tokens.motion.hoverMs}ms cubic-bezier(${tokens.easing.expoOut.join(',')})`,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = tokens.color.ink100;
+            e.currentTarget.style.boxShadow = '0 0 20px rgba(255,255,255,0.5)';
+            e.currentTarget.style.transform = 'scale(1.04)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = tokens.color.ink35;
+            e.currentTarget.style.boxShadow = '0 0 12px rgba(255,255,255,0.15)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+        >
+          Exit
+        </button>
+      </div>
+
+      {/* Top Bot Identity */}
+      <div style={{ position: 'absolute', top: '10%', textAlign: 'center', zIndex: 10, pointerEvents: 'none' }}>
+        <h1
+          style={{
+            fontFamily: tokens.font.display,
+            fontWeight: 400,
+            fontSize: '32px',
+            color: tokens.color.ink100,
+            letterSpacing: '-0.02em',
+            margin: 0,
+            textShadow: '0 0 20px rgba(255,255,255,0.3)',
+          }}
+        >
+          {bot.name}
+        </h1>
+        {bot.description && (
+          <p
+            style={{
+              fontFamily: tokens.font.body,
+              fontWeight: 600,
+              fontSize: '11px',
+              color: 'rgba(255,255,255,0.7)',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              marginTop: '6px',
+              marginBottom: 0,
+              textShadow: '0 0 10px rgba(255,255,255,0.2)',
+            }}
+          >
+            {bot.description}
+          </p>
+        )}
+        {(bot.llmModel || bot.speechModel) && (
+          <div
+            style={{
+              display: 'flex',
+              gap: '8px',
+              justifyContent: 'center',
+              marginTop: '8px',
+            }}
+          >
+            {bot.llmModel && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontFamily: 'monospace',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: userPalette.bright,
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                LLM: {bot.llmModel}
+              </span>
+            )}
+            {bot.speechModel && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontFamily: 'monospace',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: 'rgba(255,255,255,0.8)',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                SPEECH: {bot.speechModel}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Controls & Action Area */}
+      {!started ? (
+        <button
+          onClick={handleStart}
+          style={{
+            position: 'absolute',
+            bottom: '14%',
+            background: 'rgba(255,255,255,0.04)',
+            border: `1px solid ${userPalette.bright}`,
+            color: tokens.color.ink100,
+            padding: '14px 36px',
+            fontFamily: tokens.font.body,
+            fontWeight: 600,
+            fontSize: '12px',
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+            borderRadius: '6px',
+            boxShadow: `0 0 25px 2px hsla(155, 95%, 58%, 0.35)`,
+            transition: `all ${tokens.motion.hoverMs}ms cubic-bezier(${tokens.easing.expoOut.join(',')})`,
+            zIndex: 10,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = userPalette.bloom;
+            e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+            e.currentTarget.style.boxShadow = `0 0 35px 6px hsla(155, 95%, 58%, 0.55)`;
+            e.currentTarget.style.transform = 'scale(1.04)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = userPalette.bright;
+            e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+            e.currentTarget.style.boxShadow = `0 0 25px 2px hsla(155, 95%, 58%, 0.35)`;
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+        >
+          Initialize Core
+        </button>
+      ) : (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '8%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            zIndex: 10,
+            width: '90%',
+            maxWidth: '560px',
+          }}
+        >
+          {/* Live Conversation Transcript Feed Overlay */}
+          <div
+            style={{
+              width: '100%',
+              minHeight: '60px',
+              maxHeight: '120px',
+              overflowY: 'auto',
+              padding: '12px 18px',
+              background: 'rgba(4, 13, 10, 0.75)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '10px',
+              color: tokens.color.ink100,
+              fontSize: '14px',
+              fontFamily: tokens.font.body,
+              textAlign: 'center',
+              boxShadow: '0 0 30px rgba(0,0,0,0.6), 0 0 15px hsla(155, 95%, 58%, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {transcript ? (
+              <span>"{transcript}"</span>
+            ) : (
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
+                {status === 'speaking' ? 'Assistant is speaking...' : status === 'listening' ? 'Listening to your voice...' : 'Speak now or listen to assistant...'}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+            <button
+              onClick={() => setMuted(!muted)}
+              style={{
+                background: muted ? 'rgba(255, 80, 80, 0.15)' : 'rgba(255,255,255,0.06)',
+                border: `1px solid ${muted ? 'rgba(255, 80, 80, 0.4)' : 'rgba(255,255,255,0.2)'}`,
+                color: tokens.color.ink100,
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                display: 'grid',
+                placeItems: 'center',
+                cursor: 'pointer',
+                transition: 'all 200ms',
+              }}
+              title={muted ? 'Unmute microphone' : 'Mute microphone'}
+            >
+              {muted ? <MicMutedIcon size={20} /> : <MicIcon size={20} />}
+            </button>
+
+            <button
+              onClick={handleStop}
+              style={{
+                background: 'rgba(255, 80, 80, 0.2)',
+                border: '1px solid rgba(255, 80, 80, 0.5)',
+                color: '#fff',
+                padding: '12px 24px',
+                fontFamily: tokens.font.body,
+                fontWeight: 600,
+                fontSize: '11px',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                borderRadius: '4px',
+                boxShadow: '0 0 16px rgba(255, 80, 80, 0.3)',
+              }}
+            >
+              End Session
+            </button>
+          </div>
         </div>
-      </header>
-
-      {/* 4. Central Hero Experience (Holographic Orb & Subtitles) */}
-      <main className="flex-1 flex flex-col items-center justify-center w-full max-w-4xl z-10 gap-2">
-        <HolographicOrb
-          onOpenSession={handleOpenSession}
-          onCloseSession={handleCloseSession}
-          onRestartSession={handleRestartSession}
-        />
-        <TranscriptOverlay />
-      </main>
-
-      {/* 5. Minimal footer controls */}
-      <footer className="w-full flex justify-center z-10">
-        <ControlBar
-          isMuted={isMuted}
-          onToggleMute={() => setIsMuted(!isMuted)}
-          onOpenSettings={() => setShowSettings(true)}
-          onCloseSession={handleCloseSession}
-        />
-      </footer>
-
-      {/* 6. Configuration Settings drawer */}
-      <SettingsPanel
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        activeType={conversationType}
-        onChangeType={handleChangeType}
-      />
+      )}
     </div>
   );
 }

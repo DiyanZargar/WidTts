@@ -2,127 +2,667 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Design Tokens (§12.7) ─── */
+:root {
+  --void: #040d0a;
+  --accent-dim: hsl(165 85% 22%);
+  --accent-mid: hsl(160 90% 42%);
+  --accent-bright: hsl(155 95% 58%);
+  --accent-bloom: hsl(150 100% 82%);
+  --ink-100: rgba(255, 255, 255, 1);
+  --ink-60: rgba(255, 255, 255, 0.72);
+  --ink-35: rgba(255, 255, 255, 0.42);
+  --warn: hsl(28 85% 58%);
+
+  /* Typography */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Motion (§12.9) */
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-reveal: 500ms;
+  --duration-hover: 200ms;
+  --duration-flare: 900ms;
+}
+
+/* ─── Base Reset ─── */
 @layer base {
-  html, body, #root {
+  *, *::before, *::after {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
+  }
+
+  html, body, #root {
     width: 100%;
     height: 100%;
-    background-color: #09090B;
-    color: #F4F4F5;
-    font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--void);
+    color: var(--ink-100);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
   }
 }
 
-/* Glassmorphism custom styles */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.1),
-    0 10px 30px -10px rgba(0, 0, 0, 0.7);
+/* ─── Viewport Border Glow Lines ─── */
+@keyframes border-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
 }
 
+.viewport-border {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.viewport-border--top,
+.viewport-border--bottom {
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-dim) 15%,
+    var(--accent-mid) 50%,
+    var(--accent-dim) 85%,
+    transparent 100%
+  );
+}
+
+.viewport-border--left,
+.viewport-border--right {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--accent-dim) 15%,
+    var(--accent-mid) 50%,
+    var(--accent-dim) 85%,
+    transparent 100%
+  );
+}
+
+.viewport-border--top { top: 0; }
+.viewport-border--bottom { bottom: 0; }
+.viewport-border--left { left: 0; }
+.viewport-border--right { right: 0; }
+
+.viewport-border--top,
+.viewport-border--bottom,
+.viewport-border--left,
+.viewport-border--right {
+  animation: border-pulse 4s infinite ease-in-out;
+}
+
+.viewport-border--user.viewport-border--top,
+.viewport-border--user.viewport-border--bottom {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(165 85% 22%) 15%,
+    hsl(160 90% 42%) 50%,
+    hsl(165 85% 22%) 85%,
+    transparent 100%
+  );
+}
+
+.viewport-border--user.viewport-border--left,
+.viewport-border--user.viewport-border--right {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    hsl(165 85% 22%) 15%,
+    hsl(160 90% 42%) 50%,
+    hsl(165 85% 22%) 85%,
+    transparent 100%
+  );
+}
+
+/* ─── Scroll Mouse Indicator ─── */
+@keyframes scrollWheelDown {
+  0% { opacity: 1; transform: translateY(0); }
+  75% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+
+@keyframes scrollWheelUp {
+  0% { opacity: 1; transform: translateY(8px); }
+  75% { opacity: 0; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(8px); }
+}
+
+.scroll-mouse-indicator {
+  position: fixed;
+  right: 36px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1), transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none;
+}
+
+.scroll-mouse-body {
+  width: 20px;
+  height: 32px;
+  border: 1.5px solid var(--accent-mid);
+  border-radius: 12px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 5px;
+  background: rgba(5, 5, 7, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.8), 0 0 10px hsla(200, 70%, 52%, 0.25);
+}
+
+.scroll-mouse-wheel {
+  width: 3px;
+  height: 6px;
+  background-color: var(--accent-bright);
+  border-radius: 2px;
+  box-shadow: 0 0 6px var(--accent-bright);
+}
+
+.scroll-mouse-wheel--down {
+  animation: scrollWheelDown 1.3s infinite ease-in-out;
+}
+
+.scroll-mouse-wheel--up {
+  animation: scrollWheelUp 1.3s infinite ease-in-out;
+}
+
+.scroll-mouse-arrow {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--accent-bright);
+  border-bottom: 1.5px solid var(--accent-bright);
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* ─── Scroll Glow Spotlight — follows scroll via JS class ─── */
+.scroll-glow {
+  position: fixed;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, hsla(200, 70%, 45%, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 1;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: top 800ms cubic-bezier(0.16, 1, 0.3, 1), opacity 600ms ease;
+  opacity: 0.8;
+  filter: blur(40px);
+}
+
+/* ─── Typography Scale (§12.8) ─── */
+.type-display {
+  font-family: var(--font-display);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--ink-100);
+}
+
+.type-display-xl {
+  font-size: clamp(2.5rem, 6vw, 7rem);
+}
+
+.type-display-lg {
+  font-size: clamp(1.8rem, 4vw, 3.5rem);
+}
+
+.type-display-md {
+  font-size: clamp(1.2rem, 2.5vw, 2rem);
+}
+
+.type-body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--ink-60);
+  line-height: 1.65;
+}
+
+.type-micro {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-35);
+}
+
+/* ─── Glass Pane (§12.2) — brighter, more presence ─── */
+.glass-pane {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow:
+    0 0 25px 3px hsla(200, 60%, 35%, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  transition: border-color var(--duration-hover) var(--ease-expo),
+              box-shadow var(--duration-hover) var(--ease-expo);
+}
+
+.glass-pane:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 0 35px 5px hsla(200, 60%, 42%, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-pane:focus-within {
+  border-color: var(--accent-mid);
+  box-shadow:
+    0 0 30px 4px hsla(200, 70%, 52%, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Glass Input Fields ─── */
+.glass-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--ink-100);
+  font-family: var(--font-body);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--duration-hover) var(--ease-expo),
+              box-shadow var(--duration-hover) var(--ease-expo);
+}
+
+.glass-input::placeholder {
+  color: var(--ink-35);
+}
+
+.glass-input:focus {
+  border-color: var(--accent-mid);
+  box-shadow: 0 0 12px 1px hsla(200, 70%, 52%, 0.12);
+}
+
+.glass-input::-webkit-scrollbar {
+  width: 3px;
+}
+
+.glass-input::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+.glass-textarea {
+  resize: vertical;
+  min-height: 200px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.glass-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.35)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+/* ─── Action Buttons ─── */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: 1px solid var(--accent-mid);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent-bright);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all var(--duration-hover) var(--ease-expo);
+  user-select: none;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--accent-bright);
+  color: var(--ink-100);
+}
+
+.action-btn:active {
+  transform: scale(0.97);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-btn--primary {
+  background: var(--accent-mid);
+  border-color: var(--accent-mid);
+  color: var(--void);
+  font-weight: 600;
+}
+
+.action-btn--primary:hover {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+  color: var(--void);
+}
+
+/* ─── Loading Spinner (edge stroke) ─── */
+@keyframes rotate-stroke {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-ring {
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent-bright);
+  border-radius: 50%;
+  animation: rotate-stroke 1s linear infinite;
+}
+
+/* ─── Status Flash (§12.10) ─── */
+@keyframes flash-success {
+  0% { box-shadow: 0 0 0 0 var(--accent-bloom); }
+  50% { box-shadow: 0 0 30px 4px var(--accent-bloom); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes flash-error {
+  0% { box-shadow: 0 0 0 0 var(--warn); }
+  50% { box-shadow: 0 0 20px 2px var(--warn); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.flash-success { animation: flash-success 800ms var(--ease-expo) forwards; }
+.flash-error { animation: flash-error 800ms var(--ease-expo) forwards; }
+
+/* ─── Scroll Chevron ─── */
+@keyframes chevron-drift {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50% { transform: translateY(8px); opacity: 1; }
+}
+
+.scroll-chevron {
+  animation: chevron-drift 2.5s ease-in-out infinite;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* ─── Section Layout inside ScrollControls html ─── */
+.journey-section {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 6rem 8vw 4rem;
+  position: relative;
+}
+
+.journey-section__content {
+  max-width: 900px;
+  width: 62%;
+}
+
+/* ─── Two-column section layout ─── */
+.journey-section--split {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 3rem;
+  padding-top: 8rem;
+}
+
+.journey-section--split .journey-section__content {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  max-width: 700px;
+}
+
+.journey-section__sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  padding-top: 5rem;
+}
+
+/* ─── Section Hints (sidebar helper text) ─── */
+.section-hint {
+  padding: 1.25rem;
+  border-left: 1px solid hsla(200, 50%, 40%, 0.25);
+  margin-bottom: 1.5rem;
+}
+
+.section-hint__title {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-mid);
+  margin-bottom: 0.5rem;
+}
+
+.section-hint__body {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-35);
+}
+
+/* ─── Step Indicator ─── */
+.step-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent-dim);
+  margin-bottom: 1rem;
+}
+
+.step-indicator__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-mid);
+  box-shadow: 0 0 6px 1px hsla(200, 70%, 52%, 0.4);
+}
+
+/* ─── User Portal ─── */
+.user-portal {
+  position: fixed;
+  inset: 0;
+  background: var(--void);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.user-portal__identity {
+  position: absolute;
+  top: 14%;
+  text-align: center;
+  z-index: 10;
+}
+
+.user-portal__name {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  color: var(--ink-100);
+}
+
+.user-portal__description {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--ink-35);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.user-portal__action {
+  position: absolute;
+  bottom: 16%;
+  z-index: 10;
+}
+
+.user-portal__initialize {
+  background: transparent;
+  border: 1px solid var(--accent-mid);
+  color: var(--ink-60);
+  padding: 10px 26px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--duration-hover) var(--ease-expo);
+  border-radius: 4px;
+}
+
+.user-portal__initialize:hover {
+  border-color: var(--accent-bright);
+  color: var(--ink-100);
+  box-shadow: 0 0 20px 2px hsla(200, 70%, 52%, 0.15);
+}
+
+.user-portal__initialize:active {
+  border-color: var(--accent-bloom);
+  transform: scale(0.97);
+}
+
+.user-portal__transcript {
+  position: absolute;
+  bottom: 12%;
+  color: var(--ink-35);
+  font-family: var(--font-body);
+  font-size: 13px;
+  max-width: 60%;
+  text-align: center;
+  z-index: 10;
+  transition: opacity 300ms ease;
+}
+
+.user-portal__status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+  transition: background 300ms ease, box-shadow 300ms ease;
+}
+
+/* ─── prefers-reduced-motion (§12.12) ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Responsive (§12.11) ─── */
+@media (max-width: 768px) {
+  .journey-section {
+    padding: 4rem 1.5rem;
+  }
+
+  .journey-section--split {
+    flex-direction: column;
+  }
+
+  .journey-section__content {
+    width: 90%;
+    max-width: 100%;
+  }
+
+  .journey-section__sidebar {
+    width: 100%;
+    padding-top: 1rem;
+  }
+
+  .glass-pane {
+    padding: 1.5rem;
+  }
+}
+
+/* ─── User Portal styles (preserved for HolographicOrb fallback) ─── */
 .glass-orb {
   background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 60%, rgba(0, 0, 0, 0.4) 100%);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 
+  box-shadow:
     inset 0 4px 12px rgba(255, 255, 255, 0.15),
     inset 0 -4px 12px rgba(0, 0, 0, 0.4),
     0 20px 50px rgba(0, 0, 0, 0.6);
 }
 
-/* Custom animations for orb core */
 @keyframes energy-flow {
-  0%, 100% {
-    transform: scale(1) rotate(0deg);
-    filter: brightness(1) contrast(1);
-  }
-  50% {
-    transform: scale(1.06) rotate(180deg);
-    filter: brightness(1.2) contrast(1.1);
-  }
+  0%, 100% { transform: scale(1) rotate(0deg); filter: brightness(1) contrast(1); }
+  50% { transform: scale(1.06) rotate(180deg); filter: brightness(1.2) contrast(1.1); }
 }
+.animate-energy { animation: energy-flow 6s ease-in-out infinite; }
 
-.animate-energy {
-  animation: energy-flow 6s ease-in-out infinite;
-}
-
-/* Volumetric slow bg glow */
 @keyframes ambient-glow {
-  0%, 100% {
-    transform: scale(1) translate(0px, 0px);
-    opacity: 0.3;
-  }
-  33% {
-    transform: scale(1.2) translate(30px, -50px);
-    opacity: 0.45;
-  }
-  66% {
-    transform: scale(0.9) translate(-40px, 40px);
-    opacity: 0.25;
-  }
+  0%, 100% { transform: scale(1) translate(0px, 0px); opacity: 0.3; }
+  33% { transform: scale(1.2) translate(30px, -50px); opacity: 0.45; }
+  66% { transform: scale(0.9) translate(-40px, 40px); opacity: 0.25; }
 }
+.bg-glow-1 { animation: ambient-glow 15s ease-in-out infinite; }
+.bg-glow-2 { animation: ambient-glow 20s ease-in-out infinite alternate; }
 
-.bg-glow-1 {
-  animation: ambient-glow 15s ease-in-out infinite;
-}
-.bg-glow-2 {
-  animation: ambient-glow 20s ease-in-out infinite alternate;
-}
-
-/* Text glow */
-.text-glow-cyan {
-  text-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
-}
-.text-glow-purple {
-  text-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
-}
-.text-glow-green {
-  text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
-}
-.text-glow-white {
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
-}
-
-/* Scrollbar styles */
-::-webkit-scrollbar {
-  width: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* Cinematic floating dust particles */
 @keyframes particle-drift {
-  0% {
-    transform: translateY(100vh) translateX(0px) scale(0.8);
-    opacity: 0;
-  }
-  10% {
-    opacity: 0.3;
-  }
-  90% {
-    opacity: 0.3;
-  }
-  100% {
-    transform: translateY(-10vh) translateX(80px) scale(1.2);
-    opacity: 0;
-  }
+  0% { transform: translateY(100vh) translateX(0px) scale(0.8); opacity: 0; }
+  10% { opacity: 0.3; }
+  90% { opacity: 0.3; }
+  100% { transform: translateY(-10vh) translateX(80px) scale(1.2); opacity: 0; }
 }
-
 .particle {
   position: absolute;
   border-radius: 50%;
@@ -130,4 +670,3 @@
   pointer-events: none;
   animation: particle-drift 24s linear infinite;
 }
-
