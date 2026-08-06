@@ -73,23 +73,19 @@ DEEPGRAM_STT_MODELS = [
 ]
 
 DEEPGRAM_TTS_MODELS = [
-    {"id": "flux-rufus-en", "name": "Flux Rufus (Conversational Male)"},
-    {"id": "flux-asteria-en", "name": "Flux Asteria (Conversational Female)"},
-    {"id": "flux-stella-en", "name": "Flux Stella (Conversational Female)"},
-    {"id": "flux-luna-en", "name": "Flux Luna (Conversational Female)"},
-    {"id": "flux-arcas-en", "name": "Flux Arcas (Conversational Male)"},
-    {"id": "flux-orion-en", "name": "Flux Orion (Conversational Male)"},
-    {"id": "flux-zeus-en", "name": "Flux Zeus (Conversational Male)"},
-    {"id": "aura-asteria-en", "name": "Aura Asteria (US Female)"},
-    {"id": "aura-luna-en", "name": "Aura Luna (US Female)"},
-    {"id": "aura-stella-en", "name": "Aura Stella (US Female)"},
-    {"id": "aura-athena-en", "name": "Aura Athena (UK Female)"},
-    {"id": "aura-hera-en", "name": "Aura Hera (US Female)"},
-    {"id": "aura-orion-en", "name": "Aura Orion (US Male)"},
-    {"id": "aura-arcas-en", "name": "Aura Arcas (US Male)"},
-    {"id": "aura-perseus-en", "name": "Aura Perseus (US Male)"},
-    {"id": "aura-angler-en", "name": "Aura Angler (UK Male)"},
-    {"id": "aura-zeus-en", "name": "Aura Zeus (US Male)"},
+    {"id": "flux-rufus-en", "name": "Flux Rufus (Conversational Male - Flux v2)"},
+    {"id": "aura-asteria-en", "name": "Aura Asteria (US Female - Aura v1)"},
+    {"id": "aura-stella-en", "name": "Aura Stella (US Female - Aura v1)"},
+    {"id": "aura-athena-en", "name": "Aura Athena (UK Female - Aura v1)"},
+    {"id": "aura-hera-en", "name": "Aura Hera (US Female - Aura v1)"},
+    {"id": "aura-luna-en", "name": "Aura Luna (US Female - Aura v1)"},
+    {"id": "aura-orion-en", "name": "Aura Orion (US Male - Aura v1)"},
+    {"id": "aura-arcas-en", "name": "Aura Arcas (US Male - Aura v1)"},
+    {"id": "aura-perseus-en", "name": "Aura Perseus (US Male - Aura v1)"},
+    {"id": "aura-angus-en", "name": "Aura Angus (UK Male - Aura v1)"},
+    {"id": "aura-orpheus-en", "name": "Aura Orpheus (US Male - Aura v1)"},
+    {"id": "aura-helios-en", "name": "Aura Helios (UK Male - Aura v1)"},
+    {"id": "aura-zeus-en", "name": "Aura Zeus (US Male - Aura v1)"},
 ]
 
 ELEVENLABS_FALLBACK_MODELS = [
@@ -114,41 +110,25 @@ ELEVENLABS_FALLBACK_VOICES = [
 
 
 def _fetch_elevenlabs_data_sync(api_key: str):
-    models = []
+    models = ELEVENLABS_FALLBACK_MODELS
     voices = []
-
     if not api_key:
         return models, voices, False
 
-    # Fetch models dynamically from ElevenLabs API
-    req_m = urllib.request.Request(
-        "https://api.elevenlabs.io/v1/models",
-        headers={"xi-api-key": api_key, "Accept": "application/json"},
-        method="GET",
-    )
-    with urllib.request.urlopen(req_m, timeout=8) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-        if isinstance(data, list):
-            for m in data:
-                if isinstance(m, dict) and m.get("model_id"):
-                    models.append({"id": m["model_id"], "name": m.get("name") or m["model_id"]})
-
-    # Fetch voices dynamically from ElevenLabs API
-    req_v = urllib.request.Request(
+    # Fetch dynamic voices
+    req = urllib.request.Request(
         "https://api.elevenlabs.io/v1/voices",
         headers={"xi-api-key": api_key, "Accept": "application/json"},
         method="GET",
     )
-    with urllib.request.urlopen(req_v, timeout=8) as resp:
+    with urllib.request.urlopen(req, timeout=8) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-        if isinstance(data, dict) and isinstance(data.get("voices"), list):
-            for v in data["voices"]:
-                if isinstance(v, dict) and v.get("voice_id"):
-                    name = v.get("name") or v["voice_id"]
-                    cat = v.get("category")
-                    if cat:
-                        name = f"{name} ({cat})"
-                    voices.append({"id": v["voice_id"], "name": name})
+        for v in data.get("voices", []):
+            name = v.get("name", "Voice")
+            cat = v.get("category")
+            if cat:
+                name = f"{name} ({cat})"
+            voices.append({"id": v["voice_id"], "name": name})
 
     return models, voices, True
 
@@ -167,18 +147,25 @@ def _fetch_deepgram_data_sync(api_key: str):
     )
     with urllib.request.urlopen(req, timeout=8) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-        raw = data.get("models") or data.get("stt") or []
-        if isinstance(raw, list):
-            for m in raw:
+        stt_raw = data.get("stt") or data.get("models") or []
+        if isinstance(stt_raw, list):
+            for m in stt_raw:
                 if isinstance(m, dict):
                     mid = m.get("canonical_name") or m.get("name") or m.get("id") or ""
                     name = m.get("name") or mid
                     arch = m.get("architecture") or ""
                     if mid:
-                        if "tts" in arch.lower() or "aura" in mid.lower() or "flux" in mid.lower():
-                            tts_models.append({"id": mid, "name": f"{name} ({arch})"})
-                        else:
-                            stt_models.append({"id": mid, "name": f"{name} ({arch})"})
+                        stt_models.append({"id": mid, "name": f"{name} ({arch})"})
+
+        tts_raw = data.get("tts") or []
+        if isinstance(tts_raw, list):
+            for m in tts_raw:
+                if isinstance(m, dict):
+                    mid = m.get("canonical_name") or m.get("name") or m.get("id") or ""
+                    name = m.get("name") or mid
+                    arch = m.get("architecture") or ""
+                    if mid:
+                        tts_models.append({"id": mid, "name": f"{name} ({arch})"})
 
     return stt_models, tts_models, True
 
@@ -204,18 +191,43 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             return audio_bytes, "audio/mpeg"
     else:  # Deepgram
         model = req.tts_model or "aura-asteria-en"
-        version = "v2" if model.lower().startswith("flux") else "v1"
-        url = f"https://api.deepgram.com/{version}/speak?model={model}&encoding=linear16&sample_rate=24000"
+        primary_v = "v2" if model.lower().startswith("flux") else "v1"
+        fallback_v = "v1" if primary_v == "v2" else "v2"
+
+        alt_model = model
+        if model.lower().startswith("flux-"):
+            alt_model = "aura-" + model[5:]
+        elif model.lower().startswith("aura-"):
+            alt_model = "flux-" + model[5:]
+
         payload = json.dumps({"text": text}).encode("utf-8")
         headers = {
             "Authorization": f"Token {api_key}",
             "Content-Type": "application/json",
             "Accept": "audio/wav",
         }
-        request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-        with urllib.request.urlopen(request, timeout=10) as response:
-            audio_bytes = response.read()
-            return audio_bytes, "audio/wav"
+
+        attempts = [
+            (primary_v, model),
+            (fallback_v, model),
+            (primary_v, alt_model),
+            (fallback_v, alt_model),
+        ]
+
+        last_err = None
+        for version, m_name in attempts:
+            try:
+                url = f"https://api.deepgram.com/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
+                request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    audio_bytes = response.read()
+                    return audio_bytes, "audio/wav"
+            except Exception as e:
+                last_err = e
+                continue
+
+        if last_err:
+            raise last_err
 
 
 @router.get("")

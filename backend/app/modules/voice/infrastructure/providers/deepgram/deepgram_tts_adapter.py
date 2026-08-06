@@ -52,20 +52,45 @@ class DeepgramTTSAdapter(TTSProviderInterface):
         return self._http_client
 
     async def synthesize(self, text: str) -> bytes:
-        version = "v2" if self._is_v2 else "v1"
-        tts_url = f"https://api.deepgram.com/{version}/speak?model={self._tts_model}&encoding=linear16&sample_rate=24000"
+        model = self._tts_model or "aura-asteria-en"
+        primary_v = "v2" if model.lower().startswith("flux") else "v1"
+        fallback_v = "v1" if primary_v == "v2" else "v2"
+
+        alt_model = model
+        if model.lower().startswith("flux-"):
+            alt_model = "aura-" + model[5:]
+        elif model.lower().startswith("aura-"):
+            alt_model = "flux-" + model[5:]
+
         client = self._get_http_client()
-        resp = await client.post(
-            tts_url,
-            headers={
-                "Authorization": f"Token {self._api_key}",
-                "Content-Type": "application/json",
-                "Accept": "audio/wav",
-            },
-            json={"text": text},
-        )
-        resp.raise_for_status()
-        return resp.content
+        attempts = [
+            (primary_v, model),
+            (fallback_v, model),
+            (primary_v, alt_model),
+            (fallback_v, alt_model),
+        ]
+
+        last_err = None
+        for version, m_name in attempts:
+            try:
+                tts_url = f"https://api.deepgram.com/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
+                resp = await client.post(
+                    tts_url,
+                    headers={
+                        "Authorization": f"Token {self._api_key}",
+                        "Content-Type": "application/json",
+                        "Accept": "audio/wav",
+                    },
+                    json={"text": text},
+                )
+                if resp.status_code == 200:
+                    return resp.content
+            except Exception as e:
+                last_err = e
+                continue
+
+        if last_err:
+            raise last_err
 
     # ── Streaming WebSocket ──
 
