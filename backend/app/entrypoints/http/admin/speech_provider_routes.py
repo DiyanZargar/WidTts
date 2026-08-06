@@ -73,19 +73,25 @@ DEEPGRAM_STT_MODELS = [
 ]
 
 DEEPGRAM_TTS_MODELS = [
-    {"id": "flux-rufus-en", "name": "Flux Rufus (Conversational Male - Flux v2)"},
-    {"id": "aura-asteria-en", "name": "Aura Asteria (US Female - Aura v1)"},
-    {"id": "aura-stella-en", "name": "Aura Stella (US Female - Aura v1)"},
-    {"id": "aura-athena-en", "name": "Aura Athena (UK Female - Aura v1)"},
-    {"id": "aura-hera-en", "name": "Aura Hera (US Female - Aura v1)"},
-    {"id": "aura-luna-en", "name": "Aura Luna (US Female - Aura v1)"},
-    {"id": "aura-orion-en", "name": "Aura Orion (US Male - Aura v1)"},
-    {"id": "aura-arcas-en", "name": "Aura Arcas (US Male - Aura v1)"},
-    {"id": "aura-perseus-en", "name": "Aura Perseus (US Male - Aura v1)"},
-    {"id": "aura-angus-en", "name": "Aura Angus (UK Male - Aura v1)"},
-    {"id": "aura-orpheus-en", "name": "Aura Orpheus (US Male - Aura v1)"},
-    {"id": "aura-helios-en", "name": "Aura Helios (UK Male - Aura v1)"},
-    {"id": "aura-zeus-en", "name": "Aura Zeus (US Male - Aura v1)"},
+    {"id": "flux-rufus-en", "name": "Flux Rufus (Conversational Male)"},
+    {"id": "flux-asteria-en", "name": "Flux Asteria (Conversational Female)"},
+    {"id": "flux-stella-en", "name": "Flux Stella (Conversational Female)"},
+    {"id": "flux-luna-en", "name": "Flux Luna (Conversational Female)"},
+    {"id": "flux-arcas-en", "name": "Flux Arcas (Conversational Male)"},
+    {"id": "flux-orion-en", "name": "Flux Orion (Conversational Male)"},
+    {"id": "flux-zeus-en", "name": "Flux Zeus (Conversational Male)"},
+    {"id": "aura-asteria-en", "name": "Aura Asteria (US Female)"},
+    {"id": "aura-luna-en", "name": "Aura Luna (US Female)"},
+    {"id": "aura-stella-en", "name": "Aura Stella (US Female)"},
+    {"id": "aura-athena-en", "name": "Aura Athena (UK Female)"},
+    {"id": "aura-hera-en", "name": "Aura Hera (US Female)"},
+    {"id": "aura-orion-en", "name": "Aura Orion (US Male)"},
+    {"id": "aura-arcas-en", "name": "Aura Arcas (US Male)"},
+    {"id": "aura-perseus-en", "name": "Aura Perseus (US Male)"},
+    {"id": "aura-angus-en", "name": "Aura Angus (UK Male)"},
+    {"id": "aura-orpheus-en", "name": "Aura Orpheus (US Male)"},
+    {"id": "aura-helios-en", "name": "Aura Helios (UK Male)"},
+    {"id": "aura-zeus-en", "name": "Aura Zeus (US Male)"},
 ]
 
 ELEVENLABS_FALLBACK_MODELS = [
@@ -212,6 +218,8 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             (fallback_v, model),
             (primary_v, alt_model),
             (fallback_v, alt_model),
+            ("v2", "flux-rufus-en"),
+            ("v1", "aura-asteria-en"),
         ]
 
         last_err = None

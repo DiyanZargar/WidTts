@@ -68,6 +68,8 @@ class DeepgramTTSAdapter(TTSProviderInterface):
             (fallback_v, model),
             (primary_v, alt_model),
             (fallback_v, alt_model),
+            ("v2", "flux-rufus-en"),
+            ("v1", "aura-asteria-en"),
         ]
 
         last_err = None
