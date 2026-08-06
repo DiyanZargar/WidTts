@@ -30,13 +30,13 @@ Whether you are building this system from scratch or mastering every architectur
                                    │ (Implements Contracts)
 ┌──────────────────────────────────┴──────────────────────────────────────────┐
 │                      4. INFRASTRUCTURE LAYER                                │
-│  SQLite DAOs (sqlite_session_repository.py, sqlite_message_repository.py)   │
+│  PostgreSQL DAOs (postgres_session_repository.py, postgres_bot_repository.py)│
 │  External Adapters: DeepgramSTTAdapter, DeepgramTTSAdapter, LiteLLMAdapter  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                     5. SHARED CROSS-CUTTING SERVICES                        │
-│  EventBus │ CancellationToken │ PipelineLogger │ ProviderHealthManager       │
+│  EventBus │ CancellationToken │ PipelineLogger │ EnvelopeEncryption          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -89,8 +89,8 @@ Before we touch a single line of code, let's understand the high-level Clean Arc
                                      │
                   ┌──────────────────┴─────────────────────┐
                   │          Infrastructure Layer          │
-                  │ SQLite DB, Deepgram STT/TTS Adapters,  │
-                  │ LiteLLM Adapter, JSON Repositories     │
+                  │ PostgreSQL DB, Envelope Encryption,    │
+                  │ Deepgram STT/TTS, ElevenLabs, LiteLLM  │
                   └────────────────────────────────────────┘
 
                   ┌────────────────────────────────────────┐
@@ -103,11 +103,13 @@ Before we touch a single line of code, let's understand the high-level Clean Arc
 ```
 
 ## Bounded Context Inventory:
-1. **session**: Session lifecycle, state snapshots, runtime connection management (`SessionEntity`, `SqliteSessionRepository`, `RuntimeStateManager`, session use cases).
-2. **message**: Transcript storage and message history (`MessageEntity`, `SqliteMessageRepository`, message use cases).
+1. **session**: Session lifecycle, state snapshots, runtime connection management (`SessionEntity`, `PostgresSessionRepository`, `RuntimeStateManager`, session use cases).
+2. **message**: Transcript storage and message history (`MessageEntity`, `PostgresMessageRepository`, message use cases).
 3. **conversation**: FSM turn control, race condition shielding, policy decisions, LLM streaming validation, and sentence chunking (`ConversationFSM`, `TurnContext`, `ConversationPolicy`, `ConversationEngine`, `ContextManager`, `ResponseCoordinator`, `LiteLLMValidationAdapter`, `JsonConversationRepository`).
-4. **voice**: STT speech recognition and TTS speech synthesis (`STTProviderInterface`, `TTSProviderInterface`, `DeepgramSTTAdapter`, `DeepgramTTSAdapter`, `SynthesizeSpeech`).
-5. **interruption**: Speech barge-in classification and audit recording (`InterruptionEntity`, `SqliteInterruptionRepository`, `InterruptionClassifierAdapter`, `ClassifyInterruption`, `RecordInterruption`).
+4. **voice**: STT speech recognition and TTS speech synthesis (`STTProviderInterface`, `TTSProviderInterface`, `DeepgramSTTAdapter`, `DeepgramTTSAdapter`, `ElevenLabsTTSAdapter`, `SynthesizeSpeech`).
+5. **interruption**: Speech barge-in classification and audit recording (`InterruptionEntity`, `PostgresInterruptionRepository`, `InterruptionClassifierAdapter`, `ClassifyInterruption`, `RecordInterruption`).
+6. **provider**: Multi-provider credentials and models (`LLMProvider`, `SpeechProvider`, `PostgresLLMProviderRepository`, `PostgresSpeechProviderRepository`).
+7. **bot**: Autonomous voice bot identities and active runtime synchronization (`Bot`, `PostgresBotRepository`, single-active bot activation).
 
 ---
 
@@ -938,13 +940,13 @@ In `interruption/domain/interfaces/interruption_repository_interface.py`, we def
 ---
 
 # STAGE 6: Infrastructure Persistence & External Service Adapters
-### 6.1 SQLite Session Repository: [`backend/app/modules/session/infrastructure/persistence/sqlite_session_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/session/infrastructure/persistence/sqlite_session_repository.py)
+### 6.1 PostgreSQL Session Repository: [`backend/app/modules/session/infrastructure/persistence/postgres_session_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/session/infrastructure/persistence/postgres_session_repository.py)
 
 **Architectural Role & Why This File Exists**:
-SQLite DAO implementing domain repository interface for SQLite Session Repository.
+PostgreSQL DAO implementing domain repository interface for PostgreSQL Session Repository.
 
 **Exhaustive Class & Function Inventory**:
-- **Class `SqliteSessionRepository`**:
+- **Class `PostgresSessionRepository`**:
   - `create(session_id, conversation_type, user_id)`
   - `get_by_id(session_id)`
   - `update_pointer(session_id, index, state, retries)`
@@ -952,50 +954,50 @@ SQLite DAO implementing domain repository interface for SQLite Session Repositor
   - `close(session_id, status)`
 
 **Personal Senior Architect Walkthrough**:
-In `session/infrastructure/persistence/sqlite_session_repository.py`, we implement `SQLite Session Repository`. It executes SQL queries against SQLite connections checked out from `get_connection()`.
+In `session/infrastructure/persistence/postgres_session_repository.py`, we implement `PostgresSessionRepository`. It executes async SQL queries against PostgreSQL connections checked out from `get_connection()`.
 
 
 ---
-### 6.1 SQLite Message Repository: [`backend/app/modules/message/infrastructure/persistence/sqlite_message_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/message/infrastructure/persistence/sqlite_message_repository.py)
+### 6.2 PostgreSQL Message Repository: [`backend/app/modules/message/infrastructure/persistence/postgres_message_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/message/infrastructure/persistence/postgres_message_repository.py)
 
 **Architectural Role & Why This File Exists**:
-SQLite DAO implementing domain repository interface for SQLite Message Repository.
+PostgreSQL DAO implementing domain repository interface for PostgreSQL Message Repository.
 
 **Exhaustive Class & Function Inventory**:
-- **Class `SqliteMessageRepository`**:
+- **Class `PostgresMessageRepository`**:
   - `add(session_id, sender, text)`
   - `get_by_session(session_id)`
 
 **Personal Senior Architect Walkthrough**:
-In `message/infrastructure/persistence/sqlite_message_repository.py`, we implement `SQLite Message Repository`. It executes SQL queries against SQLite connections checked out from `get_connection()`.
+In `message/infrastructure/persistence/postgres_message_repository.py`, we implement `PostgresMessageRepository`. It executes async SQL queries against PostgreSQL connections checked out from `get_connection()`.
 
 
 ---
-### 6.1 SQLite Response Repository: [`backend/app/modules/conversation/infrastructure/persistence/sqlite_response_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/conversation/infrastructure/persistence/sqlite_response_repository.py)
+### 6.3 PostgreSQL Response Repository: [`backend/app/modules/conversation/infrastructure/persistence/postgres_response_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/conversation/infrastructure/persistence/postgres_response_repository.py)
 
 **Architectural Role & Why This File Exists**:
-SQLite DAO implementing domain repository interface for SQLite Response Repository.
+PostgreSQL DAO implementing domain repository interface for PostgreSQL Response Repository.
 
 **Exhaustive Class & Function Inventory**:
-- **Class `SqliteResponseRepository`**:
+- **Class `PostgresResponseRepository`**:
   - `add(sequence, session_id, user_response, validation_result)`
 
 **Personal Senior Architect Walkthrough**:
-In `conversation/infrastructure/persistence/sqlite_response_repository.py`, we implement `SQLite Response Repository`. It executes SQL queries against SQLite connections checked out from `get_connection()`.
+In `conversation/infrastructure/persistence/postgres_response_repository.py`, we implement `PostgresResponseRepository`. It executes async SQL queries against PostgreSQL connections checked out from `get_connection()`.
 
 
 ---
-### 6.1 SQLite Interruption Repository: [`backend/app/modules/interruption/infrastructure/persistence/sqlite_interruption_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/interruption/infrastructure/persistence/sqlite_interruption_repository.py)
+### 6.4 PostgreSQL Interruption Repository: [`backend/app/modules/interruption/infrastructure/persistence/postgres_interruption_repository.py`](file:///Users/rid/Developer/Extends/cmdXSec/Work/widTts/backend/app/modules/interruption/infrastructure/persistence/postgres_interruption_repository.py)
 
 **Architectural Role & Why This File Exists**:
-SQLite DAO implementing domain repository interface for SQLite Interruption Repository.
+PostgreSQL DAO implementing domain repository interface for PostgreSQL Interruption Repository.
 
 **Exhaustive Class & Function Inventory**:
-- **Class `SqliteInterruptionRepository`**:
+- **Class `PostgresInterruptionRepository`**:
   - `add(session_id, interruption_type, interruption_text)`
 
 **Personal Senior Architect Walkthrough**:
-In `interruption/infrastructure/persistence/sqlite_interruption_repository.py`, we implement `SQLite Interruption Repository`. It executes SQL queries against SQLite connections checked out from `get_connection()`.
+In `interruption/infrastructure/persistence/postgres_interruption_repository.py`, we implement `PostgresInterruptionRepository`. It executes async SQL queries against PostgreSQL connections checked out from `get_connection()`.
 
 
 ---
