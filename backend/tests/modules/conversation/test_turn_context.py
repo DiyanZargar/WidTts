@@ -15,23 +15,14 @@ def test_fsm_valid_transitions():
     fsm.transition_to(ConversationState.ASKING)
     assert fsm.current_state == ConversationState.ASKING
 
-    fsm.transition_to(ConversationState.WAITING_FOR_TTS)
-    assert fsm.current_state == ConversationState.WAITING_FOR_TTS
-
-    fsm.transition_to(ConversationState.TTS_PLAYING)
-    assert fsm.current_state == ConversationState.TTS_PLAYING
-
-    fsm.transition_to(ConversationState.LISTENING)
-    assert fsm.current_state == ConversationState.LISTENING
-
-    fsm.transition_to(ConversationState.TRANSCRIBING)
-    assert fsm.current_state == ConversationState.TRANSCRIBING
-
     fsm.transition_to(ConversationState.VALIDATING)
     assert fsm.current_state == ConversationState.VALIDATING
 
     fsm.transition_to(ConversationState.ADVANCE)
     assert fsm.current_state == ConversationState.ADVANCE
+
+    fsm.transition_to(ConversationState.NEXT_TURN)
+    assert fsm.current_state == ConversationState.NEXT_TURN
 
 
 def test_fsm_illegal_transition_raises_error():

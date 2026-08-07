@@ -434,6 +434,11 @@
   position: relative;
 }
 
+.journey-section:last-child {
+  min-height: 100vh;
+  margin-bottom: 0;
+}
+
 .journey-section__content {
   max-width: 900px;
   width: 62%;
@@ -442,9 +447,10 @@
 /* ─── Two-column section layout ─── */
 .journey-section--split {
   flex-direction: row;
-  align-items: flex-start;
+  align-items: center;
   gap: 3rem;
-  padding-top: 8rem;
+  padding-top: 4rem;
+  padding-bottom: 4rem;
 }
 
 .journey-section--split .journey-section__content {
@@ -457,7 +463,7 @@
 .journey-section__sidebar {
   width: 280px;
   flex-shrink: 0;
-  padding-top: 5rem;
+  padding-top: 0;
 }
 
 /* ─── Section Hints (sidebar helper text) ─── */
@@ -631,7 +637,6 @@
   }
 }
 
-/* ─── User Portal styles (preserved for HolographicOrb fallback) ─── */
 .glass-orb {
   background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 60%, rgba(0, 0, 0, 0.4) 100%);
   backdrop-filter: blur(12px);

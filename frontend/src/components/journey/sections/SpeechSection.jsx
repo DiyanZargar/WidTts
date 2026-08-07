@@ -468,7 +468,7 @@ export function SpeechSection({ onProviderCreated }) {
       <div className="journey-section__content">
         <div className="step-indicator">
           <span className="step-indicator__dot" />
-          Step 2 of 4
+          Step 3 of 5
         </div>
 
         <h2 className="type-display type-display-lg" style={{ marginBottom: '0.75rem' }}>
@@ -940,6 +940,30 @@ export function SpeechSection({ onProviderCreated }) {
         </div>,
         document.body
       )}
+
+      {/* Sidebar hints */}
+      <div className="journey-section__sidebar">
+        <div className="section-hint">
+          <div className="section-hint__title">Speech Recognition (STT)</div>
+          <div className="section-hint__body">
+            Converts live streaming audio into accurate text transcripts in real-time.
+          </div>
+        </div>
+
+        <div className="section-hint">
+          <div className="section-hint__title">Speech Synthesis (TTS)</div>
+          <div className="section-hint__body">
+            Synthesizes realistic human-like voice responses from LLM token streams.
+          </div>
+        </div>
+
+        <div className="section-hint">
+          <div className="section-hint__title">Supported Engines</div>
+          <div className="section-hint__body">
+            Choose between Deepgram Nova-2/Aura and ElevenLabs Scribe/Flash models.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

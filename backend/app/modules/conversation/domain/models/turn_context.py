@@ -10,13 +10,15 @@ logger = logging.getLogger("turn_context")
 
 
 class TranscriptLifecycle(str, Enum):
-    """Deterministic lifecycle stages for every transcript."""
+    """Deterministic lifecycle stages for every transcript.
+
+    Transport-level stages (QUEUED, DISCARDED) removed — LiveKit owns
+    the STT pipeline and queue management.
+    """
     CREATED = "CREATED"            # Transcript object instantiated with unique ID
-    QUEUED = "QUEUED"              # Transcript placed in STT adapter queue
     ASSIGNED = "ASSIGNED"          # Transcript bound to a specific TurnContext
     VALIDATED = "VALIDATED"        # Transcript passed through LLM validation
     CONSUMED = "CONSUMED"          # Transcript applied to conversation state
-    DISCARDED = "DISCARDED"        # Transcript rejected (late, stale, ownership fail)
     DESTROYED = "DESTROYED"        # TurnContext destroyed — all transcripts cleaned
 
 
@@ -62,11 +64,7 @@ class TurnContext:
         self.active_llm_task: Optional[asyncio.Task] = None
         # ── Turn timing ──
         self.created_at: float = time.time()
-        self.listening_started_at: Optional[float] = None  # Set when turn enters LISTENING
         self.last_transcript_at: Optional[float] = None    # Timestamp of last accepted transcript
-
-        # ── Epoch tracking for STT queue correlation (B3) ──
-        self.listening_epoch: int = 0
 
         # ── Async task management ──
         self.active_tasks: Set[asyncio.Task] = set()
@@ -118,29 +116,15 @@ class TurnContext:
         return True
 
     # ──────────────────────────────────────────────
-    #  Listening window
+    #  Transcript acceptance
     # ──────────────────────────────────────────────
 
-    def mark_listening_started(self) -> None:
-        """Record when this turn began listening for user speech.
-
-        Transcripts received before this timestamp are from previous
-        turns or TTS echo and must be rejected.
-        """
-        self.listening_started_at = time.time()
-        logger.info(
-            f"[TURN LISTENING] turn_id={self.turn_id} "
-            f"session_id={self.session_id} question_id={self.question_id} "
-            f"listening_started_at={self.listening_started_at:.3f}"
-        )
-
-    def can_accept_transcript(self, transcript_received_at: Optional[float] = None) -> bool:
+    def can_accept_transcript(self) -> bool:
         """Check whether this turn can accept an incoming transcript.
 
         Rejects if:
         - Turn is destroyed
         - A final transcript has already been consumed
-        - Transcript timestamp is before listening_started_at
         """
         if self.is_destroyed:
             logger.warning(
@@ -155,17 +139,6 @@ class TurnContext:
                 f"turn_id={self.turn_id} transcript_id={self.transcript_id}"
             )
             return False
-
-        if transcript_received_at is not None and self.listening_started_at is not None:
-            if transcript_received_at < self.listening_started_at:
-                logger.warning(
-                    f"[TRANSCRIPT REJECT] Stale transcript received — "
-                    f"turn_id={self.turn_id} "
-                    f"received={transcript_received_at:.3f} < "
-                    f"listening_start={self.listening_started_at:.3f} "
-                    f"diff={(self.listening_started_at - transcript_received_at):.3f}s"
-                )
-                return False
 
         return True
 
@@ -348,7 +321,6 @@ class TurnContext:
         if self.is_destroyed:
             return
 
-        self.transcript_lifecycle = TranscriptLifecycle.DISCARDED
         logger.info(
             f"[TRANSCRIPT DISCARDED] turn_id={self.turn_id} "
             f"question_id={self.question_id} "
@@ -423,7 +395,6 @@ class TurnContext:
         self.final_transcript_consumed = False
         self.transcript_lifecycle = TranscriptLifecycle.DESTROYED
         self.validation_result = None
-        self.listening_started_at = None
         self.last_transcript_at = None
         self.correction_stack.clear()
         self.active_validation_task = None

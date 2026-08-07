@@ -2,11 +2,12 @@ import { useNavigate } from 'react-router-dom';
 
 const SECTIONS = [
   { id: 'overview', label: 'Overview', offset: 0 },
-  { id: 'llm', label: 'LLM', offset: 0.167 },
-  { id: 'speech', label: 'Speech', offset: 0.333 },
-  { id: 'bot', label: 'Bot', offset: 0.5 },
-  { id: 'activate', label: 'Activate', offset: 0.667 },
-  { id: 'live', label: 'Live', offset: 0.833 },
+  { id: 'llm', label: 'LLM', offset: 0.143 },
+  { id: 'realtime', label: 'Realtime', offset: 0.286 },
+  { id: 'speech', label: 'Speech', offset: 0.428 },
+  { id: 'bot', label: 'Bot', offset: 0.571 },
+  { id: 'activate', label: 'Activate', offset: 0.714 },
+  { id: 'live', label: 'Live', offset: 0.857 },
 ];
 
 /**
@@ -17,11 +18,9 @@ export function TopNav({ scrollRef, currentSection = 0, visible = true }) {
   const navigate = useNavigate();
 
   const handleJumpTo = (index, offset) => {
-    // 1. Locate the exact ScrollControls outer scroll container (overflow-y)
     let container = scrollRef?.current?.el;
     
     if (!container) {
-      // Query DOM for drei ScrollControls scroll container
       const candidates = document.querySelectorAll('div');
       for (const el of candidates) {
         const style = window.getComputedStyle(el);
@@ -41,7 +40,7 @@ export function TopNav({ scrollRef, currentSection = 0, visible = true }) {
     } else {
       const sections = document.querySelectorAll('.journey-section');
       if (sections && sections[index]) {
-        sections[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        sections[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
   };

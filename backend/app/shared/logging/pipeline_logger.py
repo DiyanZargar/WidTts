@@ -1,23 +1,26 @@
 """Structured pipeline event logger for deterministic debugging and replay.
 
 Every major pipeline event is logged with a consistent schema:
-    timestamp | event=EVENT_TYPE | session_id | turn_id | epoch |
+    timestamp | event=EVENT_TYPE | session_id | turn_id |
     component=... | severity=... | details...
 
-Required fields on every log line:
-    - timestamp (ms precision)
-    - event (EVENT_TYPE)
-    - session_id (full UUID — no truncation)
-    - turn_id (full UUID — no truncation)
-    - epoch (integer, -1 if N/A)
-    - component (subsystem name)
-    - severity (INFO / WARNING / ERROR)
+This logger observes widTTS BUSINESS events only:
+- Session lifecycle
+- Conversation lifecycle
+- Turn lifecycle
+- Question presentation
+- Transcript ownership (acceptance/rejection)
+- FSM transitions
+- Interruption classification
+- LLM requests and responses
+- Validation pipeline
+- Correction pipeline
+- Error diagnostics
+- Latency metrics
+- Resource lifecycle
 
-This makes it trivial to:
-    1. Find where the pipeline breaks by scanning for gaps in event sequence.
-    2. Correlate every log line back to a single conversation + turn.
-    3. Reconstruct an entire conversation from logs alone.
-    4. Query / aggregate logs with structured filters.
+LiveKit infrastructure events (STT execution, TTS synthesis, audio transport,
+WebSocket connection, playback) are NOT logged here — LiveKit owns those.
 """
 
 import time
@@ -39,7 +42,6 @@ def _fmt(
     event_type: str,
     session_id: str = "",
     turn_id: str = "",
-    epoch: int = -1,
     component: str = "pipeline",
     severity: str = "INFO",
     **kwargs,
@@ -52,12 +54,9 @@ def _fmt(
     parts = [f"event={event_type}"]
     if session_id:
         parts.append(f"session_id={session_id}")
-        # conversation_id is the same concept in this codebase
         parts.append(f"conversation_id={session_id}")
     if turn_id:
         parts.append(f"turn_id={turn_id}")
-    if epoch >= 0:
-        parts.append(f"epoch={epoch}")
     parts.append(f"component={component}")
     parts.append(f"severity={severity}")
     for k, v in kwargs.items():
@@ -69,13 +68,12 @@ def _log(
     event_type: str,
     session_id: str = "",
     turn_id: str = "",
-    epoch: int = -1,
     component: str = "pipeline",
     severity: str = "INFO",
     **kwargs,
 ) -> None:
     """Emit a single structured pipeline log line at the appropriate level."""
-    msg = f"[PIPELINE] {_ts()} | {_fmt(event_type, session_id, turn_id, epoch, component, severity, **kwargs)}"
+    msg = f"[PIPELINE] {_ts()} | {_fmt(event_type, session_id, turn_id, component, severity, **kwargs)}"
     if severity == "ERROR":
         logger.error(msg)
     elif severity == "WARNING":
@@ -202,62 +200,7 @@ def question_ask(
     )
 
 
-# ── STT pipeline ──
-
-
-def stt_connected(session_id: str, turn_id: str = "") -> None:
-    _log(
-        "STT_CONNECTED",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="stt",
-    )
-
-
-def stt_reconnect(session_id: str, turn_id: str = "", reason: str = "") -> None:
-    _log(
-        "STT_RECONNECT",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="stt",
-        severity="WARNING",
-        reason=reason[:80],
-    )
-
-
-def stt_audio_sent(session_id: str, bytes_count: int) -> None:
-    _log(
-        "STT_AUDIO_SENT",
-        session_id=session_id,
-        component="stt",
-        bytes=bytes_count,
-    )
-
-
-def stt_partial_transcript(
-    session_id: str, turn_id: str, epoch: int, text: str
-) -> None:
-    _log(
-        "STT_PARTIAL",
-        session_id=session_id,
-        turn_id=turn_id,
-        epoch=epoch,
-        component="stt",
-        text=text[:80],
-    )
-
-
-def stt_final_transcript(
-    session_id: str, turn_id: str, epoch: int, text: str
-) -> None:
-    _log(
-        "STT_FINAL",
-        session_id=session_id,
-        turn_id=turn_id,
-        epoch=epoch,
-        component="stt",
-        text=text[:120],
-    )
+# ── Transcript processing (widTTS ownership/acceptance logic) ──
 
 
 def transcript_accepted(
@@ -290,35 +233,6 @@ def transcript_rejected(
     )
 
 
-def stt_stale_discarded(
-    session_id: str, turn_id: str, item_epoch: int, current_epoch: int
-) -> None:
-    _log(
-        "STT_STALE_DISCARDED",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="stt",
-        severity="WARNING",
-        item_epoch=item_epoch,
-        current_epoch=current_epoch,
-    )
-
-
-def stt_epoch_advance(
-    session_id: str, turn_id: str, new_epoch: int
-) -> None:
-    _log(
-        "STT_EPOCH_ADVANCE",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="stt",
-        new_epoch=new_epoch,
-    )
-
-
-# ── Transcript processing ──
-
-
 def transcript_assigned(
     session_id: str, turn_id: str, transcript_id: str, text: str
 ) -> None:
@@ -348,7 +262,7 @@ def fsm_guard_reject(
     )
 
 
-# ── Interruption classification ──
+# ── Interruption classification (widTTS business logic) ──
 
 
 def interrupt_detected(
@@ -367,14 +281,12 @@ def interrupt_classify_start(
     session_id: str,
     turn_id: str,
     transcript: str,
-    is_tts_playing: bool,
 ) -> None:
     _log(
         "INTERRUPT_CLASSIFY_START",
         session_id=session_id,
         turn_id=turn_id,
         component="interruption",
-        tts_playing=is_tts_playing,
         text=transcript[:80],
     )
 
@@ -410,7 +322,7 @@ def interrupt_routed(
     )
 
 
-# ── LLM pipeline ──
+# ── LLM pipeline (widTTS owns LLM via WidTTSLLMBridge) ──
 
 
 def llm_started(session_id: str, turn_id: str) -> None:
@@ -431,19 +343,6 @@ def llm_first_token(
         turn_id=turn_id,
         component="llm",
         idx=token_index,
-    )
-
-
-def llm_token(
-    session_id: str, turn_id: str, token: str, token_index: int
-) -> None:
-    _log(
-        "LLM_TOKEN",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="llm",
-        idx=token_index,
-        token=token[:40],
     )
 
 
@@ -478,7 +377,18 @@ def llm_cancelled(session_id: str, turn_id: str, reason: str) -> None:
     )
 
 
-# ── Validation pipeline ──
+def llm_error(session_id: str, turn_id: str, error: str) -> None:
+    _log(
+        "LLM_ERROR",
+        session_id=session_id,
+        turn_id=turn_id,
+        component="llm",
+        severity="ERROR",
+        error=error[:200],
+    )
+
+
+# ── Validation pipeline (widTTS business) ──
 
 
 def validation_start(
@@ -538,7 +448,7 @@ def validation_discarded(
     )
 
 
-# ── Correction ──
+# ── Correction (widTTS business) ──
 
 
 def correction_received(
@@ -571,152 +481,7 @@ def correction_applied(
     )
 
 
-# ── TTS pipeline ──
-
-
-def tts_connected(session_id: str, turn_id: str = "") -> None:
-    _log(
-        "TTS_CONNECTED",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-    )
-
-
-def tts_synthesize_start(
-    session_id: str, turn_id: str, text: str
-) -> None:
-    _log(
-        "TTS_SYNTHESIZE_START",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-        text=text[:80],
-    )
-
-
-def tts_synthesize_end(
-    session_id: str,
-    turn_id: str,
-    duration_ms: int,
-    audio_bytes: int,
-    chunk_count: int = 0,
-) -> None:
-    _log(
-        "TTS_SYNTHESIZE_END",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-        dur_ms=duration_ms,
-        bytes=audio_bytes,
-        chunks=chunk_count,
-    )
-
-
-def tts_first_chunk(
-    session_id: str, turn_id: str, chunk_size: int
-) -> None:
-    _log(
-        "TTS_FIRST_CHUNK",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-        size=chunk_size,
-    )
-
-
-def tts_last_chunk(
-    session_id: str, turn_id: str, chunk_size: int, total_chunks: int
-) -> None:
-    _log(
-        "TTS_LAST_CHUNK",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-        size=chunk_size,
-        total_chunks=total_chunks,
-    )
-
-
-def tts_send_to_client(
-    session_id: str, turn_id: str, audio_bytes: int
-) -> None:
-    _log(
-        "TTS_SEND_TO_CLIENT",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-        bytes=audio_bytes,
-    )
-
-
-def tts_stream_end(session_id: str, turn_id: str) -> None:
-    _log(
-        "TTS_STREAM_END",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-    )
-
-
-def tts_cancelled(session_id: str, turn_id: str, reason: str) -> None:
-    _log(
-        "TTS_CANCELLED",
-        session_id=session_id,
-        turn_id=turn_id,
-        component="tts",
-        severity="WARNING",
-        reason=reason[:80],
-    )
-
-
-# ── WebSocket events ──
-
-
-def websocket_connected(
-    session_id: str, client_ip: str = ""
-) -> None:
-    _log(
-        "WEBSOCKET_CONNECTED",
-        session_id=session_id,
-        component="websocket",
-        client=client_ip or "unknown",
-    )
-
-
-def websocket_disconnected(
-    session_id: str, reason: str = ""
-) -> None:
-    _log(
-        "WEBSOCKET_DISCONNECTED",
-        session_id=session_id,
-        component="websocket",
-        reason=reason[:80],
-    )
-
-
-def ws_frame_received(
-    session_id: str, frame_type: str, detail: str = ""
-) -> None:
-    _log(
-        "WS_FRAME_RECEIVED",
-        session_id=session_id,
-        component="websocket",
-        type=frame_type,
-        detail=detail[:40],
-    )
-
-
-def ws_control_message(session_id: str, msg_type: str) -> None:
-    _log(
-        "WS_CONTROL_MESSAGE",
-        session_id=session_id,
-        component="websocket",
-        type=msg_type,
-    )
-
-
-# ── Error diagnostics ──
+# ── Error diagnostics (widTTS business) ──
 
 
 def error_occurred(
@@ -739,10 +504,10 @@ def error_occurred(
     }
     if stack_trace:
         kwargs["stack"] = stack_trace[:500]
-    _log("ERROR", session_id=session_id, turn_id=turn_id, epoch=-1, **kwargs)
+    _log("ERROR", session_id=session_id, turn_id=turn_id, **kwargs)
 
 
-# ── Latency metrics ──
+# ── Latency metrics (widTTS business) ──
 
 
 def latency_metric(
@@ -755,20 +520,13 @@ def latency_metric(
     """Emit a structured latency measurement.
 
     Metric names used in this system:
-        - time_to_first_partial_transcript
-        - time_to_final_transcript
-        - time_to_validation_start
-        - time_to_validation_end
         - time_to_first_llm_token
         - time_to_last_llm_token
-        - time_to_first_tts_chunk
-        - time_to_last_tts_chunk
-        - time_to_playback_start
-        - time_to_playback_end
+        - time_to_validation_start
+        - time_to_validation_end
         - total_response_latency
         - total_turn_latency
         - interruption_latency
-        - websocket_reconnect_latency
     """
     _log(
         "LATENCY_METRIC",
@@ -781,7 +539,7 @@ def latency_metric(
     )
 
 
-# ── Resource lifecycle ──
+# ── Resource lifecycle (widTTS business) ──
 
 
 def resource_created(
@@ -813,36 +571,3 @@ def resource_destroyed(
         resource_id=resource_id,
         reason=reason[:80],
     )
-
-
-# ── Frontend pass-through (no-ops: actual logging is in JS console) ──
-# These placeholders document the expected frontend events so that a
-# production engineer knows browser-side events exist and should be
-# correlated via session_id / turn_id if forwarded to the backend.
-
-
-def fe_tts_playback_start(text: str) -> None:
-    """Frontend: TTS audio playback started. Logged in browser console."""
-    pass
-
-
-def fe_tts_playback_end(duration_ms: int) -> None:
-    """Frontend: TTS audio playback finished. Logged in browser console."""
-    pass
-
-
-def fe_mic_chunk_sent(bytes_count: int) -> None:
-    """Frontend: Mic audio chunk sent to backend. Logged in browser console."""
-    pass
-
-
-def fe_vad_interrupt(text: str) -> None:
-    """Frontend: VAD detected user speech during TTS. Logged in browser console."""
-    pass
-
-
-# ── Backward-compatible aliases ──
-
-ws_disconnect = websocket_disconnected
-ws_control_message = ws_control_message  # same name already exists
-ws_frame_received = ws_frame_received  # same name already exists

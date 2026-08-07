@@ -218,7 +218,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       <div className="journey-section__content">
         <div className="step-indicator">
           <span className="step-indicator__dot" />
-          Step 3 of 4
+          Step 4 of 5
         </div>
 
         <h2 className="type-display type-display-lg" style={{ marginBottom: '0.75rem' }}>
@@ -584,6 +584,30 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
         </div>,
         document.body
       )}
+
+      {/* Sidebar hints */}
+      <div className="journey-section__sidebar">
+        <div className="section-hint">
+          <div className="section-hint__title">System Prompt</div>
+          <div className="section-hint__body">
+            Defines your bot's identity, personality, knowledge boundaries, and behavioral tone.
+          </div>
+        </div>
+
+        <div className="section-hint">
+          <div className="section-hint__title">Provider Binding</div>
+          <div className="section-hint__body">
+            Bind your choice of LLM and Speech provider to power this specific bot instance.
+          </div>
+        </div>
+
+        <div className="section-hint">
+          <div className="section-hint__title">Voice Persona</div>
+          <div className="section-hint__body">
+            Configure voice IDs and speech parameters tailored to your bot's character.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

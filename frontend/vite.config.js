@@ -10,6 +10,7 @@ export default defineConfig({
       "/ws": { target: "ws://localhost:8000", changeOrigin: true, ws: true },
       "/health": { target: "http://localhost:8000", changeOrigin: true },
       "/admin/api": { target: "http://localhost:8000", changeOrigin: true },
+      "/realtime": { target: "http://localhost:8000", changeOrigin: true },
     },
   },
   worker: {

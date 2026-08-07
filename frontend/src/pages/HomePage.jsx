@@ -4,7 +4,6 @@ import { Canvas } from '@react-three/fiber';
 import { Core } from '../components/three/Core';
 import { UserParticleVoid } from '../components/journey/ParticleVoid';
 import { useVoiceSession } from '../hooks/useVoiceSession';
-import { useMicLevel } from '../hooks/useMicLevel';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { tokens, userPalette } from '../design/tokens';
 import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
@@ -20,8 +19,7 @@ import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
  */
 export default function HomePage() {
   const navigate = useNavigate();
-  const { status, audioLevel, transcript, begin, end, restart, micStream, muted, setMuted, isActive } = useVoiceSession();
-  const listenLevel = useMicLevel(micStream);
+  const { status, audioLevel, listenLevel, transcript, begin, end, restart, micStream, muted, setMuted, isActive } = useVoiceSession();
   const reducedMotion = useReducedMotion();
   const [started, setStarted] = useState(false);
 

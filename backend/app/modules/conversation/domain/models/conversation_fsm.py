@@ -7,12 +7,13 @@ logger = logging.getLogger("conversation_fsm")
 
 
 class ConversationState(str, Enum):
+    """Business-level conversation states only.
+
+    Transport-adjacent states (WAITING_FOR_TTS, TTS_PLAYING, LISTENING,
+    TRANSCRIBING) have been removed — LiveKit owns transport lifecycle.
+    """
     IDLE = "IDLE"
     ASKING = "ASKING"
-    WAITING_FOR_TTS = "WAITING_FOR_TTS"
-    TTS_PLAYING = "TTS_PLAYING"
-    LISTENING = "LISTENING"
-    TRANSCRIBING = "TRANSCRIBING"
     VALIDATING = "VALIDATING"
     RETRY = "RETRY"
     ADVANCE = "ADVANCE"
@@ -30,22 +31,7 @@ ALLOWED_TRANSITIONS: Dict[ConversationState, Set[ConversationState]] = {
         ConversationState.ASKING,
     },
     ConversationState.ASKING: {
-        ConversationState.WAITING_FOR_TTS,
-    },
-    ConversationState.WAITING_FOR_TTS: {
-        ConversationState.TTS_PLAYING,
-    },
-    ConversationState.TTS_PLAYING: {
-        ConversationState.LISTENING,
-    },
-    ConversationState.LISTENING: {
-        ConversationState.TRANSCRIBING,
-        ConversationState.ASKING,
-        ConversationState.TTS_PLAYING,
-    },
-    ConversationState.TRANSCRIBING: {
         ConversationState.VALIDATING,
-        ConversationState.LISTENING,
     },
     ConversationState.VALIDATING: {
         ConversationState.ADVANCE,
@@ -53,8 +39,6 @@ ALLOWED_TRANSITIONS: Dict[ConversationState, Set[ConversationState]] = {
     },
     ConversationState.RETRY: {
         ConversationState.ASKING,
-        ConversationState.LISTENING,
-        ConversationState.TTS_PLAYING,
     },
     ConversationState.ADVANCE: {
         ConversationState.NEXT_TURN,
@@ -77,7 +61,6 @@ class ConversationFSM:
     def current_state(self) -> ConversationState:
         return self._current_state
 
-    # Allowed FSM State Transition Map
     def transition_to(self, target_state: ConversationState, reason: str = "") -> ConversationState:
         if target_state not in ALLOWED_TRANSITIONS.get(self._current_state, set()):
             err_msg = (

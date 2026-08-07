@@ -20,7 +20,7 @@ export function LiveSection() {
   }, []);
 
   return (
-    <div className="journey-section journey-section--split">
+    <div className="journey-section journey-section--split" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 0 }}>
       <div className="journey-section__content">
         <div className="step-indicator">
           <span className="step-indicator__dot" style={{
@@ -146,7 +146,7 @@ export function LiveSection() {
           <div className="section-hint__title">Auto-Refresh</div>
           <div className="section-hint__body">
             Stats update every 5 seconds. Active session count reflects
-            WebSocket connections currently streaming audio.
+            realtime voice connections currently streaming audio.
           </div>
         </div>
 

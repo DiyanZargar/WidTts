@@ -19,5 +19,16 @@ services:
       timeout: 5s
       retries: 5
 
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: widtts-livekit
+    restart: unless-stopped
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+    command: --config /etc/livekit.yaml --dev
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+
 volumes:
   widtts_pgdata:
