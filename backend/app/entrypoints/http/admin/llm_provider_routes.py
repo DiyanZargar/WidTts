@@ -234,5 +234,12 @@ async def delete_llm_provider(provider_id: str):
     existing = await _repo.get_by_id(provider_id)
     if not existing:
         raise HTTPException(status_code=404, detail="LLM provider not found")
+    # Check if any bots reference this provider
+    from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
+    bot_repo = PostgresBotRepository()
+    bots = await bot_repo.list_all()
+    using_bots = [b["name"] for b in bots if b.get("llm_provider_id") == provider_id]
+    if using_bots:
+        raise HTTPException(status_code=409, detail=f"Cannot delete — used by bot(s): {', '.join(using_bots)}")
     await _repo.delete(provider_id)
     return {"status": "deleted"}

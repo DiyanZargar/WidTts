@@ -1,14 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 /**
- * EntryGate — Full-viewport overlay with wordmark + two buttons.
+ * EntryGate — Full-viewport overlay with wordmark + single admin button.
  * No card, no border, no form. Just type and light in the void.
  * "Enter as Admin" dismisses gate (onEnterAdmin callback).
- * "Enter as User" navigates to /user.
  */
 export function EntryGate({ open, onEnterAdmin, onAuthenticated }) {
-  const navigate = useNavigate();
   const [fading, setFading] = useState(false);
 
   const handleAdmin = () => {
@@ -16,11 +13,6 @@ export function EntryGate({ open, onEnterAdmin, onAuthenticated }) {
     setFading(true);
     const callback = onEnterAdmin || onAuthenticated;
     setTimeout(() => callback?.(), 600);
-  };
-
-  const handleUser = () => {
-    sessionStorage.setItem('widtts_role', 'user');
-    navigate('/user');
   };
 
   return (
@@ -66,7 +58,7 @@ export function EntryGate({ open, onEnterAdmin, onAuthenticated }) {
         </p>
       </div>
 
-      {/* Two minimal text buttons */}
+      {/* Single admin button */}
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
         <button
           onClick={handleAdmin}
@@ -94,34 +86,6 @@ export function EntryGate({ open, onEnterAdmin, onAuthenticated }) {
           aria-label="Enter as Admin"
         >
           Enter as Admin
-        </button>
-
-        <button
-          onClick={handleUser}
-          style={{
-            background: 'transparent',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: '8px',
-            padding: '14px 36px',
-            color: 'var(--ink-60)',
-            fontFamily: 'var(--font-body)',
-            fontSize: '14px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            transition: 'all 200ms cubic-bezier(0.16, 1, 0.3, 1)',
-            letterSpacing: '0.02em',
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.borderColor = 'var(--accent-mid)';
-            e.target.style.color = 'var(--accent-bright)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.borderColor = 'rgba(255,255,255,0.12)';
-            e.target.style.color = 'var(--ink-60)';
-          }}
-          aria-label="Enter as User"
-        >
-          Enter as User
         </button>
       </div>
     </div>

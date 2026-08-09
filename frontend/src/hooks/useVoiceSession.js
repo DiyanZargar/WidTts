@@ -91,7 +91,8 @@ export function useVoiceSession() {
 
   const begin = useCallback(() => {
     dispatch({ type: 'OPEN_WIDGET' });
-    connect(onEvent, onStatusChange);
+    const botSlug = sessionStorage.getItem('widtts_bot_slug') || null;
+    connect(onEvent, onStatusChange, botSlug);
   }, [dispatch, connect, onEvent, onStatusChange]);
 
   const end = useCallback(() => {
@@ -103,7 +104,8 @@ export function useVoiceSession() {
     disconnect();
     dispatch({ type: 'RESET_FOR_NEW_SESSION' });
     setTimeout(() => {
-      connect(onEvent, onStatusChange);
+      const botSlug = sessionStorage.getItem('widtts_bot_slug') || null;
+      connect(onEvent, onStatusChange, botSlug);
     }, 100);
   }, [disconnect, dispatch, connect, onEvent, onStatusChange]);
 

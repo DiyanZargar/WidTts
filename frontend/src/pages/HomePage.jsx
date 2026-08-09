@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import { CoreSphere } from '../components/journey/CoreSphere';
 import { UserParticleVoid } from '../components/journey/ParticleVoid';
@@ -16,6 +16,8 @@ import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
  */
 export default function HomePage() {
   const navigate = useNavigate();
+  const params = useParams();
+  const botSlug = params.slug || sessionStorage.getItem('widtts_bot_slug') || null;
   const {
     status,
     audioLevel,
@@ -50,23 +52,41 @@ export default function HomePage() {
   });
 
   useEffect(() => {
-    fetch('/admin/api/runtime/stats')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.active_bot) {
-          const ab = data.active_bot;
-          const sttP = ab.stt_provider;
-          const ttsP = ab.tts_provider;
-          setBot({
-            name: ab.name || 'Voice Assistant',
-            description: ab.description || ab.system_prompt || 'Real-time Conversational Assistant',
-            llmModel: ab.llm_model || '',
-            speechModel: sttP || ttsP ? `STT: ${sttP?.name || 'N/A'} • TTS: ${ttsP?.name || 'N/A'}` : '',
-          });
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (botSlug) {
+      // Bot-specific route — fetch from public API
+      fetch(`/api/bot/${botSlug}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.name) {
+            setBot({
+              name: data.name || 'Voice Assistant',
+              description: data.description || 'Real-time Conversational Assistant',
+              llmModel: '',
+              speechModel: '',
+            });
+          }
+        })
+        .catch(() => {});
+    } else {
+      // Admin active bot route
+      fetch('/admin/api/runtime/stats')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.active_bot) {
+            const ab = data.active_bot;
+            const sttP = ab.stt_provider;
+            const ttsP = ab.tts_provider;
+            setBot({
+              name: ab.name || 'Voice Assistant',
+              description: ab.description || ab.system_prompt || 'Real-time Conversational Assistant',
+              llmModel: ab.llm_model || '',
+              speechModel: sttP || ttsP ? `STT: ${sttP?.name || 'N/A'} • TTS: ${ttsP?.name || 'N/A'}` : '',
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [botSlug]);
 
   const handleStart = useCallback(() => {
     try {
@@ -88,8 +108,14 @@ export default function HomePage() {
 
   const handleExit = useCallback(() => {
     if (isActive) end();
-    navigate('/');
-  }, [end, isActive, navigate]);
+    // Clear bot slug from session when exiting
+    sessionStorage.removeItem('widtts_bot_slug');
+    if (botSlug) {
+      navigate(`/bot/${botSlug}`);
+    } else {
+      navigate('/');
+    }
+  }, [end, isActive, navigate, botSlug]);
 
   useEffect(() => {
     if (isActive) {

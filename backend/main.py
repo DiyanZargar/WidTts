@@ -5,6 +5,7 @@ import os
 from app.entrypoints.http.health import router as health_router
 from app.entrypoints.http.admin import admin_router
 from app.entrypoints.http.realtime_token_routes import router as realtime_token_router
+from app.entrypoints.http.public_bot_routes import router as public_bot_router
 from app.shared.database.init_db import init_db
 from app.shared.database.db import close_pool
 from app.shared.security.envelope_encryption import bootstrap_encryption_key
@@ -19,6 +20,7 @@ static_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 app.include_router(health_router)
 app.include_router(admin_router)
 app.include_router(realtime_token_router)
+app.include_router(public_bot_router)
 
 # Static asset subdirectories
 if os.path.isdir(static_dir):
@@ -34,7 +36,7 @@ async def root():
 
 @app.get("/{path:path}", include_in_schema=False)
 async def spa_fallback(path: str):
-    if path.startswith("health") or path.startswith("admin/api") or path.startswith("realtime/"):
+    if path.startswith("health") or path.startswith("admin/api") or path.startswith("realtime/") or path.startswith("api/bot/"):
         raise HTTPException(status_code=404, detail="Not Found")
     index_path = os.path.join(static_dir, "index.html")
     if os.path.isfile(index_path):

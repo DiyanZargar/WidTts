@@ -214,6 +214,15 @@ _END_ACK = "Thanks for chatting! Goodbye."
 _REPEAT_FALLBACK = "I don't have a previous response to repeat."
 _ERROR_ACK = "I'm sorry, something went wrong. Could you try again?"
 
+# Farewell indicators — if the LLM response contains these, the session is ending
+_FAREWELL_PATTERNS = [
+    "goodbye", "good bye", "bye bye", "bye!", "bye.", "see you", "take care",
+    "have a great day", "have a wonderful day", "have a fantastic day",
+    "thanks for chatting", "thank you for chatting", "session is complete",
+    "session is over", "that's all", " signing off", "farewell",
+    "until next time", "catch you later", "talk to you later",
+]
+
 
 # ── LLMStream subclass ──────────────────────────────────────────────
 
@@ -280,7 +289,7 @@ class WidTTSLLMStream(LLMStream):
             response_text = _STOP_ACK
 
         elif action == PolicyAction.END_CONVERSATION:
-            response_text = _END_ACK
+            response_text = None  # Let the LLM generate its own farewell in character
 
         elif action == PolicyAction.REPEAT:
             response_text = _find_last_assistant_message(chat_ctx) or _REPEAT_FALLBACK
@@ -302,6 +311,10 @@ class WidTTSLLMStream(LLMStream):
                 duration_ms,
                 response_text[:80],
             )
+            # END_CONVERSATION policy → schedule session end
+            if action == PolicyAction.END_CONVERSATION and self._bridge._on_session_end:
+                logger.info("[BRIDGE] END_CONVERSATION policy — scheduling session end in 5s")
+                self._bridge._on_session_end()
             return
 
         # 5. Normal answer / correction / continue — delegate to adapter
@@ -309,6 +322,7 @@ class WidTTSLLMStream(LLMStream):
             context_messages = _build_context_messages(chat_ctx)
             token_count = 0
             first_token_time: Optional[float] = None
+            full_response = ""
 
             async for token in self._bridge._adapter.stream_chat(
                 user_text=user_text,
@@ -325,6 +339,7 @@ class WidTTSLLMStream(LLMStream):
                     logger.info("[BRIDGE] First token in %dms", ttft_ms)
 
                 token_count += 1
+                full_response += token
                 chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
                 await self._event_ch.send(ChatChunk(
                     id=chunk_id,
@@ -345,6 +360,11 @@ class WidTTSLLMStream(LLMStream):
                 duration_ms=duration_ms, token_count=token_count,
                 classification=action.value,
             )
+
+            # Check if the response sounds like a farewell → schedule session end
+            if self._bridge._on_session_end and _is_farewell(full_response):
+                logger.info("[BRIDGE] Farewell detected — scheduling session end in 5s")
+                self._bridge._on_session_end()
 
         except asyncio.CancelledError:
             logger.info("[BRIDGE] Stream cancelled")
@@ -408,11 +428,13 @@ class WidTTSLLMBridge(LLM):
         bot: Dict[str, Any],
         conversation_adapter: ConversationAdapterProtocol,
         policy: ConversationPolicy,
+        on_session_end: Optional[Any] = None,
     ) -> None:
         super().__init__()
         self._bot = bot
         self._adapter = conversation_adapter
         self._policy = policy
+        self._on_session_end = on_session_end
 
         self._system_prompt: str = bot.get("system_prompt", "")
         self._llm_config: Dict[str, Any] = {
@@ -563,3 +585,9 @@ def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
             messages.append({"role": role_str, "content": text})
 
     return messages
+
+
+def _is_farewell(text: str) -> bool:
+    """Check if the response text contains farewell indicators."""
+    lower = text.lower().strip()
+    return any(pattern in lower for pattern in _FAREWELL_PATTERNS)

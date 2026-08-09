@@ -136,16 +136,35 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
         api_key: str = creds["api_key"]
         model: str = config.get("tts_model") or "aura-asteria-en"
 
-        # Transparently map flux-* model names to valid Deepgram Aura voices for LiveKit
+        # Map flux-* model names to valid Deepgram Aura voices for LiveKit
         if model.startswith("flux-"):
             flux_map = {
-                "flux-rufus-en": "aura-orion-en",   # Male voice
-                "flux-aura-en": "aura-asteria-en",  # Female voice
+                "flux-rufus-en": "aura-orion-en",
+                "flux-aura-en": "aura-asteria-en",
+                "flux-asteria-en": "aura-asteria-en",
+                "flux-orion-en": "aura-orion-en",
+                "flux-luna-en": "aura-luna-en",
+                "flux-arcas-en": "aura-arcas-en",
+                "flux-stella-en": "aura-stella-en",
+                "flux-athena-en": "aura-athena-en",
+                "flux-helios-en": "aura-helios-en",
+                "flux-zeus-en": "aura-zeus-en",
             }
-            mapped = flux_map.get(model, "aura-asteria-en")
+            mapped = flux_map.get(model)
+            if mapped is None:
+                # Try generic flux-X → aura-X mapping for any new flux voices
+                candidate = "aura-" + model[5:]
+                if candidate.startswith("aura-"):
+                    mapped = candidate
+                    logger.info("[PLUGIN_FACTORY] Flux model '%s' not in map, trying '%s'", model, mapped)
+                else:
+                    mapped = "aura-asteria-en"
             logger.info("[PLUGIN_FACTORY] Deepgram TTS mapping '%s' -> '%s'", model, mapped)
             model = mapped
-        elif not model.startswith("aura-"):
+        elif model.startswith("aura-"):
+            # Aura and Aura-2 models are used as-is
+            pass
+        else:
             logger.warning("[PLUGIN_FACTORY] Unknown Deepgram TTS model '%s', defaulting to 'aura-asteria-en'", model)
             model = "aura-asteria-en"
 

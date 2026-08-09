@@ -11,6 +11,7 @@ export default defineConfig({
       "/health": { target: "http://localhost:8000", changeOrigin: true },
       "/admin/api": { target: "http://localhost:8000", changeOrigin: true },
       "/realtime": { target: "http://localhost:8000", changeOrigin: true },
+      "/api/bot": { target: "http://localhost:8000", changeOrigin: true },
     },
   },
   worker: {

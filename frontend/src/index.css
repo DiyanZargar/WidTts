@@ -328,6 +328,227 @@
   cursor: pointer;
 }
 
+.glass-select option {
+  background: #111113;
+  color: var(--ink-100);
+  padding: 8px 12px;
+}
+
+/* ─── Language Multi-Select Dropdown ─── */
+.lang-dropdown {
+  position: relative;
+}
+
+.lang-dropdown__trigger {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  user-select: none;
+}
+
+.lang-dropdown__trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--ink-100);
+}
+
+.lang-dropdown__trigger-text--empty {
+  color: var(--ink-35);
+}
+
+.lang-dropdown__panel {
+  position: fixed;
+  z-index: 99999;
+  margin-top: 4px;
+  background: #111113;
+  backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 4px 0;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.lang-dropdown__panel::-webkit-scrollbar {
+  width: 3px;
+}
+
+.lang-dropdown__panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+.lang-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 100ms;
+}
+
+.lang-dropdown__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lang-dropdown__item--selected {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.lang-dropdown__checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 100ms;
+}
+
+.lang-dropdown__checkbox--checked {
+  border-color: var(--accent-bright);
+  background: var(--accent-bright);
+}
+
+.lang-dropdown__label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--ink-60);
+  cursor: pointer;
+}
+
+.lang-dropdown__label--selected {
+  color: var(--ink-100);
+}
+
+.lang-dropdown__star {
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--ink-35);
+  transition: color 150ms;
+}
+
+.lang-dropdown__star--primary {
+  color: #34d399;
+}
+
+/* ─── Glass Select (custom dropdown replacing native <select>) ─── */
+.glass-dropdown {
+  position: relative;
+}
+
+.glass-dropdown__trigger {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  user-select: none;
+}
+
+.glass-dropdown__trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--ink-100);
+}
+
+.glass-dropdown__trigger-text--empty {
+  color: var(--ink-35);
+}
+
+.glass-dropdown__panel {
+  position: fixed;
+  z-index: 99999;
+  margin-top: 4px;
+  background: #111113;
+  backdrop-filter: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 4px 0;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.glass-dropdown__panel::-webkit-scrollbar {
+  width: 3px;
+}
+
+.glass-dropdown__panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+.glass-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 100ms;
+}
+
+.glass-dropdown__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.glass-dropdown__item--selected {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Radio circle for single-select */
+.glass-dropdown__radio {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 100ms;
+}
+
+.glass-dropdown__radio--selected {
+  border-color: var(--accent-bright);
+}
+
+.glass-dropdown__radio-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+}
+
+.glass-dropdown__label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--ink-60);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glass-dropdown__label--selected {
+  color: var(--ink-100);
+}
+
 /* ─── Action Buttons ─── */
 .action-btn {
   display: inline-flex;
@@ -405,6 +626,12 @@
 
 .flash-success { animation: flash-success 800ms var(--ease-expo) forwards; }
 .flash-error { animation: flash-error 800ms var(--ease-expo) forwards; }
+
+/* ─── Toast Notification ─── */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ─── Scroll Chevron ─── */
 @keyframes chevron-drift {
@@ -488,6 +715,8 @@
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--ink-35);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* ─── Step Indicator ─── */

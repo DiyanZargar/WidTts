@@ -163,10 +163,18 @@ export function LLMSection({ onProviderCreated }) {
 
   const confirmDelete = async () => {
     if (!deletingProviderId) return;
-    await fetch(`/admin/api/llm-providers/${deletingProviderId}`, { method: 'DELETE' });
-    setProviders((prev) => prev.filter((p) => p.id !== deletingProviderId));
-    if (editingProviderId === deletingProviderId) {
-      resetFormToNew();
+    try {
+      const res = await fetch(`/admin/api/llm-providers/${deletingProviderId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setTestResult({ success: false, message: data.detail || 'Cannot delete this provider.' });
+        setDeletingProviderId(null);
+        return;
+      }
+      setProviders((prev) => prev.filter((p) => p.id !== deletingProviderId));
+      if (editingProviderId === deletingProviderId) resetFormToNew();
+    } catch (err) {
+      setTestResult({ success: false, message: err.message });
     }
     setDeletingProviderId(null);
   };
@@ -459,9 +467,9 @@ export function LLMSection({ onProviderCreated }) {
                 onClick={confirmDelete}
                 style={{
                   padding: '8px 18px',
-                  background: 'var(--warn)',
+                  background: 'var(--accent-mid)',
                   border: 'none',
-                  color: '#fff',
+                  color: '#000',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '12px',

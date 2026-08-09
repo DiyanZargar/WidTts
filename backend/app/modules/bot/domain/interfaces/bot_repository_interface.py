@@ -36,3 +36,18 @@ class BotRepositoryInterface(ABC):
         Enforced by partial unique index idx_one_active_bot.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    async def deploy(self, bot_id: str, slug: str) -> None:
+        """Deploy a bot with a unique URL slug."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def undeploy(self, bot_id: str) -> None:
+        """Remove a bot's deployment (clear slug + is_deployed)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_by_slug(self, slug: str) -> Optional[Dict[str, Any]]:
+        """Get a deployed bot by its URL slug."""
+        raise NotImplementedError

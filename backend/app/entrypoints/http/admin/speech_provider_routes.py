@@ -176,14 +176,23 @@ def _fetch_deepgram_data_sync(api_key: str):
     return stt_models, tts_models, True
 
 
+_SAMPLE_AUDIO_CACHE: Dict[Tuple[str, str, str, str], Tuple[bytes, str]] = {}
+
+
 def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
     text = req.text or "Hey, how's it going!"
     api_key = req.api_key or ""
     provider_type = req.provider_type or "deepgram"
+    model = req.tts_model or ""
+    voice_id = req.tts_voice_id or ""
+
+    cache_key = (provider_type, model, voice_id, text)
+    if cache_key in _SAMPLE_AUDIO_CACHE:
+        return _SAMPLE_AUDIO_CACHE[cache_key]
 
     if provider_type == "elevenlabs":
-        voice_id = req.tts_voice_id or "21m00Tcm4TlvDq8ikWAM"
-        model_id = req.tts_model or "eleven_turbo_v2_5"
+        voice_id = voice_id or "21m00Tcm4TlvDq8ikWAM"
+        model_id = model or "eleven_turbo_v2_5"
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128"
         payload = json.dumps({"text": text, "model_id": model_id}).encode("utf-8")
         headers = {
@@ -192,20 +201,33 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             "Accept": "audio/mpeg",
         }
         request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             audio_bytes = response.read()
-            return audio_bytes, "audio/mpeg"
-    else:  # Deepgram
-        model = req.tts_model or "aura-asteria-en"
-        primary_v = "v2" if model.lower().startswith("flux") else "v1"
-        fallback_v = "v1" if primary_v == "v2" else "v2"
+            res = (audio_bytes, "audio/mpeg")
+            _SAMPLE_AUDIO_CACHE[cache_key] = res
+            return res
+    else:  # Deepgram REST (Real Neural Voice)
+        target_model = model or "aura-asteria-en"
+        flux_map = {
+            "flux-rufus-en": "aura-orion-en",
+            "flux-aura-en": "aura-asteria-en",
+            "flux-asteria-en": "aura-asteria-en",
+            "flux-orion-en": "aura-orion-en",
+            "flux-luna-en": "aura-luna-en",
+            "flux-arcas-en": "aura-arcas-en",
+            "flux-stella-en": "aura-stella-en",
+            "flux-athena-en": "aura-athena-en",
+            "flux-helios-en": "aura-helios-en",
+            "flux-zeus-en": "aura-zeus-en",
+        }
 
-        alt_model = model
-        if model.lower().startswith("flux-"):
-            alt_model = "aura-" + model[5:]
-        elif model.lower().startswith("aura-"):
-            alt_model = "flux-" + model[5:]
+        mapped_rest_model = target_model
+        if target_model.lower() in flux_map:
+            mapped_rest_model = flux_map[target_model.lower()]
+        elif target_model.lower().startswith("flux-"):
+            mapped_rest_model = "aura-" + target_model[5:]
 
+        attempts = [mapped_rest_model, target_model, "aura-asteria-en", "aura-orion-en"]
         payload = json.dumps({"text": text}).encode("utf-8")
         headers = {
             "Authorization": f"Token {api_key}",
@@ -213,23 +235,18 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             "Accept": "audio/wav",
         }
 
-        attempts = [
-            (primary_v, model),
-            (fallback_v, model),
-            (primary_v, alt_model),
-            (fallback_v, alt_model),
-            ("v2", "flux-rufus-en"),
-            ("v1", "aura-asteria-en"),
-        ]
-
         last_err = None
-        for version, m_name in attempts:
+        for m_name in attempts:
+            if not m_name:
+                continue
             try:
-                url = f"https://api.deepgram.com/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
+                url = f"https://api.deepgram.com/v1/speak?model={m_name}&encoding=linear16&sample_rate=24000"
                 request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                with urllib.request.urlopen(request, timeout=10) as response:
+                with urllib.request.urlopen(request, timeout=4) as response:
                     audio_bytes = response.read()
-                    return audio_bytes, "audio/wav"
+                    res = (audio_bytes, "audio/wav")
+                    _SAMPLE_AUDIO_CACHE[cache_key] = res
+                    return res
             except Exception as e:
                 last_err = e
                 continue
@@ -238,10 +255,32 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             raise last_err
 
 
+def _prewarm_models_background(api_key: str, provider_type: str, models: List[str]):
+    for m in models:
+        try:
+            req = SampleAudioRequest(api_key=api_key, provider_type=provider_type, tts_model=m)
+            _generate_sample_audio_sync(req)
+        except Exception:
+            pass
+
+
+async def _trigger_prewarm(api_key: str, provider_type: str, models: List[str]):
+    await asyncio.to_thread(_prewarm_models_background, api_key, provider_type, models)
+
+
 @router.get("")
 async def list_speech_providers():
     providers = await _repo.list_all()
     for p in providers:
+        if p.get("credentials_enc") and p.get("key_version"):
+            try:
+                creds = await load_and_decrypt(p["credentials_enc"], p["key_version"])
+                api_key = creds.get("api_key", "")
+                if api_key:
+                    ptype = p.get("provider_type") or "deepgram"
+                    asyncio.create_task(_trigger_prewarm(api_key, ptype, ["flux-rufus-en", "flux-aura-en", "aura-asteria-en", "aura-orion-en"]))
+            except Exception:
+                pass
         p["credentials_enc"] = {"encrypted": True}
     return providers
 
@@ -332,6 +371,29 @@ async def generate_sample_audio(req: SampleAudioRequest):
         raise HTTPException(status_code=500, detail=f"Failed to generate live audio sample: {str(e)}")
 
 
+class PrewarmRequest(BaseModel):
+    provider_id: str
+    models: List[str]
+
+
+@router.post("/prewarm")
+async def prewarm_models(req: PrewarmRequest):
+    """Fire-and-forget: prewarm all listed TTS models in the backend cache."""
+    p = await _repo.get_by_id(req.provider_id)
+    if not p or not p.get("credentials_enc") or not p.get("key_version"):
+        return {"status": "skipped", "reason": "provider not found or no credentials"}
+
+    try:
+        creds = await load_and_decrypt(p["credentials_enc"], p["key_version"])
+        api_key = creds.get("api_key", "")
+        provider_type = p.get("provider_type") or "deepgram"
+        if api_key:
+            asyncio.create_task(_trigger_prewarm(api_key, provider_type, req.models))
+    except Exception:
+        pass
+    return {"status": "prewarming", "models": len(req.models)}
+
+
 @router.post("")
 async def create_speech_provider(req: SpeechProviderCreateRequest):
     blob, key_version = await encrypt_and_store(req.credentials)
@@ -385,5 +447,12 @@ async def delete_speech_provider(provider_id: str):
     existing = await _repo.get_by_id(provider_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Speech provider not found")
+    # Check if any bots reference this provider
+    from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
+    bot_repo = PostgresBotRepository()
+    bots = await bot_repo.list_all()
+    using_bots = [b["name"] for b in bots if b.get("stt_provider_id") == provider_id or b.get("tts_provider_id") == provider_id]
+    if using_bots:
+        raise HTTPException(status_code=409, detail=f"Cannot delete — used by bot(s): {', '.join(using_bots)}")
     await _repo.delete(provider_id)
     return {"status": "deleted"}

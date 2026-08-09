@@ -1,9 +1,9 @@
 """
-Realtime Token route.
+Public bot routes — accessed by end users via deploy links.
 
-Mints a LiveKit AccessToken scoped to a per-session room.
-Also starts the LiveKit session adapter as a background task.
-No LiveKit terminology appears in any response field name.
+These endpoints are unauthenticated. They allow users to:
+1. Fetch a deployed bot's public info by slug
+2. Mint a LiveKit token for a specific deployed bot
 """
 
 import uuid
@@ -12,16 +12,14 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.shared.security.token_service import verify_token, AuthenticationError
-from app.shared.security.envelope_encryption import load_and_decrypt
+from app.modules.bot.infrastructure.persistence.postgres_bot_repository import (
+    PostgresBotRepository,
+)
 from app.modules.voice.infrastructure.persistence.realtime_config_repository import (
     RealtimeConfigRepository,
 )
 from app.modules.session.infrastructure.persistence.postgres_session_repository import (
     PostgresSessionRepository,
-)
-from app.modules.bot.infrastructure.persistence.postgres_bot_repository import (
-    PostgresBotRepository,
 )
 from app.modules.provider.infrastructure.persistence.postgres_speech_provider_repository import (
     PostgresSpeechProviderRepository,
@@ -29,13 +27,14 @@ from app.modules.provider.infrastructure.persistence.postgres_speech_provider_re
 from app.modules.provider.infrastructure.persistence.postgres_llm_provider_repository import (
     PostgresLLMProviderRepository,
 )
+from app.shared.security.envelope_encryption import load_and_decrypt
 
-logger = logging.getLogger("realtime_token")
-router = APIRouter(prefix="/realtime", tags=["realtime"])
+logger = logging.getLogger("public_bot_routes")
+router = APIRouter(prefix="/api/bot", tags=["public-bot"])
 
+_bot_repo = PostgresBotRepository()
 _config_repo = RealtimeConfigRepository()
 _session_repo = PostgresSessionRepository()
-_bot_repo = PostgresBotRepository()
 _speech_repo = PostgresSpeechProviderRepository()
 _llm_repo = PostgresLLMProviderRepository()
 
@@ -47,22 +46,33 @@ async def _decrypt_value(encrypted: dict) -> str:
     return result["value"]
 
 
-class TokenRequest(BaseModel):
-    conversation_type: str = "active_bot"
+@router.get("/{slug}")
+async def get_bot_by_slug(slug: str):
+    """Get a deployed bot's public info by slug."""
+    bot = await _bot_repo.get_by_slug(slug)
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+    return {
+        "id": bot["id"],
+        "name": bot.get("name", ""),
+        "description": bot.get("description", ""),
+        "is_deployed": bot.get("is_deployed", False),
+    }
 
 
-@router.post("/token")
-async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
+class BotSlugTokenRequest(BaseModel):
+    conversation_type: str = "bot_session"
+
+
+@router.post("/{slug}/token")
+async def mint_token_for_bot(slug: str, req: BotSlugTokenRequest):
     """
-    Mint a realtime access token for the current user.
-    Creates a new session and starts the LiveKit session adapter.
+    Mint a LiveKit access token for a specific deployed bot.
+    No user authentication required — the bot slug is the access key.
     """
-    # Authenticate user
-    token_str = authorization.replace("Bearer ", "") if authorization else None
-    try:
-        user_id = verify_token(token_str)
-    except AuthenticationError as e:
-        raise HTTPException(401, f"Authentication failed: {e}")
+    bot = await _bot_repo.get_by_slug(slug)
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
 
     # Load realtime config
     config = await _config_repo.get_active()
@@ -76,16 +86,10 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
         logger.error(f"[TOKEN] Failed to decrypt realtime credentials: {e}")
         raise HTTPException(500, "Configuration error")
 
-    # Load active bot
-    bot = await _bot_repo.get_active()
-    if not bot:
-        raise HTTPException(503, "No active bot configured")
-
-    # Load speech providers (STT and TTS can be different)
+    # Load speech providers
     stt_provider = None
     if bot.get("stt_provider_id"):
         stt_provider = await _speech_repo.get_by_id(bot["stt_provider_id"])
-
     tts_provider = None
     if bot.get("tts_provider_id"):
         tts_provider = await _speech_repo.get_by_id(bot["tts_provider_id"])
@@ -97,6 +101,7 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
 
     # Create session
     session_id = str(uuid.uuid4())
+    user_id = f"user-{uuid.uuid4().hex[:8]}"
     await _session_repo.create(
         session_id=session_id,
         conversation_type=req.conversation_type,
@@ -110,19 +115,24 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
 
     try:
         from livekit.api import AccessToken, VideoGrants
+        from datetime import timedelta
 
         token = AccessToken(api_key=api_key, api_secret=api_secret)
         token.with_identity(user_id)
         import json
-        token.with_metadata(json.dumps({"session_id": session_id, "bot_id": bot["id"]}))
-        token.with_grants(VideoGrants(
-            room_join=True,
-            room=room_name,
-            can_publish=True,
-            can_subscribe=True,
-            can_publish_data=True,
-        ))
-        from datetime import timedelta
+
+        token.with_metadata(
+            json.dumps({"session_id": session_id, "bot_id": bot["id"]})
+        )
+        token.with_grants(
+            VideoGrants(
+                room_join=True,
+                room=room_name,
+                can_publish=True,
+                can_subscribe=True,
+                can_publish_data=True,
+            )
+        )
         token.with_ttl(timedelta(seconds=ttl))
         jwt_token = token.to_jwt()
     except Exception as e:
@@ -145,7 +155,9 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
         )
     )
 
-    logger.info(f"[TOKEN] Minted token for session={session_id} room={room_name}")
+    logger.info(
+        f"[TOKEN] Minted bot-slug token for session={session_id} bot={bot['name']}"
+    )
 
     return {
         "token": jwt_token,
@@ -175,21 +187,18 @@ async def _start_session_adapter(
     )
 
     try:
-        # STT credentials — pass encrypted blob to factory (factory decrypts)
         stt_cred_blob = {}
         stt_kv = 1
         if stt_provider and stt_provider.get("credentials_enc"):
             stt_cred_blob = stt_provider["credentials_enc"]
             stt_kv = stt_provider.get("key_version", 1)
 
-        # TTS credentials — pass encrypted blob to factory (factory decrypts)
         tts_cred_blob = {}
         tts_kv = 1
         if tts_provider and tts_provider.get("credentials_enc"):
             tts_cred_blob = tts_provider["credentials_enc"]
             tts_kv = tts_provider.get("key_version", 1)
 
-        # Decrypt LLM provider credentials
         llm_creds = {}
         if llm_provider and llm_provider.get("credentials_enc"):
             llm_creds = await load_and_decrypt(
@@ -197,19 +206,22 @@ async def _start_session_adapter(
                 llm_provider.get("key_version", 1),
             )
 
-        # Build snapshot — use bot-level model/language, falling back to provider defaults
         snapshot = SessionSnapshot(
             session_id=session_id,
             bot_id=bot["id"],
             bot_name=bot.get("name", "Assistant"),
             system_prompt=bot.get("system_prompt", ""),
             greeting=bot.get("greeting", ""),
-            stt_provider_type=stt_provider.get("provider_type", "") if stt_provider else "",
+            stt_provider_type=(
+                stt_provider.get("provider_type", "") if stt_provider else ""
+            ),
             stt_model=bot.get("stt_model") or (stt_provider.get("stt_model", "") if stt_provider else ""),
             stt_language=bot.get("stt_primary_language", "en"),
             stt_languages=bot.get("stt_languages", ["en"]),
             stt_primary_language=bot.get("stt_primary_language", "en"),
-            tts_provider_type=tts_provider.get("provider_type", "") if tts_provider else "",
+            tts_provider_type=(
+                tts_provider.get("provider_type", "") if tts_provider else ""
+            ),
             tts_model=bot.get("tts_model") or (tts_provider.get("tts_model", "") if tts_provider else ""),
             tts_voice_id=tts_provider.get("tts_voice_id", "") if tts_provider else "",
             tts_language=bot.get("tts_primary_language", "en"),
@@ -228,7 +240,6 @@ async def _start_session_adapter(
             tts_key_version=tts_kv,
         )
 
-        # Create and connect room
         from livekit import rtc
         from livekit.agents.utils import http_context
 
@@ -239,18 +250,19 @@ async def _start_session_adapter(
         def _on_disconnect(*args, **kwargs):
             disconnected_event.set()
 
-        # Generate a server-side token for the agent
         from livekit.api import AccessToken, VideoGrants
+        from datetime import timedelta
 
         agent_token = AccessToken(api_key=api_key, api_secret=api_secret)
         agent_token.with_identity(f"agent-{session_id}")
-        agent_token.with_grants(VideoGrants(
-            room_join=True,
-            room=room_name,
-            can_publish=True,
-            can_subscribe=True,
-        ))
-        from datetime import timedelta
+        agent_token.with_grants(
+            VideoGrants(
+                room_join=True,
+                room=room_name,
+                can_publish=True,
+                can_subscribe=True,
+            )
+        )
         agent_token.with_ttl(timedelta(seconds=7200))
         agent_jwt = agent_token.to_jwt()
 
@@ -258,17 +270,15 @@ async def _start_session_adapter(
             await room.connect(server_url, agent_jwt)
             logger.info(f"[SESSION] Agent connected to room={room_name}")
 
-            # Create and start session
             session = LiveKitSession(snapshot=snapshot)
             await session.start(room)
 
-            # Keep session alive until room disconnects
             await disconnected_event.wait()
 
     except Exception as e:
         logger.error(f"[SESSION] Session adapter failed for {session_id}: {e}")
     finally:
-        if 'session' in locals():
+        if "session" in locals():
             try:
                 await session.destroy()
             except Exception:

@@ -12,6 +12,7 @@ import { LLMSection } from './sections/LLMSection';
 import { SpeechSection } from './sections/SpeechSection';
 import { BotIdentitySection } from './sections/BotIdentitySection';
 import { ReviewSection } from './sections/ReviewSection';
+import { DeploySection } from './sections/DeploySection';
 import { LiveSection } from './sections/LiveSection';
 
 /**
@@ -100,6 +101,7 @@ export function AdminJourney() {
   // Provider state for passing to BotIdentitySection
   const [llmProviders, setLlmProviders] = useState([]);
   const [speechProviders, setSpeechProviders] = useState([]);
+  const [botRefreshTrigger, setBotRefreshTrigger] = useState(0);
 
   // Load providers on mount
   useEffect(() => {
@@ -133,7 +135,8 @@ export function AdminJourney() {
   }, []);
 
   const handleBotCreated = useCallback((data) => {
-    setSetupProgress(1.0);
+    // Refresh deploy section — don't touch orb progress on saves
+    setBotRefreshTrigger(t => t + 1);
   }, []);
 
   const handleActivated = useCallback(() => {
@@ -204,7 +207,7 @@ export function AdminJourney() {
                   speechProviders={speechProviders}
                   onBotCreated={handleBotCreated}
                 />
-                <ReviewSection onActivated={handleActivated} />
+                <DeploySection onActivated={handleActivated} refreshTrigger={botRefreshTrigger} />
                 <LiveSection />
               </div>
             </Scroll>

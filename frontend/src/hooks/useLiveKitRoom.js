@@ -126,15 +126,22 @@ export function useLiveKitRoom() {
     }
   }, []);
 
-  const connect = useCallback(async (onEvent, onStatusChange) => {
+  const connect = useCallback(async (onEvent, onStatusChange, botSlug) => {
     callbacksRef.current = { onEvent, onStatusChange };
 
     try {
-      // Fetch token from backend
-      const res = await fetch(`${API_BASE}/realtime/token`, {
+      // Fetch token from backend — bot-specific or active bot
+      const tokenUrl = botSlug
+        ? `${API_BASE}/api/bot/${botSlug}/token`
+        : `${API_BASE}/realtime/token`;
+      const tokenBody = botSlug
+        ? JSON.stringify({ conversation_type: 'bot_session' })
+        : JSON.stringify({ conversation_type: 'active_bot' });
+
+      const res = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_type: 'active_bot' }),
+        body: tokenBody,
       });
 
       if (!res.ok) {

@@ -5,13 +5,14 @@ const SECTIONS = [
   { id: 'llm', label: 'LLM', offset: 0.167 },
   { id: 'speech', label: 'Speech', offset: 0.333 },
   { id: 'bot', label: 'Bot', offset: 0.5 },
-  { id: 'activate', label: 'Activate', offset: 0.667 },
+  { id: 'deploy', label: 'Deploy', offset: 0.667 },
   { id: 'live', label: 'Live', offset: 0.833 },
 ];
 
 /**
  * TopNav — Fixed transparent nav with 3D + 2D scroll-spy sync.
- * Clicking any section label smoothly scrolls BOTH the 3D camera/orb and HTML section.
+ * Has a solid background that fades to transparent at the bottom edge,
+ * so content fades in smoothly as it scrolls underneath.
  */
 export function TopNav({ scrollRef, currentSection = 0, visible = true }) {
   const navigate = useNavigate();
@@ -59,38 +60,88 @@ export function TopNav({ scrollRef, currentSection = 0, visible = true }) {
         right: 0,
         zIndex: 50,
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '1.25rem 2.5rem',
-        pointerEvents: 'auto',
+        flexDirection: 'column',
+        pointerEvents: 'none',
       }}
     >
-      {/* Wordmark */}
-      <div
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: '18px',
-          fontWeight: 400,
-          letterSpacing: '-0.02em',
-          color: 'var(--ink-60)',
-        }}
-      >
-        widTTS
-      </div>
-
-      {/* Section Navigation Labels */}
+      {/* Nav bar with solid background */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '2rem',
+          justifyContent: 'space-between',
+          padding: '1.25rem 2.5rem',
+          background: '#050507',
+          pointerEvents: 'auto',
         }}
-        className="nav-labels"
       >
-        {SECTIONS.map((section, i) => (
+        {/* Wordmark */}
+        <div
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '18px',
+            fontWeight: 400,
+            letterSpacing: '-0.02em',
+            color: 'var(--ink-60)',
+          }}
+        >
+          widTTS
+        </div>
+
+        {/* Section Navigation Labels */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2rem',
+          }}
+          className="nav-labels"
+        >
+          {SECTIONS.map((section, i) => (
+            <button
+              key={section.id}
+              onClick={() => handleJumpTo(i, section.offset)}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: '4px 0',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                fontSize: '11px',
+                fontWeight: 500,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: currentSection === i ? 'var(--accent-bright)' : 'var(--ink-35)',
+                transition: 'color 300ms cubic-bezier(0.16, 1, 0.3, 1)',
+                position: 'relative',
+              }}
+              aria-label={`Jump to ${section.label} section`}
+              onMouseEnter={(e) => {
+                if (currentSection !== i) e.currentTarget.style.color = 'var(--ink-60)';
+              }}
+              onMouseLeave={(e) => {
+                if (currentSection !== i) e.currentTarget.style.color = 'var(--ink-35)';
+              }}
+            >
+              {section.label}
+              {currentSection === i && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: '1px',
+                    background: 'var(--accent-bright)',
+                    boxShadow: '0 0 8px var(--accent-mid)',
+                  }}
+                />
+              )}
+            </button>
+          ))}
+
           <button
-            key={section.id}
-            onClick={() => handleJumpTo(i, section.offset)}
+            onClick={handleExit}
             style={{
               background: 'none',
               border: 'none',
@@ -101,56 +152,25 @@ export function TopNav({ scrollRef, currentSection = 0, visible = true }) {
               fontWeight: 500,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
-              color: currentSection === i ? 'var(--accent-bright)' : 'var(--ink-35)',
-              transition: 'color 300ms cubic-bezier(0.16, 1, 0.3, 1)',
-              position: 'relative',
+              color: 'var(--ink-35)',
+              transition: 'color 200ms',
             }}
-            aria-label={`Jump to ${section.label} section`}
-            onMouseEnter={(e) => {
-              if (currentSection !== i) e.currentTarget.style.color = 'var(--ink-60)';
-            }}
-            onMouseLeave={(e) => {
-              if (currentSection !== i) e.currentTarget.style.color = 'var(--ink-35)';
-            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink-100)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-35)')}
           >
-            {section.label}
-            {currentSection === i && (
-              <span
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: '1px',
-                  background: 'var(--accent-bright)',
-                  boxShadow: '0 0 8px var(--accent-mid)',
-                }}
-              />
-            )}
+            Exit
           </button>
-        ))}
-
-        <button
-          onClick={handleExit}
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: '4px 0',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-body)',
-            fontSize: '11px',
-            fontWeight: 500,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--ink-35)',
-            transition: 'color 200ms',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink-100)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-35)')}
-        >
-          Exit
-        </button>
+        </div>
       </div>
+
+      {/* Fade-out gradient — from solid to transparent */}
+      <div
+        style={{
+          height: '40px',
+          background: 'linear-gradient(to bottom, #050507 0%, transparent 100%)',
+          pointerEvents: 'none',
+        }}
+      />
     </nav>
   );
 }
