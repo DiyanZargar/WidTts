@@ -468,7 +468,7 @@ export function SpeechSection({ onProviderCreated }) {
       <div className="journey-section__content">
         <div className="step-indicator">
           <span className="step-indicator__dot" />
-          Step 3 of 5
+          Step 2 of 4
         </div>
 
         <h2 className="type-display type-display-lg" style={{ marginBottom: '0.75rem' }}>

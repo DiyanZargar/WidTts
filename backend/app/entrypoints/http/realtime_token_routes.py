@@ -81,10 +81,14 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
     if not bot:
         raise HTTPException(503, "No active bot configured")
 
-    # Load speech provider
-    speech_provider = None
-    if bot.get("speech_provider_id"):
-        speech_provider = await _speech_repo.get_by_id(bot["speech_provider_id"])
+    # Load speech providers (STT and TTS can be different)
+    stt_provider = None
+    if bot.get("stt_provider_id"):
+        stt_provider = await _speech_repo.get_by_id(bot["stt_provider_id"])
+
+    tts_provider = None
+    if bot.get("tts_provider_id"):
+        tts_provider = await _speech_repo.get_by_id(bot["tts_provider_id"])
 
     # Load LLM provider
     llm_provider = None
@@ -134,7 +138,8 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
             api_key=api_key,
             api_secret=api_secret,
             bot=bot,
-            speech_provider=speech_provider,
+            stt_provider=stt_provider,
+            tts_provider=tts_provider,
             llm_provider=llm_provider,
             audio_sample_rate=config.get("audio_sample_rate", 16000),
         )
@@ -158,7 +163,8 @@ async def _start_session_adapter(
     api_key: str,
     api_secret: str,
     bot: dict,
-    speech_provider: dict,
+    stt_provider: dict,
+    tts_provider: dict,
     llm_provider: dict,
     audio_sample_rate: int,
 ):
@@ -169,12 +175,19 @@ async def _start_session_adapter(
     )
 
     try:
-        # Speech credentials — pass encrypted blob to factory (factory decrypts)
-        speech_cred_blob = {}
-        speech_kv = 1
-        if speech_provider and speech_provider.get("credentials_enc"):
-            speech_cred_blob = speech_provider["credentials_enc"]
-            speech_kv = speech_provider.get("key_version", 1)
+        # STT credentials — pass encrypted blob to factory (factory decrypts)
+        stt_cred_blob = {}
+        stt_kv = 1
+        if stt_provider and stt_provider.get("credentials_enc"):
+            stt_cred_blob = stt_provider["credentials_enc"]
+            stt_kv = stt_provider.get("key_version", 1)
+
+        # TTS credentials — pass encrypted blob to factory (factory decrypts)
+        tts_cred_blob = {}
+        tts_kv = 1
+        if tts_provider and tts_provider.get("credentials_enc"):
+            tts_cred_blob = tts_provider["credentials_enc"]
+            tts_kv = tts_provider.get("key_version", 1)
 
         # Decrypt LLM provider credentials
         llm_creds = {}
@@ -190,10 +203,11 @@ async def _start_session_adapter(
             bot_id=bot["id"],
             bot_name=bot.get("name", "Assistant"),
             system_prompt=bot.get("system_prompt", ""),
-            speech_provider_type=speech_provider.get("provider_type", "") if speech_provider else "",
-            stt_model=speech_provider.get("stt_model", "") if speech_provider else "",
-            tts_model=speech_provider.get("tts_model", "") if speech_provider else "",
-            tts_voice_id=speech_provider.get("tts_voice_id", "") if speech_provider else "",
+            stt_provider_type=stt_provider.get("provider_type", "") if stt_provider else "",
+            stt_model=stt_provider.get("stt_model", "") if stt_provider else "",
+            tts_provider_type=tts_provider.get("provider_type", "") if tts_provider else "",
+            tts_model=tts_provider.get("tts_model", "") if tts_provider else "",
+            tts_voice_id=tts_provider.get("tts_voice_id", "") if tts_provider else "",
             llm_provider_id=bot.get("llm_provider_id", ""),
             llm_model=bot.get("llm_model", ""),
             server_url=server_url,
@@ -201,14 +215,22 @@ async def _start_session_adapter(
             audio_sample_rate=audio_sample_rate,
             llm_api_key=llm_creds.get("api_key", ""),
             llm_base_url=llm_provider.get("base_url", "") if llm_provider else "",
-            encrypted_speech_credentials=speech_cred_blob,
-            speech_key_version=speech_kv,
+            encrypted_stt_credentials=stt_cred_blob,
+            stt_key_version=stt_kv,
+            encrypted_tts_credentials=tts_cred_blob,
+            tts_key_version=tts_kv,
         )
 
         # Create and connect room
         from livekit import rtc
+        from livekit.agents.utils import http_context
 
         room = rtc.Room()
+        disconnected_event = asyncio.Event()
+
+        @room.on("disconnected")
+        def _on_disconnect(*args, **kwargs):
+            disconnected_event.set()
 
         # Generate a server-side token for the agent
         from livekit.api import AccessToken, VideoGrants
@@ -225,15 +247,16 @@ async def _start_session_adapter(
         agent_token.with_ttl(timedelta(seconds=7200))
         agent_jwt = agent_token.to_jwt()
 
-        await room.connect(server_url, agent_jwt)
-        logger.info(f"[SESSION] Agent connected to room={room_name}")
+        async with http_context.open():
+            await room.connect(server_url, agent_jwt)
+            logger.info(f"[SESSION] Agent connected to room={room_name}")
 
-        # Create and start session
-        session = LiveKitSession(snapshot=snapshot)
-        await session.start(room)
+            # Create and start session
+            session = LiveKitSession(snapshot=snapshot)
+            await session.start(room)
 
-        # Keep session alive until room disconnects
-        await room.disconnected
+            # Keep session alive until room disconnects
+            await disconnected_event.wait()
 
     except Exception as e:
         logger.error(f"[SESSION] Session adapter failed for {session_id}: {e}")

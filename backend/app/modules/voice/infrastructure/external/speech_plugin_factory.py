@@ -77,10 +77,19 @@ async def build_stt_plugin(config: Dict[str, Any]) -> Any:
         from livekit.plugins import deepgram as _dg
 
         api_key: str = creds["api_key"]
-        model: str = config.get("stt_model") or "nova-2"
+        model: str = config.get("stt_model") or "nova-3"
+        language: str = config.get("stt_language") or "en-US"
 
-        logger.info("[PLUGIN_FACTORY] Deepgram STT  model=%s", model)
-        return _dg.STT(api_key=api_key, model=model)
+        logger.info("[PLUGIN_FACTORY] Deepgram STT  model=%s  language=%s", model, language)
+        return _dg.STT(
+            api_key=api_key,
+            model=model,
+            language=language,
+            smart_format=True,
+            punctuate=True,
+            interim_results=True,
+            endpointing_ms=100,
+        )
 
     elif provider_type == "elevenlabs":
         from livekit.plugins import elevenlabs as _el
@@ -126,6 +135,19 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
 
         api_key: str = creds["api_key"]
         model: str = config.get("tts_model") or "aura-asteria-en"
+
+        # Transparently map flux-* model names to valid Deepgram Aura voices for LiveKit
+        if model.startswith("flux-"):
+            flux_map = {
+                "flux-rufus-en": "aura-orion-en",   # Male voice
+                "flux-aura-en": "aura-asteria-en",  # Female voice
+            }
+            mapped = flux_map.get(model, "aura-asteria-en")
+            logger.info("[PLUGIN_FACTORY] Deepgram TTS mapping '%s' -> '%s'", model, mapped)
+            model = mapped
+        elif not model.startswith("aura-"):
+            logger.warning("[PLUGIN_FACTORY] Unknown Deepgram TTS model '%s', defaulting to 'aura-asteria-en'", model)
+            model = "aura-asteria-en"
 
         logger.info("[PLUGIN_FACTORY] Deepgram TTS  model=%s", model)
         return _dg.TTS(api_key=api_key, model=model)

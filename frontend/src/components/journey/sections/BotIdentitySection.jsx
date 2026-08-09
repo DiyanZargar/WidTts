@@ -1,46 +1,43 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
-const DEFAULT_SYSTEM_PROMPT = `You are a warm, highly engaging, and intelligent voice assistant companion. You speak naturally, concisely, and conversationally. Your primary mission is to guide the user through a structured 7-step check-in journey, validating their answers turn by turn before advancing to the next question.
+const DEFAULT_SYSTEM_PROMPT = `You are a warm, highly engaging, and intelligent voice assistant companion. You speak naturally, concisely, and conversationally. Your primary mission is to guide the user through a structured 5-question check-in journey, validating their answers turn by turn before advancing to the next question.
 
 ### SPEECH & TONE RULES:
 1. Concise Spoken Turns: Keep all responses to 1-2 short sentences (under 25 words total). Avoid long explanations.
-2. Spoken Formatting: Never use markdown formatting (no asterisks, no bullet points, no bold, no headers, no emojis). Write numbers as words (e.g., "seven" instead of "7").
+2. Spoken Formatting: Never use markdown formatting (no asterisks, no bullet points, no bold, no headers, no emojis). Write numbers as words (e.g., "five" instead of "5").
 3. Conversational Warmth: Be warm, empathetic, encouraging, and natural.
+4. Natural Redirection: When the user gives an off-topic or unclear answer:
+   - NEVER say generic phrases like "I didn't catch that", "Sorry, I didn't get that", or "Could you repeat that?".
+   - ALWAYS acknowledge what the user actually said first to show you heard them (e.g., "Cats are awesome! But tell me...").
+   - Then naturally, warmly redirect back to the active question.
 
-### SEQUENTIAL 7-QUESTION FLOW:
-You must ask these 7 questions in exact order, one at a time:
+### SEQUENTIAL 5-QUESTION FLOW:
+You must ask these 5 questions in exact order, one at a time:
 
 Question 1: "What should I call you?"
 - Expected Answer: User's name or preferred nickname.
 
 Question 2: "What do you do for work or focus on daily?"
-- Expected Answer: Profession, role, student status, or daily main activity.
+- Expected Answer: Profession, role, student status, or main daily activity.
 
 Question 3: "How are you feeling today, and how would you rate your week so far?"
 - Expected Answer: Current mood, feeling, or rating of the week.
 
-Question 4: "What is your biggest personal or career goal right now?"
+Question 4: "What is your main personal or career goal right now?"
 - Expected Answer: A stated goal, ambition, or target outcome.
 
-Question 5: "What would you say is your strongest skill or key strength?"
-- Expected Answer: A named skill, talent, or personality strength.
-
-Question 6: "Which skill or habit would you most like to improve?"
-- Expected Answer: A skill, habit, or area for growth.
-
-Question 7: "What is something you are grateful for today?"
+Question 5: "What is something you are grateful for today?"
 - Expected Answer: Something specific or general the user appreciates.
 
 ### ANSWER VALIDATION & CONTROL LOGIC:
 1. Valid Answer: If the user provides a direct, meaningful answer to the active question:
-   - Provide a brief, warm 1-sentence acknowledgement (e.g., "Nice to meet you, Alex!", "That is a great skill to have.").
+   - Provide a brief, warm 1-sentence acknowledgement (e.g., "Nice to meet you, Alex!", "That is a great goal to work towards.").
    - Immediately ask the NEXT question in sequence in the same turn.
-2. Invalid / Off-Topic / Unclear Answer: If the user gives an irrelevant answer, stays silent, or says something incomprehensible:
-   - Politely acknowledge and gently re-ask the active question without advancing (e.g., "I didn't quite catch that. What do you focus on daily?").
+2. Off-Topic / Unclear Answer: Acknowledge what they said warmly, then gently re-ask the active question without advancing.
 3. User Correction: If the user corrects an earlier answer (e.g., "Actually, my name is Jordan, not Alex"):
    - Acknowledge the correction warmly (e.g., "Got it, Jordan! Thanks for clarifying.") and continue with the active question.
-4. Completion: After Question 7 is validly answered, provide a warm 2-sentence closing summary reflecting their name and main goal, then end with a fond sign-off.`;
+4. Completion: After Question 5 is validly answered, provide a warm 2-sentence closing summary reflecting their name and main goal, then end with a fond sign-off.`;
 
 /**
  * BotIdentitySection — Bot name, description, voice selection, and system prompt.
@@ -56,7 +53,8 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     system_prompt: DEFAULT_SYSTEM_PROMPT,
     llm_provider_id: '',
     llm_model: '',
-    speech_provider_id: '',
+    stt_provider_id: '',
+    tts_provider_id: '',
   });
 
   const [saving, setSaving] = useState(false);
@@ -117,12 +115,15 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     }
   }, [llmProviders, fetchModelsForProvider, form.llm_provider_id, editingBotId]);
 
-  // Pre-select speech provider if available
+  // Pre-select speech providers if available
   useEffect(() => {
-    if (!form.speech_provider_id && speechProviders.length > 0 && !editingBotId) {
-      setForm((prev) => ({ ...prev, speech_provider_id: speechProviders[0].id }));
+    if (!form.stt_provider_id && speechProviders.length > 0 && !editingBotId) {
+      setForm((prev) => ({ ...prev, stt_provider_id: speechProviders[0].id }));
     }
-  }, [speechProviders, form.speech_provider_id, editingBotId]);
+    if (!form.tts_provider_id && speechProviders.length > 0 && !editingBotId) {
+      setForm((prev) => ({ ...prev, tts_provider_id: speechProviders[0].id }));
+    }
+  }, [speechProviders, form.stt_provider_id, form.tts_provider_id, editingBotId]);
 
   const handleSelectBotForEdit = (bot) => {
     setEditingBotId(bot.id);
@@ -132,7 +133,8 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       system_prompt: bot.system_prompt || DEFAULT_SYSTEM_PROMPT,
       llm_provider_id: bot.llm_provider_id || '',
       llm_model: bot.llm_model || '',
-      speech_provider_id: bot.speech_provider_id || '',
+      stt_provider_id: bot.stt_provider_id || '',
+      tts_provider_id: bot.tts_provider_id || '',
     });
     setCustomModelInput(false);
     if (bot.llm_provider_id) {
@@ -149,7 +151,8 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       system_prompt: DEFAULT_SYSTEM_PROMPT,
       llm_provider_id: llmProviders[0]?.id || '',
       llm_model: '',
-      speech_provider_id: speechProviders[0]?.id || '',
+      stt_provider_id: speechProviders[0]?.id || '',
+      tts_provider_id: speechProviders[0]?.id || '',
     });
     setCustomModelInput(false);
     setResult(null);
@@ -211,14 +214,15 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     form.system_prompt.trim() !== '' &&
     form.llm_provider_id !== '' &&
     form.llm_model.trim() !== '' &&
-    form.speech_provider_id !== '';
+    form.stt_provider_id !== '' &&
+    form.tts_provider_id !== '';
 
   return (
     <div className="journey-section journey-section--split">
       <div className="journey-section__content">
         <div className="step-indicator">
           <span className="step-indicator__dot" />
-          Step 4 of 5
+          Step 3 of 4
         </div>
 
         <h2 className="type-display type-display-lg" style={{ marginBottom: '0.75rem' }}>
@@ -254,7 +258,8 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
             {bots.map((b) => {
               const isSelected = editingBotId === b.id;
               const llmP = llmProviders.find((p) => p.id === b.llm_provider_id);
-              const speechP = speechProviders.find((p) => p.id === b.speech_provider_id);
+              const sttP = speechProviders.find((p) => p.id === b.stt_provider_id);
+              const ttsP = speechProviders.find((p) => p.id === b.tts_provider_id);
 
               return (
                 <div
@@ -289,7 +294,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                         {b.name} {isSelected && <span style={{ fontSize: '11px', opacity: 0.8 }}>(Editing)</span>}
                       </div>
                       <div className="type-micro" style={{ fontSize: '10px', marginTop: '2px' }}>
-                        LLM: {llmP?.name || b.llm_provider_id || 'N/A'} ({b.llm_model || 'N/A'}) • Speech: {speechP?.name || b.speech_provider_id || 'N/A'}
+                        LLM: {llmP?.name || b.llm_provider_id || 'N/A'} ({b.llm_model || 'N/A'}) • STT: {sttP?.name || 'N/A'} • TTS: {ttsP?.name || 'N/A'}
                       </div>
                     </div>
                   </div>
@@ -453,22 +458,41 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
               </div>
             </div>
 
-            <div>
-              <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>
-                Speech Engine Provider *
-              </label>
-              <select
-                className="glass-input glass-select"
-                value={form.speech_provider_id}
-                onChange={(e) => setForm({ ...form, speech_provider_id: e.target.value })}
-              >
-                <option value="" style={{ background: '#111' }}>Select Speech Provider</option>
-                {speechProviders.map((p) => (
-                  <option key={p.id} value={p.id} style={{ background: '#111' }}>
-                    {p.name} ({p.provider_type})
-                  </option>
-                ))}
-              </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>
+                  STT Provider (Speech-to-Text) *
+                </label>
+                <select
+                  className="glass-input glass-select"
+                  value={form.stt_provider_id}
+                  onChange={(e) => setForm({ ...form, stt_provider_id: e.target.value })}
+                >
+                  <option value="" style={{ background: '#111' }}>Select STT Provider</option>
+                  {speechProviders.map((p) => (
+                    <option key={p.id} value={p.id} style={{ background: '#111' }}>
+                      {p.name} ({p.provider_type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>
+                  TTS Provider (Text-to-Speech) *
+                </label>
+                <select
+                  className="glass-input glass-select"
+                  value={form.tts_provider_id}
+                  onChange={(e) => setForm({ ...form, tts_provider_id: e.target.value })}
+                >
+                  <option value="" style={{ background: '#111' }}>Select TTS Provider</option>
+                  {speechProviders.map((p) => (
+                    <option key={p.id} value={p.id} style={{ background: '#111' }}>
+                      {p.name} ({p.provider_type})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>

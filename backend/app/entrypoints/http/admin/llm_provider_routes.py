@@ -78,7 +78,7 @@ FALLBACK_MODELS = {
 
 
 def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[Dict[str, str]]:
-    url = (base_url or "").strip().rstrip("/")
+    url = (base_url or "").lstrip("=").strip().rstrip("/")
     if not url:
         if provider_type == "openai":
             url = "https://api.openai.com/v1"
@@ -93,6 +93,12 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
         elif provider_type == "ollama":
             url = "http://localhost:11434/v1"
 
+    if url and not url.startswith("http://") and not url.startswith("https://"):
+        if "localhost" in url or "127.0.0.1" in url:
+            url = f"http://{url}"
+        else:
+            url = f"https://{url}"
+
     if provider_type == "anthropic":
         endpoint = "https://api.anthropic.com/v1/models"
         headers = {
@@ -106,7 +112,7 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
     else:
         # Standard OpenAI / OpenAI-compatible / Groq / OpenRouter / Ollama
         if not url.endswith("/models"):
-            if not url.endswith("/v1") and not url.endswith("/v1/"):
+            if not url.endswith("/v1"):
                 endpoint = f"{url}/v1/models"
             else:
                 endpoint = f"{url}/models"
@@ -117,8 +123,8 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
-    req = urllib.request.Request(endpoint, headers=headers, method="GET")
     try:
+        req = urllib.request.Request(endpoint, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             models = []
@@ -132,7 +138,6 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
             for item in raw_list:
                 if isinstance(item, dict):
                     mid = item.get("id") or item.get("name") or ""
-                    # For Gemini "models/gemini-1.5-pro" -> "gemini-1.5-pro"
                     if mid.startswith("models/"):
                         mid = mid.replace("models/", "")
                     if mid:
@@ -142,7 +147,7 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
 
             return models
     except Exception as e:
-        print(f"[LLM_MODELS] Failed to fetch models from {endpoint}: {e}")
+        logger.warning(f"[LLM_MODELS] Failed to fetch models from {endpoint}: {e}")
         return []
 
 

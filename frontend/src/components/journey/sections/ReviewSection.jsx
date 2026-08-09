@@ -36,7 +36,7 @@ export function ReviewSection({ onActivated }) {
       <div className="journey-section__content">
         <div className="step-indicator">
           <span className="step-indicator__dot" />
-          Step 5 of 5
+          Step 4 of 4
         </div>
 
         <h2

@@ -64,7 +64,7 @@ To connect widTTS to a cloud-managed LiveKit server:
    * **WebSocket URL**: `wss://your-project-subdomain.livekit.cloud`
    * **API Key**: `APIxxxxxxxxxxxx`
    * **API Secret**: `secretxxxxxxxxxxxxxxxx`
-5. Enter these credentials into the **Realtime Transport** section of the widTTS Admin Journey.
+5. Configure these credentials in `backend/.env` under `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`.
 
 ---
 
@@ -100,6 +100,14 @@ This starts:
    DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
    MASTER_ENCRYPTION_KEY=PGe4qntNrj9RGqhna1JwmRfjm7WPr2e2njV6fT3r8PM=
    APP_SECRET=dev-secret-change-in-production
+   PORT=8000
+
+   # LiveKit Realtime Transport
+   LIVEKIT_URL=ws://localhost:7880
+   LIVEKIT_API_KEY=devkey
+   LIVEKIT_API_SECRET=secret
+   LIVEKIT_TOKEN_TTL_SECONDS=3600
+   LIVEKIT_AUDIO_SAMPLE_RATE=16000
    ```
 
    *(To generate a new 32-byte Master Encryption Key, run: `python3 -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"`)*

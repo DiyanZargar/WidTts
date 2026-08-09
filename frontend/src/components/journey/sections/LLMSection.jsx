@@ -180,7 +180,7 @@ export function LLMSection({ onProviderCreated }) {
       <div className="journey-section__content">
         <div className="step-indicator">
           <span className="step-indicator__dot" />
-          Step 1 of 5
+          Step 1 of 4
         </div>
 
         <h2 className="type-display type-display-lg" style={{ marginBottom: '0.75rem' }}>

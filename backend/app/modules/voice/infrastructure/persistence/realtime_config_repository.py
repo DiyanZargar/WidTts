@@ -43,16 +43,39 @@ class RealtimeConfigRepository:
             return [_format_row(r) for r in rows]
 
     async def get_active(self) -> Optional[Dict[str, Any]]:
-        """Return the currently active config row, or most recently updated."""
-        async with get_connection() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM realtime_runtime_config WHERE is_active = TRUE ORDER BY updated_at DESC LIMIT 1"
-            )
-            if not row:
+        """Return the currently active config row, or fallback to environment configuration (.env)."""
+        try:
+            async with get_connection() as conn:
                 row = await conn.fetchrow(
-                    "SELECT * FROM realtime_runtime_config ORDER BY updated_at DESC LIMIT 1"
+                    "SELECT * FROM realtime_runtime_config WHERE is_active = TRUE ORDER BY updated_at DESC LIMIT 1"
                 )
-            return _format_row(row)
+                if not row:
+                    row = await conn.fetchrow(
+                        "SELECT * FROM realtime_runtime_config ORDER BY updated_at DESC LIMIT 1"
+                    )
+                if row:
+                    return _format_row(row)
+        except Exception as e:
+            logger.warning(f"Failed to fetch realtime config from DB: {e}")
+
+        # Fallback to environment configuration (.env)
+        from app.shared.config.settings import settings
+        from app.shared.security.envelope_encryption import encrypt_and_dump
+
+        enc_key = await encrypt_and_dump(settings.livekit_api_key)
+        enc_secret = await encrypt_and_dump(settings.livekit_api_secret)
+
+        return {
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "Environment Transport",
+            "provider_type": "livekit",
+            "server_url": settings.livekit_url,
+            "encrypted_api_key": enc_key,
+            "encrypted_api_secret": enc_secret,
+            "room_token_ttl_seconds": settings.livekit_token_ttl_seconds,
+            "audio_sample_rate": settings.livekit_audio_sample_rate,
+            "is_active": True,
+        }
 
     async def get_by_id(self, config_id: str) -> Optional[Dict[str, Any]]:
         """Return a single config by ID."""

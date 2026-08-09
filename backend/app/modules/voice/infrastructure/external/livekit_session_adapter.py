@@ -17,21 +17,27 @@ class SessionSnapshot:
     bot_id: str
     bot_name: str
     system_prompt: str
-    speech_provider_type: str
+    # STT provider (can be different from TTS)
+    stt_provider_type: str
     stt_model: str
+    # TTS provider (can be different from STT)
+    tts_provider_type: str
     tts_model: str
     tts_voice_id: str
+    # LLM
     llm_provider_id: str
     llm_model: str
+    # LiveKit
     server_url: str
     room_name: str
     audio_sample_rate: int
     llm_api_key: str = ""
     llm_base_url: str = ""
-    # Speech credentials (encrypted) — passed through so the factory can
-    # decrypt and forward to the provider.  Populated by the token route.
-    encrypted_speech_credentials: dict = field(default_factory=dict)
-    speech_key_version: int = 0
+    # Encrypted credentials (blob + key_version) — factory decrypts
+    encrypted_stt_credentials: dict = field(default_factory=dict)
+    stt_key_version: int = 0
+    encrypted_tts_credentials: dict = field(default_factory=dict)
+    tts_key_version: int = 0
 
 
 @dataclass
@@ -55,21 +61,56 @@ class LiveKitSession:
         )
         try:
             from livekit.agents import AgentSession, Agent
+            from livekit.agents.voice.room_io import RoomOptions, TextOutputOptions
             from livekit.plugins import silero
 
             self._stt_plugin = await self._build_stt()
             self._tts_plugin = await self._build_tts()
-            self._vad_plugin = silero.VAD.load()
             self._llm_bridge = self._build_llm_bridge()
+            self._vad_plugin = silero.VAD.load(
+                min_silence_duration=0.4,
+                activation_threshold=0.45,
+                min_speech_duration=0.05,
+            )
+            import os
+            timeout_sec = float(os.getenv("ROOM_INACTIVITY_TIMEOUT_SECONDS", "30"))
 
             self._agent_session = AgentSession(
                 vad=self._vad_plugin,
                 stt=self._stt_plugin,
                 llm=self._llm_bridge,
                 tts=self._tts_plugin,
+                user_away_timeout=timeout_sec,
             )
+
+            # Handle inactivity timeout (user away for timeout_sec)
+            @self._agent_session.on("user_state_changed")
+            def _on_user_state_changed(ev):
+                if getattr(ev, "new_state", None) == "away":
+                    logger.info("[SESSION] Inactivity timeout (%ss) reached for session=%s", timeout_sec, self.snapshot.session_id)
+                    import asyncio
+                    async def _disconnect_inactivity():
+                        try:
+                            if self._agent_session and self._agent_session.room:
+                                import json
+                                payload = json.dumps({"event": "session_end", "payload": {"reason": "inactivity_timeout"}}).encode('utf-8')
+                                await self._agent_session.room.local_participant.publish_data(payload)
+                        except Exception:
+                            pass
+                        await self.destroy()
+                    asyncio.create_task(_disconnect_inactivity())
+
             agent = Agent(instructions=self.snapshot.system_prompt)
-            await self._agent_session.start(room=room, agent=agent)
+            await self._agent_session.start(
+                room=room,
+                agent=agent,
+                room_options=RoomOptions(
+                    text_output=TextOutputOptions(sync_transcription=False),
+                ),
+            )
+
+            # Speak initial greeting immediately when the room connects
+            await self._agent_session.say("Hi there! What should I call you?")
 
             duration_ms = int((time.monotonic() - self._started_at) * 1000)
             logger.info(
@@ -97,10 +138,10 @@ class LiveKitSession:
         )
 
         config = {
-            "provider_type": self.snapshot.speech_provider_type,
+            "provider_type": self.snapshot.stt_provider_type,
             "stt_model": self.snapshot.stt_model,
-            "credentials_enc": self.snapshot.encrypted_speech_credentials,
-            "key_version": self.snapshot.speech_key_version,
+            "credentials_enc": self.snapshot.encrypted_stt_credentials,
+            "key_version": self.snapshot.stt_key_version,
         }
         return await build_stt_plugin(config)
 
@@ -111,11 +152,11 @@ class LiveKitSession:
         )
 
         config = {
-            "provider_type": self.snapshot.speech_provider_type,
+            "provider_type": self.snapshot.tts_provider_type,
             "tts_model": self.snapshot.tts_model,
             "tts_voice_id": self.snapshot.tts_voice_id,
-            "credentials_enc": self.snapshot.encrypted_speech_credentials,
-            "key_version": self.snapshot.speech_key_version,
+            "credentials_enc": self.snapshot.encrypted_tts_credentials,
+            "key_version": self.snapshot.tts_key_version,
         }
         return await build_tts_plugin(config)
 

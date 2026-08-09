@@ -18,7 +18,8 @@ class Bot:
     system_prompt: str = ""
     llm_provider_id: Optional[str] = None
     llm_model: str = ""
-    speech_provider_id: Optional[str] = None
+    stt_provider_id: Optional[str] = None
+    tts_provider_id: Optional[str] = None
     is_active: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

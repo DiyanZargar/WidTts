@@ -11,12 +11,13 @@ class PostgresBotRepository(BotRepositoryInterface):
         async with get_connection() as conn:
             await conn.execute(
                 """INSERT INTO bots (id, name, description, personality, system_prompt,
-                   llm_provider_id, llm_model, speech_provider_id, is_active)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                   llm_provider_id, llm_model, stt_provider_id, tts_provider_id, is_active)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
                 bid, bot["name"], bot.get("description", ""),
                 bot.get("personality", ""), bot.get("system_prompt", ""),
                 bot.get("llm_provider_id"), bot.get("llm_model", ""),
-                bot.get("speech_provider_id"), bot.get("is_active", False),
+                bot.get("stt_provider_id"), bot.get("tts_provider_id"),
+                bot.get("is_active", False),
             )
         return bid
 
@@ -35,7 +36,7 @@ class PostgresBotRepository(BotRepositoryInterface):
         vals = []
         idx = 1
         for key in ("name", "description", "personality", "system_prompt",
-                     "llm_provider_id", "llm_model", "speech_provider_id", "is_active"):
+                     "llm_provider_id", "llm_model", "stt_provider_id", "tts_provider_id", "is_active"):
             if key in updates:
                 sets.append(f"{key} = ${idx}")
                 vals.append(updates[key])

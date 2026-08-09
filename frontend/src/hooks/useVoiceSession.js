@@ -30,17 +30,28 @@ export function useVoiceSession() {
         dispatch({ type: 'CLEAR_PARTIAL_TRANSCRIPT' });
         break;
       case 'tts_audio_meta':
-        dispatch({
-          type: 'APPEND_TRANSCRIPT_LINE',
-          line: { id: Date.now(), speaker: 'assistant', text: evt.payload.text, isHighlighted: true },
-        });
+        if (evt.payload?.is_streaming) {
+          dispatch({ type: 'SET_PARTIAL_ASSISTANT_TRANSCRIPT', text: evt.payload.text });
+        } else {
+          dispatch({
+            type: 'APPEND_TRANSCRIPT_LINE',
+            line: { id: Date.now(), speaker: 'assistant', text: evt.payload.text, isHighlighted: true },
+          });
+          dispatch({ type: 'CLEAR_PARTIAL_ASSISTANT_TRANSCRIPT' });
+        }
         dispatch({ type: 'SET_ASSISTANT_HIGHLIGHT', value: true });
         break;
       case 'tts_stream_end':
+        dispatch({ type: 'CLEAR_PARTIAL_ASSISTANT_TRANSCRIPT' });
         dispatch({ type: 'SET_ASSISTANT_HIGHLIGHT', value: false });
         break;
       case 'session_completed':
-        dispatch({ type: 'SESSION_COMPLETED' });
+      case 'session_end':
+      case 'session_timeout':
+      case 'room_disconnected':
+        dispatch({ type: 'CLOSE_WIDGET' });
+        dispatch({ type: 'SET_LISTENING', value: false });
+        dispatch({ type: 'SET_SPEAKING', value: false });
         break;
       case 'session_reset':
         dispatch({ type: 'SESSION_RESET' });
@@ -101,6 +112,9 @@ export function useVoiceSession() {
     audioLevel,
     listenLevel,
     transcript,
+    transcriptLines: state.transcriptLines || [],
+    partialTranscript: state.partialTranscript || '',
+    partialAssistantTranscript: state.partialAssistantTranscript || '',
     begin,
     end,
     restart,

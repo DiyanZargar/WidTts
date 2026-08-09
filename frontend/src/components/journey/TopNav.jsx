@@ -2,12 +2,11 @@ import { useNavigate } from 'react-router-dom';
 
 const SECTIONS = [
   { id: 'overview', label: 'Overview', offset: 0 },
-  { id: 'llm', label: 'LLM', offset: 0.143 },
-  { id: 'realtime', label: 'Realtime', offset: 0.286 },
-  { id: 'speech', label: 'Speech', offset: 0.428 },
-  { id: 'bot', label: 'Bot', offset: 0.571 },
-  { id: 'activate', label: 'Activate', offset: 0.714 },
-  { id: 'live', label: 'Live', offset: 0.857 },
+  { id: 'llm', label: 'LLM', offset: 0.167 },
+  { id: 'speech', label: 'Speech', offset: 0.333 },
+  { id: 'bot', label: 'Bot', offset: 0.5 },
+  { id: 'activate', label: 'Activate', offset: 0.667 },
+  { id: 'live', label: 'Live', offset: 0.833 },
 ];
 
 /**

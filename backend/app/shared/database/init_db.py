@@ -17,24 +17,25 @@ async def seed_default_realtime_config():
     try:
         from app.modules.voice.infrastructure.persistence.realtime_config_repository import RealtimeConfigRepository
         from app.shared.security.envelope_encryption import encrypt_and_store
+        from app.shared.config.settings import settings
 
         repo = RealtimeConfigRepository()
-        active = await repo.get_active()
-        if not active:
-            encrypted_key, _ = await encrypt_and_store({"value": "devkey"})
-            encrypted_secret, _ = await encrypt_and_store({"value": "secret"})
+        all_configs = await repo.get_all()
+        if not all_configs:
+            encrypted_key, _ = await encrypt_and_store({"value": settings.livekit_api_key})
+            encrypted_secret, _ = await encrypt_and_store({"value": settings.livekit_api_secret})
 
             await repo.create({
-                "name": "Local Docker",
+                "name": "Environment Transport",
                 "provider_type": "livekit",
-                "server_url": "ws://localhost:7880",
+                "server_url": settings.livekit_url,
                 "encrypted_api_key": encrypted_key,
                 "encrypted_api_secret": encrypted_secret,
-                "room_token_ttl_seconds": 3600,
-                "audio_sample_rate": 16000,
+                "room_token_ttl_seconds": settings.livekit_token_ttl_seconds,
+                "audio_sample_rate": settings.livekit_audio_sample_rate,
                 "is_active": True,
             })
-            logger.info("[INIT_DB] Seeded default Local Docker realtime transport configuration")
+            logger.info("[INIT_DB] Seeded default realtime transport configuration from .env settings")
     except Exception as e:
         logger.warning(f"[INIT_DB] Realtime config seed warning: {e}")
 

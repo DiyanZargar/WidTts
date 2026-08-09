@@ -10,79 +10,100 @@ import * as THREE from 'three';
  *
  * Also reused on /user — import this, don't duplicate.
  */
-export function CoreSphere({ progress = 0, activated = false, position = [0, 0, 0], status, audioLevel = 0 }) {
+export function CoreSphere({ progress = 0, activated = false, isActive = false, position = [0, 0, 0], status, audioLevel = 0, listenLevel = 0 }) {
   const coreRef = useRef();
   const glowRef = useRef();
+  const matRef = useRef();
 
-  // Radiant Emerald Green color progression based on setup progress (0→1)
-  const colors = useMemo(() => ({
+  // Emerald Green setup palette (Admin & Active User)
+  const emeraldColors = useMemo(() => ({
     dim: new THREE.Color('hsl(165, 85%, 22%)'),
     mid: new THREE.Color('hsl(160, 90%, 42%)'),
     bright: new THREE.Color('hsl(155, 95%, 58%)'),
     bloom: new THREE.Color('hsl(150, 100%, 82%)'),
-    warn: new THREE.Color('hsl(28, 85%, 58%)'),
   }), []);
 
-  // Status-to-color mapping for /user mode
-  const STATUS_COLOR = useMemo(() => ({
-    idle: colors.dim,
-    connecting: colors.mid,
-    listening: colors.mid,
-    thinking: colors.bright,
-    speaking: colors.bright,
-    error: colors.warn,
-  }), [colors]);
+  // Soft Yellowish Amber for Inner Core when Inactive/Off
+  const offColors = useMemo(() => ({
+    dim: new THREE.Color('hsl(45, 75%, 18%)'),
+    mid: new THREE.Color('hsl(45, 85%, 45%)'),
+  }), []);
 
-  useFrame((state) => {
-    if (!coreRef.current) return;
+  const isUserPortal = status !== undefined;
+
+  useFrame((state, delta) => {
+    if (!coreRef.current || !matRef.current) return;
     const t = state.clock.getElapsedTime();
 
     // Gentle breathing rotation
-    coreRef.current.rotation.y = t * 0.15;
+    coreRef.current.rotation.y += delta * 0.15;
     coreRef.current.rotation.x = Math.sin(t * 0.1) * 0.1;
 
-    // Determine target color
-    let baseColor;
+    // Combined voice amplitude
+    const voiceEnergy = Math.max(audioLevel, listenLevel);
 
-    if (status) {
-      // /user mode — driven by voice session status
-      baseColor = (STATUS_COLOR[status] || colors.dim).clone();
-      if (status === 'speaking' && audioLevel > 0) {
-        baseColor.lerp(colors.bloom, audioLevel * 0.3);
-      }
+    const isClosed = isUserPortal && (!isActive || status === 'idle' || status === 'disconnected' || status === 'completed' || status === 'off' || status === 'cancelled' || status === 'error');
+
+    let baseColor, emissiveColor, emissiveIntensity;
+
+    if (isClosed) {
+      // ONLY Inner Core shifts to Soft Yellowish Amber when Inactive/Off
+      baseColor = offColors.dim.clone();
+      emissiveColor = offColors.mid.clone();
+      emissiveIntensity = 0.45;
     } else {
-      // Admin mode — driven by setup progress
-      baseColor = colors.dim.clone();
-      if (progress < 0.5) {
-        baseColor.lerp(colors.mid, progress * 2);
+      // Active / Admin Mode: Default Radiant Emerald Green
+      baseColor = emeraldColors.dim.clone();
+      emissiveColor = emeraldColors.mid.clone();
+      emissiveIntensity = 0.6;
+
+      if (status === 'speaking') {
+        emissiveColor.lerp(emeraldColors.bright, 0.4 + audioLevel * 0.5);
+        emissiveIntensity = 0.7 + audioLevel * 0.8;
+      } else if (status === 'listening') {
+        emissiveColor.lerp(emeraldColors.bright, 0.3 + listenLevel * 0.4);
+        emissiveIntensity = 0.6 + listenLevel * 0.6;
+      } else if (status === 'thinking') {
+        emissiveColor = emeraldColors.bloom.clone();
+        emissiveIntensity = 1.0;
+      } else if (progress < 0.5) {
+        emissiveColor.lerp(emeraldColors.mid, progress * 2);
       } else {
-        baseColor.copy(colors.mid).lerp(colors.bright, (progress - 0.5) * 2);
+        emissiveColor.copy(emeraldColors.mid).lerp(emeraldColors.bright, (progress - 0.5) * 2);
       }
 
       if (activated) {
         const flarePhase = (Math.sin(t * 2) * 0.5 + 0.5) * 0.3;
-        baseColor.lerp(colors.bloom, flarePhase);
+        emissiveColor.lerp(emeraldColors.bloom, flarePhase);
       }
     }
 
-    coreRef.current.material.color.lerp(baseColor, 0.05);
-    coreRef.current.material.emissive.lerp(baseColor, 0.05);
+    matRef.current.color.lerp(baseColor, 0.08);
+    matRef.current.emissive.lerp(emissiveColor, 0.08);
+    matRef.current.emissiveIntensity = THREE.MathUtils.lerp(
+      matRef.current.emissiveIntensity,
+      emissiveIntensity,
+      0.08
+    );
 
-    // Audio reactivity / setup pulse
-    const reactiveScale = status === 'speaking' ? 1 + audioLevel * 0.15 : 1;
-    const scale = (activated ? 1.05 : 1) * reactiveScale;
+    const baseDistort = isClosed ? 0.15 : status === 'thinking' ? 0.5 : voiceEnergy > 0.05 ? 0.4 : 0.3;
+    matRef.current.distort = THREE.MathUtils.lerp(matRef.current.distort, baseDistort + voiceEnergy * 0.3, 0.1);
+    matRef.current.speed = THREE.MathUtils.lerp(matRef.current.speed, isClosed ? 0.5 : 1.5 + voiceEnergy * 2.5, 0.1);
+
+    const scale = (activated ? 1.05 : 1) * (1 + voiceEnergy * 0.15);
     coreRef.current.scale.setScalar(scale);
 
-    // Outer glow pulse
+    // Outer ambient glow halo: 100% Transparent Delicate Admin Emerald Halo
     if (glowRef.current) {
       glowRef.current.scale.setScalar(scale * 1.35);
-      glowRef.current.material.opacity = (0.08 + (progress * 0.1) + (audioLevel * 0.15));
+      glowRef.current.material.color.set('hsl(155, 95%, 58%)');
+      glowRef.current.material.opacity = 0.05 + voiceEnergy * 0.08;
     }
   });
 
   return (
     <group position={position}>
-      {/* Outer ambient glow sphere */}
+      {/* Outer ambient glow sphere — Exact Admin Theme */}
       <Sphere ref={glowRef} args={[1.4, 32, 32]}>
         <meshBasicMaterial
           color="hsl(155, 95%, 58%)"
@@ -92,9 +113,10 @@ export function CoreSphere({ progress = 0, activated = false, position = [0, 0, 
         />
       </Sphere>
 
-      {/* Main distorted core sphere */}
-      <Sphere ref={coreRef} args={[1.1, 64, 64]}>
+      {/* Main distorted inner core sphere — Exact Admin Theme */}
+      <Sphere ref={coreRef} args={[0.85, 64, 64]}>
         <MeshDistortMaterial
+          ref={matRef}
           color="hsl(165, 85%, 22%)"
           emissive="hsl(160, 90%, 42%)"
           emissiveIntensity={0.6}

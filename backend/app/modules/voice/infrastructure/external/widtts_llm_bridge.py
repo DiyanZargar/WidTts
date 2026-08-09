@@ -47,7 +47,7 @@ import uuid
 from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
 
 from livekit.agents.llm import ChatChunk, ChoiceDelta, LLM, LLMStream
-from livekit.agents.llm.chat_context import ChatContext, ChatRole
+from livekit.agents.llm.chat_context import ChatContext
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, APIConnectOptions, NotGivenOr
 
 from app.modules.conversation.domain.policy.conversation_policy import (
@@ -168,14 +168,16 @@ class DefaultConversationAdapter:
         for msg in context:
             messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
 
-        messages.append({"role": "user", "content": user_text})
+        # Append user_text only if it isn't already present at the end of context
+        if not messages or messages[-1].get("content") != user_text:
+            messages.append({"role": "user", "content": user_text})
 
         model = llm_config.get("model") or self._model
         api_key = llm_config.get("api_key") or self._api_key or None
         base_url = llm_config.get("base_url") or self._base_url or None
 
-        # When using a custom endpoint, litellm needs "openai/" prefix
-        # to bypass provider detection and use OpenAI-compatible transport.
+        # When using a custom endpoint (proxy), litellm always needs "openai/"
+        # prefix to route via OpenAI-compatible transport to the api_base URL.
         if base_url and not model.startswith("openai/"):
             model = f"openai/{model}"
 
@@ -291,7 +293,7 @@ class WidTTSLLMStream(LLMStream):
             chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
             await self._event_ch.send(ChatChunk(
                 id=chunk_id,
-                delta=ChoiceDelta(role=ChatRole.ASSISTANT, content=response_text),
+                delta=ChoiceDelta(role="assistant", content=response_text),
             ))
             duration_ms = int((time.monotonic() - t0) * 1000)
             logger.info(
@@ -326,7 +328,7 @@ class WidTTSLLMStream(LLMStream):
                 chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
                 await self._event_ch.send(ChatChunk(
                     id=chunk_id,
-                    delta=ChoiceDelta(content=token),
+                    delta=ChoiceDelta(role="assistant", content=token),
                 ))
 
             duration_ms = int((time.monotonic() - t0) * 1000)
@@ -362,7 +364,7 @@ class WidTTSLLMStream(LLMStream):
             chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
             await self._event_ch.send(ChatChunk(
                 id=chunk_id,
-                delta=ChoiceDelta(role=ChatRole.ASSISTANT, content=_ERROR_ACK),
+                delta=ChoiceDelta(role="assistant", content=_ERROR_ACK),
             ))
 
 
@@ -536,9 +538,9 @@ def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
         # Map ChatRole enum to string
         if role == "user" or str(role) == "user":
             role_str = "user"
-        elif role == ChatRole.ASSISTANT or role == "assistant":
+        elif role == "assistant" or str(role) == "assistant":
             role_str = "assistant"
-        elif role == ChatRole.SYSTEM or role == "system":
+        elif role == "system" or str(role) == "system":
             role_str = "system"
         else:
             continue  # Skip tool messages and other roles

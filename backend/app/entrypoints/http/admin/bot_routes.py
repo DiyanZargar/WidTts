@@ -16,7 +16,8 @@ class BotCreateRequest(BaseModel):
     system_prompt: str = ""
     llm_provider_id: Optional[str] = None
     llm_model: str = ""
-    speech_provider_id: Optional[str] = None
+    stt_provider_id: Optional[str] = None
+    tts_provider_id: Optional[str] = None
 
 
 class BotUpdateRequest(BaseModel):
@@ -26,7 +27,8 @@ class BotUpdateRequest(BaseModel):
     system_prompt: Optional[str] = None
     llm_provider_id: Optional[str] = None
     llm_model: Optional[str] = None
-    speech_provider_id: Optional[str] = None
+    stt_provider_id: Optional[str] = None
+    tts_provider_id: Optional[str] = None
 
 
 @router.get("")

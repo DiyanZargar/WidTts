@@ -173,15 +173,17 @@ export function useLiveKitRoom() {
       // Track subscription (remote audio from TTS)
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === Track.Kind.Audio) {
-          // Attach to hidden audio element for playback
-          if (!audioElementRef.current) {
-            const audio = document.createElement('audio');
-            audio.autoplay = true;
-            audio.style.display = 'none';
-            document.body.appendChild(audio);
-            audioElementRef.current = audio;
-          }
-          track.attach(audioElementRef.current);
+          // Attach using LiveKit's managed element generator for zero-latency WebRTC audio
+          const audioEl = track.attach();
+          audioEl.id = `livekit-audio-${participant.identity || 'agent'}`;
+          audioEl.style.display = 'none';
+          document.body.appendChild(audioEl);
+          audioElementRef.current = audioEl;
+
+          // Explicitly invoke play() to bypass browser autoplay restrictions
+          audioEl.play().catch((err) => {
+            console.warn('[LiveKit] Autoplay prevented, user interaction required:', err);
+          });
 
           // Create AnalyserNode on the remote audio track for level visualization
           try {
@@ -199,31 +201,79 @@ export function useLiveKitRoom() {
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
         track.detach();
         if (track.kind === Track.Kind.Audio) {
+          if (audioElementRef.current) {
+            audioElementRef.current.remove();
+            audioElementRef.current = null;
+          }
           remoteAnalyserRef.current = null;
         }
       });
 
-      // Transcription events — LiveKit's native transcription pipeline.
-      // Agent and user transcripts arrive here automatically from the
-      // LiveKit agents framework (STT/TTS). This is the SOLE source of
-      // transcript data for the frontend.
+      // Text Stream Transcription Handler — LiveKit 2.x Agent Protocol ('lk.transcription')
+      room.registerTextStreamHandler('lk.transcription', async (reader, participantInfo) => {
+        const info = reader.info || {};
+        const attrs = info.attributes || {};
+        const localIdentity = room.localParticipant?.identity;
+        const localMicSid = room.localParticipant?.getTrackPublication(Track.Source.Microphone)?.trackSid;
+
+        // Determine speaker identity: user STT vs agent TTS
+        const publishOnBehalf = attrs['lk.publish_on_behalf'];
+        const transcribedTrackId = attrs['lk.transcribed_track_id'];
+        const isLocal = Boolean(
+          (publishOnBehalf && publishOnBehalf === localIdentity) ||
+          (transcribedTrackId && localMicSid && transcribedTrackId === localMicSid) ||
+          (info.senderIdentity && info.senderIdentity === localIdentity) ||
+          (participantInfo?.identity && participantInfo.identity === localIdentity)
+        );
+
+        let fullText = '';
+
+        try {
+          for await (const chunk of reader) {
+            if (!chunk) continue;
+            fullText += chunk; // Accumulate incoming delta stream chunks into full sentence
+
+            if (isLocal) {
+              onEvent?.({ event: 'user_partial_transcript', payload: { text: fullText } });
+            } else {
+              onEvent?.({ event: 'tts_audio_meta', payload: { text: fullText, is_streaming: true } });
+            }
+          }
+        } catch (e) {
+          console.warn('[LiveKit] TextStream error:', e);
+        }
+
+        // Stream completed
+        const finalClean = fullText.trim();
+        if (finalClean) {
+          if (isLocal) {
+            onEvent?.({ event: 'user_transcript', payload: { text: finalClean } });
+          } else {
+            onEvent?.({ event: 'tts_audio_meta', payload: { text: finalClean, is_streaming: false } });
+            onEvent?.({ event: 'tts_stream_end', payload: {} });
+          }
+        }
+      });
+
+      // Legacy TranscriptionReceived fallback — LiveKit 1.x Event Protocol
       room.on(RoomEvent.TranscriptionReceived, (segments, participant) => {
         if (!segments || segments.length === 0) return;
 
         for (const seg of segments) {
-          const isLocal = participant?.identity === room.localParticipant?.identity;
+          const isLocal = (
+            participant?.identity === room.localParticipant?.identity ||
+            seg.participant_identity === room.localParticipant?.identity
+          );
           const text = seg.text?.trim();
           if (!text) continue;
 
           if (isLocal) {
-            // User speech from STT
             if (seg.final) {
               onEvent?.({ event: 'user_transcript', payload: { text } });
             } else {
               onEvent?.({ event: 'user_partial_transcript', payload: { text } });
             }
           } else {
-            // Agent speech from TTS
             if (seg.final) {
               onEvent?.({ event: 'tts_audio_meta', payload: { text, is_streaming: false } });
               onEvent?.({ event: 'tts_stream_end', payload: {} });
@@ -234,16 +284,28 @@ export function useLiveKitRoom() {
         }
       });
 
-      // Data channel — widTTS business events ONLY.
-      // Transcripts are NOT sent here (they come via TranscriptionReceived above).
-      // Reserved for: session lifecycle, conversation state, validation results,
-      // thinking status, runtime events, analytics.
+      // Data channel — widTTS business events
       room.on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
         try {
           const msg = JSON.parse(new TextDecoder().decode(payload));
           onEvent?.(msg);
         } catch (e) {
           // Binary data — ignore
+        }
+      });
+
+      // Room Disconnected & Participant Disconnected (Inactivity timeout / agent leave)
+      room.on(RoomEvent.Disconnected, (reason) => {
+        console.log('[LiveKit] Room disconnected:', reason);
+        stopLevelLoop();
+        onEvent?.({ event: 'session_end', payload: { reason: reason || 'disconnected' } });
+      });
+
+      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        console.log('[LiveKit] Participant disconnected:', participant?.identity);
+        if (participant?.identity?.startsWith('agent-')) {
+          stopLevelLoop();
+          onEvent?.({ event: 'session_end', payload: { reason: 'agent_disconnected' } });
         }
       });
 

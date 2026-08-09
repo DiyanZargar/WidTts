@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # Base64-encoded 32-byte AES-256 master key for wrapping DEKs.
     master_encryption_key: str = ""
 
+    # ── Realtime Voice Transport (LiveKit) ──
+    livekit_url: str = Field(default="ws://localhost:7880", alias="LIVEKIT_URL")
+    livekit_api_key: str = Field(default="devkey", alias="LIVEKIT_API_KEY")
+    livekit_api_secret: str = Field(default="secret", alias="LIVEKIT_API_SECRET")
+    livekit_token_ttl_seconds: int = Field(default=3600, alias="LIVEKIT_TOKEN_TTL_SECONDS")
+    livekit_audio_sample_rate: int = Field(default=16000, alias="LIVEKIT_AUDIO_SAMPLE_RATE")
+
     # ── Application ──
     app_secret: str = "dev-secret-change-in-production"
     port: int = 8000

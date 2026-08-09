@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
-import { Core } from '../components/three/Core';
+import { CoreSphere } from '../components/journey/CoreSphere';
 import { UserParticleVoid } from '../components/journey/ParticleVoid';
 import { useVoiceSession } from '../hooks/useVoiceSession';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -12,16 +12,34 @@ import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
  * HomePage — User Portal (`/user`)
  *
  * Full-viewport vibrant radiant emerald energy sphere + edge-to-edge floating particle void.
- * - Real-time Voice Reactivity (STT user mic input + TTS bot audio output drive orb distortion & pulse).
- * - Full conversation transcript feed & real-time assistant responses.
- * - Automatic greeting audio upon session initialization.
- * - Clean top-right EXIT navigation.
+ * Reuses the exact 3D CoreSphere from admin panel with full real-time voice reactivity.
  */
 export default function HomePage() {
   const navigate = useNavigate();
-  const { status, audioLevel, listenLevel, transcript, begin, end, restart, micStream, muted, setMuted, isActive } = useVoiceSession();
+  const {
+    status,
+    audioLevel,
+    listenLevel,
+    transcriptLines,
+    partialTranscript,
+    partialAssistantTranscript,
+    begin,
+    end,
+    restart,
+    muted,
+    setMuted,
+    isActive,
+  } = useVoiceSession();
   const reducedMotion = useReducedMotion();
   const [started, setStarted] = useState(false);
+  const transcriptScrollRef = useRef(null);
+
+  // Auto-scroll transcript feed container to bottom whenever new lines/partials arrive
+  useEffect(() => {
+    if (transcriptScrollRef.current) {
+      transcriptScrollRef.current.scrollTop = transcriptScrollRef.current.scrollHeight;
+    }
+  }, [transcriptLines, partialTranscript, partialAssistantTranscript]);
 
   // Fetch active bot runtime info from API
   const [bot, setBot] = useState({
@@ -37,12 +55,13 @@ export default function HomePage() {
       .then((data) => {
         if (data?.active_bot) {
           const ab = data.active_bot;
-          const sp = ab.speech_provider;
+          const sttP = ab.stt_provider;
+          const ttsP = ab.tts_provider;
           setBot({
             name: ab.name || 'Voice Assistant',
             description: ab.description || ab.system_prompt || 'Real-time Conversational Assistant',
             llmModel: ab.llm_model || '',
-            speechModel: sp ? `${sp.provider_type?.toUpperCase()} (${sp.stt_model || sp.tts_model})` : '',
+            speechModel: sttP || ttsP ? `STT: ${sttP?.name || 'N/A'} • TTS: ${ttsP?.name || 'N/A'}` : '',
           });
         }
       })
@@ -50,7 +69,6 @@ export default function HomePage() {
   }, []);
 
   const handleStart = useCallback(() => {
-    // Explicitly resume browser AudioContext on user gesture to guarantee sound output
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (AudioCtx) {
@@ -73,7 +91,6 @@ export default function HomePage() {
     navigate('/');
   }, [end, isActive, navigate]);
 
-  // Keep started state in sync with session activity
   useEffect(() => {
     if (isActive) {
       setStarted(true);
@@ -82,13 +99,15 @@ export default function HomePage() {
     }
   }, [isActive, status]);
 
-  // Status badge label
   const getStatusBadge = () => {
     if (status === 'speaking') return { label: '🔊 Speaking...', color: userPalette.bright };
     if (status === 'listening') return { label: '🎙 Listening...', color: 'hsl(160, 90%, 45%)' };
     if (status === 'thinking') return { label: '🧠 Thinking...', color: 'hsl(45, 95%, 60%)' };
     if (status === 'connecting') return { label: '⏳ Connecting...', color: tokens.color.ink60 };
-    return { label: '● Ready', color: userPalette.bright };
+    if (!isActive || status === 'idle' || status === 'completed' || status === 'disconnected' || status === 'off') {
+      return { label: '● SESSION OFF', color: 'hsl(350, 90%, 55%)' };
+    }
+    return { label: '● READY', color: userPalette.bright };
   };
 
   const statusBadge = getStatusBadge();
@@ -105,13 +124,12 @@ export default function HomePage() {
         userSelect: 'none',
       }}
     >
-      {/* Viewport border glow lines */}
       <div className="viewport-border viewport-border--top viewport-border--user" />
       <div className="viewport-border viewport-border--bottom viewport-border--user" />
       <div className="viewport-border viewport-border--left viewport-border--user" />
       <div className="viewport-border viewport-border--right viewport-border--user" />
 
-      {/* FULL-SCREEN 3D Canvas */}
+      {/* FULL-SCREEN 3D Canvas with exact Admin Panel CoreSphere */}
       <div
         style={{
           position: 'absolute',
@@ -123,19 +141,21 @@ export default function HomePage() {
         }}
       >
         <Canvas
-          camera={{ fov: 45, position: [0, 0, 8] }}
-          gl={{ alpha: true, antialias: true }}
+          camera={{ fov: 45, position: [0, 0.4, 8.5] }}
+          gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
           style={{ background: 'transparent', width: '100%', height: '100%' }}
         >
-          {/* Particles across full viewport */}
+          <ambientLight intensity={0.15} />
+          <directionalLight position={[5, 10, 5]} intensity={0.4} color="hsl(155, 95%, 58%)" />
+          <pointLight position={[-5, 5, -5]} intensity={0.3} color="hsl(160, 90%, 42%)" />
           <UserParticleVoid />
-
-          {/* Central Radiant Emerald Energy Orb */}
-          <Core
-            status={reducedMotion ? 'idle' : status}
+          <CoreSphere
+            status={status}
+            isActive={isActive}
+            activated={isActive}
             audioLevel={audioLevel}
             listenLevel={listenLevel}
-            radius={1.35}
+            progress={0}
           />
         </Canvas>
       </div>
@@ -328,37 +348,144 @@ export default function HomePage() {
             maxWidth: '560px',
           }}
         >
-          {/* Live Conversation Transcript Feed Overlay */}
-          <div
-            style={{
-              width: '100%',
-              minHeight: '60px',
-              maxHeight: '120px',
-              overflowY: 'auto',
-              padding: '12px 18px',
-              background: 'rgba(4, 13, 10, 0.75)',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: '10px',
-              color: tokens.color.ink100,
-              fontSize: '14px',
-              fontFamily: tokens.font.body,
-              textAlign: 'center',
-              boxShadow: '0 0 30px rgba(0,0,0,0.6), 0 0 15px hsla(155, 95%, 58%, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {transcript ? (
-              <span>"{transcript}"</span>
-            ) : (
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
-                {status === 'speaking' ? 'Assistant is speaking...' : status === 'listening' ? 'Listening to your voice...' : 'Speak now or listen to assistant...'}
-              </span>
-            )}
-          </div>
+          {/* Live Subtitle Transcript Overlay (Minimal, Frameless) */}
+          {(transcriptLines.length > 0 || partialTranscript || partialAssistantTranscript) && (
+            <div
+              ref={transcriptScrollRef}
+              style={{
+                width: '100%',
+                maxHeight: '160px',
+                overflowY: 'auto',
+                padding: '8px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                pointerEvents: 'auto',
+                maskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 100%)',
+              }}
+            >
+              {transcriptLines.slice(-6).map((line, idx) => {
+                const isUser = line.speaker === 'user';
+                const isLatest = idx === Math.min(transcriptLines.length, 6) - 1 && !partialTranscript && !partialAssistantTranscript;
+                return (
+                  <div
+                    key={line.id || idx}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: isUser ? 'flex-end' : 'flex-start',
+                      alignSelf: isUser ? 'flex-end' : 'flex-start',
+                      maxWidth: '88%',
+                      opacity: isLatest ? 1 : 0.65,
+                      transition: 'all 300ms ease-out',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        letterSpacing: '0.15em',
+                        textTransform: 'uppercase',
+                        color: isUser ? 'rgba(52, 211, 153, 0.7)' : 'rgba(103, 232, 249, 0.7)',
+                        marginBottom: '2px',
+                      }}
+                    >
+                      {isUser ? 'YOU' : (bot.name || 'AI').toUpperCase()}
+                    </span>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: '14px',
+                        lineHeight: '1.4',
+                        fontWeight: isLatest ? 500 : 400,
+                        color: isUser ? 'rgba(236, 253, 245, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                        textShadow: isLatest ? '0 0 12px rgba(255, 255, 255, 0.2)' : 'none',
+                        textAlign: isUser ? 'right' : 'left',
+                      }}
+                    >
+                      {line.text}
+                    </p>
+                  </div>
+                );
+              })}
+
+              {/* Live partial user STT */}
+              {partialTranscript && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    alignSelf: 'flex-end',
+                    maxWidth: '88%',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      letterSpacing: '0.15em',
+                      textTransform: 'uppercase',
+                      color: 'rgba(52, 211, 153, 0.9)',
+                      marginBottom: '2px',
+                    }}
+                  >
+                    YOU
+                  </span>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: '14px',
+                      lineHeight: '1.4',
+                      color: 'rgba(52, 211, 153, 0.95)',
+                      fontStyle: 'italic',
+                      textAlign: 'right',
+                    }}
+                  >
+                    "{partialTranscript}" <span className="animate-pulse">...</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Live partial assistant stream */}
+              {partialAssistantTranscript && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    alignSelf: 'flex-start',
+                    maxWidth: '88%',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      letterSpacing: '0.15em',
+                      textTransform: 'uppercase',
+                      color: 'rgba(103, 232, 249, 0.9)',
+                      marginBottom: '2px',
+                    }}
+                  >
+                    {(bot.name || 'AI').toUpperCase()}
+                  </span>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: '14px',
+                      lineHeight: '1.4',
+                      color: 'rgba(255, 255, 255, 0.95)',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {partialAssistantTranscript} <span className="animate-pulse">...</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
             <button

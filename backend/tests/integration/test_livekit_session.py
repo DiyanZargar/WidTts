@@ -15,7 +15,8 @@ def _make_snapshot(**overrides):
         "bot_id": "bot-1",
         "bot_name": "Test Bot",
         "system_prompt": "You are a test assistant.",
-        "speech_provider_type": "deepgram",
+        "stt_provider_type": "deepgram",
+        "tts_provider_type": "deepgram",
         "stt_model": "nova-2",
         "tts_model": "aura-asteria-en",
         "tts_voice_id": "",
@@ -38,11 +39,11 @@ def test_session_snapshot_creation():
 
 def test_session_snapshot_has_credential_fields():
     snap = _make_snapshot(
-        encrypted_speech_credentials={"nonce": "abc", "ciphertext": "def"},
-        speech_key_version=1,
+        encrypted_stt_credentials={"nonce": "abc", "ciphertext": "def"},
+        stt_key_version=1,
     )
-    assert snap.encrypted_speech_credentials == {"nonce": "abc", "ciphertext": "def"}
-    assert snap.speech_key_version == 1
+    assert snap.encrypted_stt_credentials == {"nonce": "abc", "ciphertext": "def"}
+    assert snap.stt_key_version == 1
 
 
 def test_session_snapshot_has_llm_credentials():

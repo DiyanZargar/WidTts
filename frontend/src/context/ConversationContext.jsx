@@ -31,14 +31,26 @@ function reducer(state, action) {
         })),
       };
     case "APPEND_TRANSCRIPT_LINE":
+      // Avoid duplicate adjacent lines if identical text arrived
+      const existing = state.transcriptLines;
+      const lastLine = existing[existing.length - 1];
+      if (lastLine && lastLine.speaker === action.line.speaker && lastLine.text === action.line.text) {
+        return state;
+      }
       return {
         ...state,
-        transcriptLines: [...state.transcriptLines.slice(-5), action.line],
+        transcriptLines: [...existing.slice(-50), action.line],
+        partialTranscript: action.line.speaker === "user" ? "" : state.partialTranscript,
+        partialAssistantTranscript: action.line.speaker === "assistant" ? "" : state.partialAssistantTranscript,
       };
     case "SET_PARTIAL_TRANSCRIPT":
       return { ...state, partialTranscript: action.text };
     case "CLEAR_PARTIAL_TRANSCRIPT":
       return { ...state, partialTranscript: "" };
+    case "SET_PARTIAL_ASSISTANT_TRANSCRIPT":
+      return { ...state, partialAssistantTranscript: action.text };
+    case "CLEAR_PARTIAL_ASSISTANT_TRANSCRIPT":
+      return { ...state, partialAssistantTranscript: "" };
     case "SET_ASSISTANT_HIGHLIGHT":
       return { ...state, isSpeaking: action.value };
     case "SESSION_COMPLETED":
