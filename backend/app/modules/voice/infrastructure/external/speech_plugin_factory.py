@@ -80,7 +80,17 @@ async def build_stt_plugin(config: Dict[str, Any]) -> Any:
         model: str = config.get("stt_model") or "nova-3"
         language: str = config.get("stt_language") or "en"
         # Map common short codes to Deepgram-expected codes
-        lang_map = {"en": "en-US", "es": "es", "fr": "fr", "de": "de", "pt": "pt", "zh": "zh", "ja": "ja", "ko": "ko", "hi": "hi", "ar": "ar"}
+        lang_map = {
+            "en": "en-US", "es": "es", "fr": "fr", "de": "de", "pt": "pt",
+            "zh": "zh", "ja": "ja", "ko": "ko", "hi": "hi", "ar": "ar",
+            "ru": "ru", "it": "it", "nl": "nl", "pl": "pl", "tr": "tr",
+            "sv": "sv", "no": "no", "da": "da", "fi": "fi", "cs": "cs",
+            "el": "el", "he": "he", "th": "th", "vi": "vi", "id": "id",
+            "ms": "ms", "ro": "ro", "hu": "hu", "uk": "uk", "ca": "ca",
+            "tl": "tl", "bn": "bn", "ta": "ta", "te": "te", "ur": "ur",
+            "fa": "fa", "hr": "hr", "sk": "sk", "sl": "sl", "sr": "sr",
+            "bg": "bg", "lt": "lt", "lv": "lv", "et": "et",
+        }
         language = lang_map.get(language, language)
 
         logger.info("[PLUGIN_FACTORY] Deepgram STT  model=%s  language=%s", model, language)

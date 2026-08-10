@@ -265,10 +265,21 @@ def _get_speech_models(provider_type: str) -> dict:
         ]
 
         # Dynamically parse language from model name: [family]-[voice]-[lang]
+        # Complete language name map from Deepgram docs
         lang_names = {
             "en": "English", "es": "Spanish", "nl": "Dutch", "fr": "French",
             "de": "German", "it": "Italian", "ja": "Japanese", "ko": "Korean",
             "pt": "Portuguese", "zh": "Chinese", "ar": "Arabic", "hi": "Hindi",
+            "ru": "Russian", "tr": "Turkish", "pl": "Polish", "sv": "Swedish",
+            "no": "Norwegian", "da": "Danish", "fi": "Finnish", "cs": "Czech",
+            "el": "Greek", "he": "Hebrew", "th": "Thai", "vi": "Vietnamese",
+            "id": "Indonesian", "ms": "Malay", "ro": "Romanian", "hu": "Hungarian",
+            "uk": "Ukrainian", "ca": "Catalan", "tl": "Tagalog", "bn": "Bengali",
+            "ta": "Tamil", "te": "Telugu", "ur": "Urdu", "fa": "Persian",
+            "hr": "Croatian", "sk": "Slovak", "sl": "Slovenian", "sr": "Serbian",
+            "bg": "Bulgarian", "lt": "Lithuanian", "lv": "Latvian", "et": "Estonian",
+            "be": "Belarusian", "bs": "Bosnian", "mk": "Macedonian", "mr": "Marathi",
+            "ne": "Nepali", "gu": "Gujarati", "kn": "Kannada", "pa": "Punjabi",
         }
         tts_by_lang = {}
         for v in tts_voices:
@@ -279,12 +290,22 @@ def _get_speech_models(provider_type: str) -> dict:
                 tts_by_lang[lang_code] = {"language": lang_entry, "voices": []}
             tts_by_lang[lang_code]["voices"].append(v)
 
-        # Collect available languages from TTS voices
-        available_langs = [tts_by_lang[k]["language"] for k in sorted(tts_by_lang.keys())]
+        # Collect available languages — union of TTS + STT supported languages
+        # TTS languages (from voice names)
+        tts_lang_codes = set(tts_by_lang.keys())
+        # STT languages from Nova-3 (all languages Deepgram STT supports)
+        nova3_langs = [
+            "ar", "be", "bn", "bs", "bg", "ca", "zh", "hr", "cs", "da", "nl",
+            "en", "et", "fi", "fr", "de", "el", "gu", "he", "hi", "hu", "id",
+            "it", "ja", "kn", "ko", "lv", "lt", "mk", "ms", "mr", "ne", "no",
+            "fa", "pl", "pt", "ro", "ru", "sr", "sk", "sl", "es", "sv", "tl",
+            "ta", "te", "th", "tr", "uk", "ur", "vi",
+        ]
+        all_lang_codes = sorted(tts_lang_codes | set(nova3_langs))
+        available_langs = [{"code": c, "name": lang_names.get(c, c.upper())} for c in all_lang_codes]
 
-        # STT models with language support metadata
-        stt_multilingual = ["nova-3", "nova-2", "nova", "flux-general-multi", "base", "enhanced"]
-        stt_english_only = ["nova-2-meeting", "nova-2-phonecall", "nova-2-video", "nova-2-medical", "nova-2-finance", "flux-general-en"]
+        # STT models with language support metadata (from Deepgram docs)
+        # Nova-3: all languages. Nova-2: many. Nova-1: en, es, hi. Enhanced: subset. English-only models listed separately.
         stt_all = [
             {"id": "nova-3", "name": "Nova 3 (Latest)"},
             {"id": "flux-general-en", "name": "Flux (English)"},
@@ -299,11 +320,32 @@ def _get_speech_models(provider_type: str) -> dict:
             {"id": "base", "name": "Base"},
             {"id": "enhanced", "name": "Enhanced"},
         ]
-        # Group STT models by language — multilingual models appear under every language
+        # Models that support all languages
+        stt_nova3_models = {"nova-3", "flux-general-multi"}
+        # Models that support many (but not all) languages
+        stt_nova2_langs = {"bg","ca","zh","cs","da","nl","en","et","fi","fr","de","el","hi","hu","id","it","ja","ko","lv","lt","ms","no","pl","pt","ro","ru","sk","es","sv","th","tr","uk","vi"}
+        stt_nova1_langs = {"en", "es", "hi"}
+        stt_enhanced_langs = {"da","nl","en","fr","de","hi","it","ja","ko","no","pl","pt","es","sv","ta"}
+        stt_english_only = {"nova-2-meeting", "nova-2-phonecall", "nova-2-video", "nova-2-medical", "nova-2-finance", "flux-general-en"}
+
         stt_by_lang = {}
         for lang in available_langs:
             code = lang["code"]
-            models_for_lang = [m for m in stt_all if m["id"] in stt_multilingual or (m["id"] in stt_english_only and code == "en")]
+            models_for_lang = []
+            for m in stt_all:
+                mid = m["id"]
+                if mid in stt_nova3_models:
+                    models_for_lang.append(m)
+                elif mid == "nova-2" and code in stt_nova2_langs:
+                    models_for_lang.append(m)
+                elif mid == "nova" and code in stt_nova1_langs:
+                    models_for_lang.append(m)
+                elif mid == "base" and code in stt_nova2_langs:
+                    models_for_lang.append(m)
+                elif mid == "enhanced" and code in stt_enhanced_langs:
+                    models_for_lang.append(m)
+                elif mid in stt_english_only and code == "en":
+                    models_for_lang.append(m)
             stt_by_lang[code] = {"language": lang, "models": models_for_lang}
 
         return {
