@@ -144,7 +144,144 @@ async def undeploy_bot(bot_id: str):
 
 
 def _get_speech_models(provider_type: str) -> dict:
+    """Return STT/TTS models grouped by language for the given provider.
+    
+    Language is parsed dynamically from model names using the Deepgram
+    convention: [family]-[voice]-[language_code]. This means new voices
+    added by Deepgram will automatically appear under the correct language
+    without code changes.
+    """
     if provider_type == "deepgram":
+        # All Deepgram Aura-2 + Aura-1 + Flux voices
+        # Format: [family]-[voice]-[lang] — language parsed from last segment
+        tts_voices = [
+            # Flux voices (conversational)
+            {"id": "flux-aura-en", "name": "Flux Aura"},
+            {"id": "flux-rufus-en", "name": "Flux Rufus"},
+            # Aura-1 voices
+            {"id": "aura-asteria-en", "name": "Aura Asteria"},
+            {"id": "aura-orion-en", "name": "Aura Orion"},
+            {"id": "aura-luna-en", "name": "Aura Luna"},
+            {"id": "aura-arcas-en", "name": "Aura Arcas"},
+            {"id": "aura-stella-en", "name": "Aura Stella"},
+            {"id": "aura-athena-en", "name": "Aura Athena"},
+            {"id": "aura-helios-en", "name": "Aura Helios"},
+            {"id": "aura-zeus-en", "name": "Aura Zeus"},
+            # Aura-2 English
+            {"id": "aura-2-amalthea-en", "name": "Aura 2 Amalthea"},
+            {"id": "aura-2-andromeda-en", "name": "Aura 2 Andromeda"},
+            {"id": "aura-2-apollo-en", "name": "Aura 2 Apollo"},
+            {"id": "aura-2-arcas-en", "name": "Aura 2 Arcas"},
+            {"id": "aura-2-aries-en", "name": "Aura 2 Aries"},
+            {"id": "aura-2-asteria-en", "name": "Aura 2 Asteria"},
+            {"id": "aura-2-athena-en", "name": "Aura 2 Athena"},
+            {"id": "aura-2-atlas-en", "name": "Aura 2 Atlas"},
+            {"id": "aura-2-aurora-en", "name": "Aura 2 Aurora"},
+            {"id": "aura-2-callista-en", "name": "Aura 2 Callista"},
+            {"id": "aura-2-cora-en", "name": "Aura 2 Cora"},
+            {"id": "aura-2-cordelia-en", "name": "Aura 2 Cordelia"},
+            {"id": "aura-2-delia-en", "name": "Aura 2 Delia"},
+            {"id": "aura-2-draco-en", "name": "Aura 2 Draco"},
+            {"id": "aura-2-electra-en", "name": "Aura 2 Electra"},
+            {"id": "aura-2-harmonia-en", "name": "Aura 2 Harmonia"},
+            {"id": "aura-2-helena-en", "name": "Aura 2 Helena"},
+            {"id": "aura-2-hera-en", "name": "Aura 2 Hera"},
+            {"id": "aura-2-hermes-en", "name": "Aura 2 Hermes"},
+            {"id": "aura-2-hyperion-en", "name": "Aura 2 Hyperion"},
+            {"id": "aura-2-iris-en", "name": "Aura 2 Iris"},
+            {"id": "aura-2-janus-en", "name": "Aura 2 Janus"},
+            {"id": "aura-2-juno-en", "name": "Aura 2 Juno"},
+            {"id": "aura-2-jupiter-en", "name": "Aura 2 Jupiter"},
+            {"id": "aura-2-luna-en", "name": "Aura 2 Luna"},
+            {"id": "aura-2-mars-en", "name": "Aura 2 Mars"},
+            {"id": "aura-2-minerva-en", "name": "Aura 2 Minerva"},
+            {"id": "aura-2-neptune-en", "name": "Aura 2 Neptune"},
+            {"id": "aura-2-odysseus-en", "name": "Aura 2 Odysseus"},
+            {"id": "aura-2-ophelia-en", "name": "Aura 2 Ophelia"},
+            {"id": "aura-2-orion-en", "name": "Aura 2 Orion"},
+            {"id": "aura-2-orpheus-en", "name": "Aura 2 Orpheus"},
+            {"id": "aura-2-pandora-en", "name": "Aura 2 Pandora"},
+            {"id": "aura-2-phoebe-en", "name": "Aura 2 Phoebe"},
+            {"id": "aura-2-pluto-en", "name": "Aura 2 Pluto"},
+            {"id": "aura-2-saturn-en", "name": "Aura 2 Saturn"},
+            {"id": "aura-2-selene-en", "name": "Aura 2 Selene"},
+            {"id": "aura-2-thalia-en", "name": "Aura 2 Thalia"},
+            {"id": "aura-2-theia-en", "name": "Aura 2 Theia"},
+            {"id": "aura-2-vesta-en", "name": "Aura 2 Vesta"},
+            {"id": "aura-2-zeus-en", "name": "Aura 2 Zeus"},
+            # Aura-2 Spanish
+            {"id": "aura-2-sirio-es", "name": "Aura 2 Sirio"},
+            {"id": "aura-2-nestor-es", "name": "Aura 2 Nestor"},
+            {"id": "aura-2-carina-es", "name": "Aura 2 Carina"},
+            {"id": "aura-2-celeste-es", "name": "Aura 2 Celeste"},
+            {"id": "aura-2-alvaro-es", "name": "Aura 2 Alvaro"},
+            {"id": "aura-2-diana-es", "name": "Aura 2 Diana"},
+            {"id": "aura-2-aquila-es", "name": "Aura 2 Aquila"},
+            {"id": "aura-2-selena-es", "name": "Aura 2 Selena"},
+            {"id": "aura-2-estrella-es", "name": "Aura 2 Estrella"},
+            {"id": "aura-2-javier-es", "name": "Aura 2 Javier"},
+            {"id": "aura-2-agustina-es", "name": "Aura 2 Agustina"},
+            {"id": "aura-2-antonia-es", "name": "Aura 2 Antonia"},
+            {"id": "aura-2-gloria-es", "name": "Aura 2 Gloria"},
+            {"id": "aura-2-luciano-es", "name": "Aura 2 Luciano"},
+            {"id": "aura-2-olivia-es", "name": "Aura 2 Olivia"},
+            {"id": "aura-2-silvia-es", "name": "Aura 2 Silvia"},
+            {"id": "aura-2-valerio-es", "name": "Aura 2 Valerio"},
+            # Aura-2 Dutch
+            {"id": "aura-2-beatrix-nl", "name": "Aura 2 Beatrix"},
+            {"id": "aura-2-daphne-nl", "name": "Aura 2 Daphne"},
+            {"id": "aura-2-cornelia-nl", "name": "Aura 2 Cornelia"},
+            {"id": "aura-2-sander-nl", "name": "Aura 2 Sander"},
+            {"id": "aura-2-hestia-nl", "name": "Aura 2 Hestia"},
+            {"id": "aura-2-lars-nl", "name": "Aura 2 Lars"},
+            {"id": "aura-2-roman-nl", "name": "Aura 2 Roman"},
+            {"id": "aura-2-rhea-nl", "name": "Aura 2 Rhea"},
+            {"id": "aura-2-leda-nl", "name": "Aura 2 Leda"},
+            # Aura-2 French
+            {"id": "aura-2-agathe-fr", "name": "Aura 2 Agathe"},
+            {"id": "aura-2-hector-fr", "name": "Aura 2 Hector"},
+            # Aura-2 German
+            {"id": "aura-2-elara-de", "name": "Aura 2 Elara"},
+            {"id": "aura-2-aurelia-de", "name": "Aura 2 Aurelia"},
+            {"id": "aura-2-lara-de", "name": "Aura 2 Lara"},
+            {"id": "aura-2-julius-de", "name": "Aura 2 Julius"},
+            {"id": "aura-2-fabian-de", "name": "Aura 2 Fabian"},
+            {"id": "aura-2-kara-de", "name": "Aura 2 Kara"},
+            {"id": "aura-2-viktoria-de", "name": "Aura 2 Viktoria"},
+            # Aura-2 Italian
+            {"id": "aura-2-melia-it", "name": "Aura 2 Melia"},
+            {"id": "aura-2-elio-it", "name": "Aura 2 Elio"},
+            {"id": "aura-2-flavio-it", "name": "Aura 2 Flavio"},
+            {"id": "aura-2-maia-it", "name": "Aura 2 Maia"},
+            {"id": "aura-2-cinzia-it", "name": "Aura 2 Cinzia"},
+            {"id": "aura-2-cesare-it", "name": "Aura 2 Cesare"},
+            {"id": "aura-2-livia-it", "name": "Aura 2 Livia"},
+            {"id": "aura-2-perseo-it", "name": "Aura 2 Perseo"},
+            {"id": "aura-2-dionisio-it", "name": "Aura 2 Dionisio"},
+            {"id": "aura-2-demetra-it", "name": "Aura 2 Demetra"},
+            # Aura-2 Japanese
+            {"id": "aura-2-fujin-ja", "name": "Aura 2 Fujin"},
+            {"id": "aura-2-izanami-ja", "name": "Aura 2 Izanami"},
+        ]
+
+        # Dynamically parse language from model name: [family]-[voice]-[lang]
+        lang_names = {
+            "en": "English", "es": "Spanish", "nl": "Dutch", "fr": "French",
+            "de": "German", "it": "Italian", "ja": "Japanese", "ko": "Korean",
+            "pt": "Portuguese", "zh": "Chinese", "ar": "Arabic", "hi": "Hindi",
+        }
+        tts_by_lang = {}
+        for v in tts_voices:
+            parts = v["id"].rsplit("-", 1)
+            lang_code = parts[-1] if len(parts) > 1 else "en"
+            lang_entry = {"code": lang_code, "name": lang_names.get(lang_code, lang_code.upper())}
+            if lang_code not in tts_by_lang:
+                tts_by_lang[lang_code] = {"language": lang_entry, "voices": []}
+            tts_by_lang[lang_code]["voices"].append(v)
+
+        # Collect available languages from TTS voices
+        available_langs = [tts_by_lang[k]["language"] for k in sorted(tts_by_lang.keys())]
+
         return {
             "stt": [
                 {"id": "nova-3", "name": "Nova 3 (Latest)"},
@@ -156,65 +293,39 @@ def _get_speech_models(provider_type: str) -> dict:
                 {"id": "nova-2-medical", "name": "Nova 2 Medical"},
                 {"id": "nova-2-finance", "name": "Nova 2 Finance"},
                 {"id": "base", "name": "Base"},
-                {"id": "base-meeting", "name": "Base Meeting"},
-                {"id": "base-phonecall", "name": "Base Phonecall"},
                 {"id": "enhanced", "name": "Enhanced"},
-                {"id": "enhanced-meeting", "name": "Enhanced Meeting"},
-                {"id": "enhanced-phonecall", "name": "Enhanced Phonecall"},
             ],
-            "tts": [
-                {"id": "flux-aura-en", "name": "Flux Aura (Female, English)"},
-                {"id": "flux-rufus-en", "name": "Flux Rufus (Male, English)"},
-                {"id": "aura-asteria-en", "name": "Aura Asteria (Female, English)"},
-                {"id": "aura-orion-en", "name": "Aura Orion (Male, English)"},
-                {"id": "aura-luna-en", "name": "Aura Luna (Female, English)"},
-                {"id": "aura-arcas-en", "name": "Aura Arcas (Male, English)"},
-                {"id": "aura-2-athena-en", "name": "Aura 2 Athena (Female, English)"},
-                {"id": "aura-2-hera-en", "name": "Aura 2 Hera (Female, English)"},
-                {"id": "aura-2-zeus-en", "name": "Aura 2 Zeus (Male, English)"},
-                {"id": "aura-2-perseus-en", "name": "Aura 2 Perseus (Male, English)"},
-                {"id": "aura-2-stella-en", "name": "Aura 2 Stella (Female, English)"},
-                {"id": "aura-2-angulus-en", "name": "Aura 2 Angulus (Male, English)"},
-            ],
-            "languages": [
-                {"code": "en", "name": "English"},
-                {"code": "en-US", "name": "English (US)"},
-                {"code": "en-GB", "name": "English (UK)"},
-                {"code": "ar", "name": "Arabic"},
-                {"code": "es", "name": "Spanish"},
-                {"code": "fr", "name": "French"},
-                {"code": "de", "name": "German"},
-                {"code": "hi", "name": "Hindi"},
-                {"code": "ja", "name": "Japanese"},
-                {"code": "ko", "name": "Korean"},
-                {"code": "pt", "name": "Portuguese"},
-                {"code": "zh", "name": "Chinese"},
-            ],
+            "tts": tts_voices,
+            "tts_by_language": tts_by_lang,
+            "languages": available_langs,
         }
     elif provider_type == "elevenlabs":
+        tts_voices = [
+            {"id": "eleven_multilingual_v2", "name": "Multilingual v2"},
+            {"id": "eleven_turbo_v2", "name": "Turbo v2"},
+            {"id": "eleven_turbo_v2_5", "name": "Turbo v2.5"},
+            {"id": "eleven_flash_v2_5", "name": "Flash v2.5"},
+            {"id": "eleven_monolingual_v1", "name": "Monolingual v1"},
+        ]
+        # ElevenLabs models are language-agnostic; language is set via API param
+        eleven_langs = [
+            {"code": "en", "name": "English"}, {"code": "es", "name": "Spanish"},
+            {"code": "fr", "name": "French"}, {"code": "de", "name": "German"},
+            {"code": "it", "name": "Italian"}, {"code": "pt", "name": "Portuguese"},
+            {"code": "pl", "name": "Polish"}, {"code": "nl", "name": "Dutch"},
+            {"code": "tr", "name": "Turkish"}, {"code": "sv", "name": "Swedish"},
+            {"code": "ja", "name": "Japanese"}, {"code": "ko", "name": "Korean"},
+            {"code": "zh", "name": "Chinese"}, {"code": "ar", "name": "Arabic"},
+            {"code": "hi", "name": "Hindi"}, {"code": "ru", "name": "Russian"},
+        ]
+        # All ElevenLabs models are available for all languages
+        tts_by_lang = {}
+        for lang in eleven_langs:
+            tts_by_lang[lang["code"]] = {"language": lang, "voices": tts_voices}
         return {
-            "stt": [{"id": "scribe_v1", "name": "Scribe v1"}],
-            "tts": [
-                {"id": "eleven_multilingual_v2", "name": "Multilingual v2"},
-                {"id": "eleven_turbo_v2", "name": "Turbo v2"},
-                {"id": "eleven_monolingual_v1", "name": "Monolingual v1"},
-            ],
-            "languages": [
-                {"code": "en", "name": "English"},
-                {"code": "ar", "name": "Arabic"},
-                {"code": "es", "name": "Spanish"},
-                {"code": "fr", "name": "French"},
-                {"code": "de", "name": "German"},
-                {"code": "hi", "name": "Hindi"},
-                {"code": "ja", "name": "Japanese"},
-                {"code": "ko", "name": "Korean"},
-                {"code": "pt", "name": "Portuguese"},
-                {"code": "zh", "name": "Chinese"},
-                {"code": "nl", "name": "Dutch"},
-                {"code": "tr", "name": "Turkish"},
-                {"code": "pl", "name": "Polish"},
-                {"code": "sv", "name": "Swedish"},
-                {"code": "it", "name": "Italian"},
-            ],
+            "stt": [{"id": "scribe_v1", "name": "Scribe v1"}, {"id": "scribe_v1_base", "name": "Scribe v1 Base"}],
+            "tts": tts_voices,
+            "tts_by_language": tts_by_lang,
+            "languages": eleven_langs,
         }
-    return {"stt": [], "tts": [], "languages": []}
+    return {"stt": [], "tts": [], "languages": [], "tts_by_language": {}}

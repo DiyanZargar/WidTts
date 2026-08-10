@@ -78,7 +78,10 @@ async def build_stt_plugin(config: Dict[str, Any]) -> Any:
 
         api_key: str = creds["api_key"]
         model: str = config.get("stt_model") or "nova-3"
-        language: str = config.get("stt_language") or "en-US"
+        language: str = config.get("stt_language") or "en"
+        # Map common short codes to Deepgram-expected codes
+        lang_map = {"en": "en-US", "es": "es", "fr": "fr", "de": "de", "pt": "pt", "zh": "zh", "ja": "ja", "ko": "ko", "hi": "hi", "ar": "ar"}
+        language = lang_map.get(language, language)
 
         logger.info("[PLUGIN_FACTORY] Deepgram STT  model=%s  language=%s", model, language)
         return _dg.STT(
@@ -96,9 +99,12 @@ async def build_stt_plugin(config: Dict[str, Any]) -> Any:
 
         api_key: str = creds["api_key"]
         model_id: str = config.get("stt_model") or "scribe_v1"
-
-        logger.info("[PLUGIN_FACTORY] ElevenLabs STT  model_id=%s", model_id)
-        return _el.STT(api_key=api_key, model_id=model_id)
+        language: str = config.get("stt_language") or ""
+        logger.info("[PLUGIN_FACTORY] ElevenLabs STT  model_id=%s  language=%s", model_id, language)
+        kwargs = {"api_key": api_key, "model_id": model_id}
+        if language:
+            kwargs["language_code"] = language
+        return _el.STT(**kwargs)
 
     else:
         raise UnsupportedProviderError(
@@ -168,7 +174,7 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
             logger.warning("[PLUGIN_FACTORY] Unknown Deepgram TTS model '%s', defaulting to 'aura-asteria-en'", model)
             model = "aura-asteria-en"
 
-        logger.info("[PLUGIN_FACTORY] Deepgram TTS  model=%s", model)
+        logger.info("[PLUGIN_FACTORY] Deepgram TTS  model=%s  language=%s", model, config.get("tts_language", ""))
         return _dg.TTS(api_key=api_key, model=model)
 
     elif provider_type == "elevenlabs":
@@ -180,8 +186,12 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
         if not voice_id:
             raise ValueError("ElevenLabs TTS requires tts_voice_id in the provider config")
 
-        logger.info("[PLUGIN_FACTORY] ElevenLabs TTS  voice_id=%s", _mask(voice_id))
-        return _el.TTS(api_key=api_key, voice_id=voice_id)
+        language: str = config.get("tts_language") or ""
+        logger.info("[PLUGIN_FACTORY] ElevenLabs TTS  voice_id=%s  language=%s", _mask(voice_id), language)
+        kwargs = {"api_key": api_key, "voice_id": voice_id}
+        if language:
+            kwargs["language"] = language
+        return _el.TTS(**kwargs)
 
     else:
         raise UnsupportedProviderError(

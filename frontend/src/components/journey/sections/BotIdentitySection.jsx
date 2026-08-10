@@ -293,6 +293,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
   // Speech models (fetched per provider type)
   const [sttModels, setSttModels] = useState([]);
   const [ttsModels, setTtsModels] = useState([]);
+  const [ttsByLanguage, setTtsByLanguage] = useState({});
   const [availableLanguages, setAvailableLanguages] = useState([]);
 
   // Audio preview (Ported from dev branch SpeechSection)
@@ -540,8 +541,10 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       fetchSpeechModels(provider.provider_type).then(data => {
         const models = data.tts || [];
         setTtsModels(models);
+        setTtsByLanguage(data.tts_by_language || {});
+        // Update available languages from TTS voices
+        if (data.languages?.length) setAvailableLanguages(data.languages);
         // Fire-and-forget: batch prewarm all TTS models in the backend cache
-        // so selecting any model later is instant
         if (models.length > 0) {
           fetch('/admin/api/speech-providers/prewarm', {
             method: 'POST',
@@ -552,6 +555,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       });
     } else {
       setTtsModels([]);
+      setTtsByLanguage({});
     }
   }, [form.tts_provider_id, speechProviders, fetchSpeechModels]);
 
@@ -880,17 +884,37 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   onChange={(val) => handleTtsProviderChange(val)}
                   placeholder="Select Provider"
                 />
+                <LanguageMultiSelect
+                  languages={availableLanguages}
+                  selected={form.tts_languages}
+                  primary={form.tts_primary_language}
+                  onChange={(selected) => {
+                    const newPrimary = selected.includes(form.tts_primary_language) ? form.tts_primary_language : (selected[0] || 'en');
+                    // Clear TTS model if it's not available in the new primary language
+                    const langVoices = ttsByLanguage[newPrimary]?.voices || [];
+                    const modelStillValid = form.tts_model === '' || langVoices.some(v => v.id === form.tts_model);
+                    setForm({ ...form, tts_languages: selected, tts_primary_language: newPrimary, tts_model: modelStillValid ? form.tts_model : '' });
+                  }}
+                  onSetPrimary={(code) => {
+                    // Clear TTS model if it's not available in the new primary language
+                    const langVoices = ttsByLanguage[code]?.voices || [];
+                    const modelStillValid = form.tts_model === '' || langVoices.some(v => v.id === form.tts_model);
+                    setForm({ ...form, tts_primary_language: code, tts_model: modelStillValid ? form.tts_model : '' });
+                  }}
+                  label="Language"
+                />
                 <GlassSelect
-                  label="Model"
-                  options={[{ value: '', label: 'Default' }, ...ttsModels.map(m => ({ value: m.id, label: m.name }))]}
+                  label="Voice"
+                  options={[
+                    { value: '', label: 'Default' },
+                    ...(ttsByLanguage[form.tts_primary_language]?.voices || ttsModels).map(m => ({ value: m.id, label: m.name }))
+                  ]}
                   value={form.tts_model}
                   onChange={(val) => {
                     terminateActiveAudio();
                     setForm({ ...form, tts_model: val });
                     if (!val) return;
                     setPreviewingModel(val);
-                    // Debounced API call (300ms) — only fires if user stops switching
-                    // Prewarmed cache makes this near-instant
                     if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current);
                     previewDebounceRef.current = setTimeout(() => {
                       playAudioGreeting(val);
@@ -898,14 +922,6 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   }}
                   placeholder="Default"
                   disabled={!form.tts_provider_id}
-                />
-                <LanguageMultiSelect
-                  languages={availableLanguages}
-                  selected={form.tts_languages}
-                  primary={form.tts_primary_language}
-                  onChange={(selected) => setForm({ ...form, tts_languages: selected, tts_primary_language: selected.includes(form.tts_primary_language) ? form.tts_primary_language : (selected[0] || 'en') })}
-                  onSetPrimary={(code) => setForm({ ...form, tts_primary_language: code })}
-                  label="Languages"
                 />
               </div>
             </div>
