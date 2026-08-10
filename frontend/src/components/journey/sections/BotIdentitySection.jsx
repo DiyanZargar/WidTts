@@ -294,6 +294,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
   const [sttModels, setSttModels] = useState([]);
   const [ttsModels, setTtsModels] = useState([]);
   const [ttsByLanguage, setTtsByLanguage] = useState({});
+  const [sttByLanguage, setSttByLanguage] = useState({});
   const [availableLanguages, setAvailableLanguages] = useState([]);
 
   // Audio preview (Ported from dev branch SpeechSection)
@@ -527,10 +528,12 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     if (provider) {
       fetchSpeechModels(provider.provider_type).then(data => {
         setSttModels(data.stt || []);
+        setSttByLanguage(data.stt_by_language || {});
         setAvailableLanguages(data.languages || []);
       });
     } else {
       setSttModels([]);
+      setSttByLanguage({});
     }
   }, [form.stt_provider_id, speechProviders, fetchSpeechModels]);
 
@@ -847,21 +850,33 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   onChange={(val) => handleSttProviderChange(val)}
                   placeholder="Select Provider"
                 />
-                <GlassSelect
-                  label="Model"
-                  options={[{ value: '', label: 'Default' }, ...sttModels.map(m => ({ value: m.id, label: m.name }))]}
-                  value={form.stt_model}
-                  onChange={(val) => setForm({ ...form, stt_model: val })}
-                  placeholder="Default"
-                  disabled={!form.stt_provider_id}
-                />
                 <LanguageMultiSelect
                   languages={availableLanguages}
                   selected={form.stt_languages}
                   primary={form.stt_primary_language}
-                  onChange={(selected) => setForm({ ...form, stt_languages: selected, stt_primary_language: selected.includes(form.stt_primary_language) ? form.stt_primary_language : (selected[0] || 'en') })}
-                  onSetPrimary={(code) => setForm({ ...form, stt_primary_language: code })}
-                  label="Languages"
+                  onChange={(selected) => {
+                    const newPrimary = selected.includes(form.stt_primary_language) ? form.stt_primary_language : (selected[0] || 'en');
+                    const langModels = sttByLanguage[newPrimary]?.models || [];
+                    const modelStillValid = form.stt_model === '' || langModels.some(m => m.id === form.stt_model);
+                    setForm({ ...form, stt_languages: selected, stt_primary_language: newPrimary, stt_model: modelStillValid ? form.stt_model : '' });
+                  }}
+                  onSetPrimary={(code) => {
+                    const langModels = sttByLanguage[code]?.models || [];
+                    const modelStillValid = form.stt_model === '' || langModels.some(m => m.id === form.stt_model);
+                    setForm({ ...form, stt_primary_language: code, stt_model: modelStillValid ? form.stt_model : '' });
+                  }}
+                  label="Language"
+                />
+                <GlassSelect
+                  label="Model"
+                  options={[
+                    { value: '', label: 'Default' },
+                    ...(sttByLanguage[form.stt_primary_language]?.models || sttModels).map(m => ({ value: m.id, label: m.name }))
+                  ]}
+                  value={form.stt_model}
+                  onChange={(val) => setForm({ ...form, stt_model: val })}
+                  placeholder="Default"
+                  disabled={!form.stt_provider_id}
                 />
               </div>
             </div>

@@ -282,19 +282,33 @@ def _get_speech_models(provider_type: str) -> dict:
         # Collect available languages from TTS voices
         available_langs = [tts_by_lang[k]["language"] for k in sorted(tts_by_lang.keys())]
 
+        # STT models with language support metadata
+        stt_multilingual = ["nova-3", "nova-2", "nova", "flux-general-multi", "base", "enhanced"]
+        stt_english_only = ["nova-2-meeting", "nova-2-phonecall", "nova-2-video", "nova-2-medical", "nova-2-finance", "flux-general-en"]
+        stt_all = [
+            {"id": "nova-3", "name": "Nova 3 (Latest)"},
+            {"id": "flux-general-en", "name": "Flux (English)"},
+            {"id": "flux-general-multi", "name": "Flux (Multilingual)"},
+            {"id": "nova-2", "name": "Nova 2"},
+            {"id": "nova", "name": "Nova"},
+            {"id": "nova-2-meeting", "name": "Nova 2 Meeting"},
+            {"id": "nova-2-phonecall", "name": "Nova 2 Phonecall"},
+            {"id": "nova-2-video", "name": "Nova 2 Video"},
+            {"id": "nova-2-medical", "name": "Nova 2 Medical"},
+            {"id": "nova-2-finance", "name": "Nova 2 Finance"},
+            {"id": "base", "name": "Base"},
+            {"id": "enhanced", "name": "Enhanced"},
+        ]
+        # Group STT models by language — multilingual models appear under every language
+        stt_by_lang = {}
+        for lang in available_langs:
+            code = lang["code"]
+            models_for_lang = [m for m in stt_all if m["id"] in stt_multilingual or (m["id"] in stt_english_only and code == "en")]
+            stt_by_lang[code] = {"language": lang, "models": models_for_lang}
+
         return {
-            "stt": [
-                {"id": "nova-3", "name": "Nova 3 (Latest)"},
-                {"id": "nova-2", "name": "Nova 2"},
-                {"id": "nova", "name": "Nova"},
-                {"id": "nova-2-meeting", "name": "Nova 2 Meeting"},
-                {"id": "nova-2-phonecall", "name": "Nova 2 Phonecall"},
-                {"id": "nova-2-video", "name": "Nova 2 Video"},
-                {"id": "nova-2-medical", "name": "Nova 2 Medical"},
-                {"id": "nova-2-finance", "name": "Nova 2 Finance"},
-                {"id": "base", "name": "Base"},
-                {"id": "enhanced", "name": "Enhanced"},
-            ],
+            "stt": stt_all,
+            "stt_by_language": stt_by_lang,
             "tts": tts_voices,
             "tts_by_language": tts_by_lang,
             "languages": available_langs,
@@ -320,10 +334,14 @@ def _get_speech_models(provider_type: str) -> dict:
         ]
         # All ElevenLabs models are available for all languages
         tts_by_lang = {}
+        stt_by_lang = {}
+        stt_all = [{"id": "scribe_v1", "name": "Scribe v1"}, {"id": "scribe_v1_base", "name": "Scribe v1 Base"}]
         for lang in eleven_langs:
             tts_by_lang[lang["code"]] = {"language": lang, "voices": tts_voices}
+            stt_by_lang[lang["code"]] = {"language": lang, "models": stt_all}
         return {
-            "stt": [{"id": "scribe_v1", "name": "Scribe v1"}, {"id": "scribe_v1_base", "name": "Scribe v1 Base"}],
+            "stt": stt_all,
+            "stt_by_language": stt_by_lang,
             "tts": tts_voices,
             "tts_by_language": tts_by_lang,
             "languages": eleven_langs,
