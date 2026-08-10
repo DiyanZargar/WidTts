@@ -547,29 +547,26 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
         setTtsByLanguage(data.tts_by_language || {});
         if (data.languages?.length) setAvailableLanguages(data.languages);
 
-        // For Fish Audio: fetch real voices from the voice library API
+        // For Fish Audio: also fetch real voice names from the library
         if (provider.provider_type === 'fishaudio') {
           fetch(`/admin/api/bots/speech-voices/${form.tts_provider_id}`)
             .then(r => r.json())
             .then(voiceData => {
               const voices = voiceData.voices || [];
               if (voices.length > 0) {
-                // Build tts_by_language from fetched voices
-                const byLang = {};
-                const langSet = new Set();
-                for (const v of voices) {
-                  const lang = v.language || 'en';
-                  langSet.add(lang);
-                  if (!byLang[lang]) byLang[lang] = { language: { code: lang, name: lang }, voices: [] };
-                  byLang[lang].voices.push({ id: v.id, name: v.name });
-                }
-                setTtsByLanguage(byLang);
-                // Update languages list from voice data
-                const langs = [...langSet].map(code => {
-                  const names = { en:'English', zh:'Chinese', ja:'Japanese', ko:'Korean', de:'German', fr:'French', es:'Spanish', pt:'Portuguese', ar:'Arabic', hi:'Hindi', ru:'Russian', it:'Italian', nl:'Dutch', pl:'Polish', tr:'Turkish', sv:'Swedish', da:'Danish', fi:'Finnish', no:'Norwegian', nb:'Norwegian', vi:'Vietnamese', th:'Thai', id:'Indonesian', ms:'Malay', uk:'Ukrainian', cs:'Czech', el:'Greek', hu:'Hungarian', ro:'Romanian', bg:'Bulgarian', sk:'Slovak', hr:'Croatian', sr:'Serbian', sl:'Slovenian', et:'Estonian', lv:'Latvian', lt:'Lithuanian', tl:'Filipino', bn:'Bengali', ta:'Tamil', te:'Telugu', ur:'Urdu', fa:'Persian', he:'Hebrew', sw:'Swahili', af:'Afrikaans', cy:'Welsh', eu:'Basque', gl:'Galician', ka:'Georgian', km:'Khmer', lo:'Lao', ml:'Malayalam', mn:'Mongolian', my:'Burmese', si:'Sinhala', uz:'Uzbek', zu:'Zulu' };
-                  return { code, name: names[code] || code.toUpperCase() };
+                // Merge real voices into tts_by_language (keep static entries too)
+                setTtsByLanguage(prev => {
+                  const merged = { ...prev };
+                  for (const v of voices) {
+                    const lang = v.language || 'en';
+                    if (!merged[lang]) merged[lang] = { language: { code: lang, name: lang }, voices: [] };
+                    // Avoid duplicate voice IDs
+                    if (!merged[lang].voices.some(x => x.id === v.id)) {
+                      merged[lang].voices.push({ id: v.id, name: v.name });
+                    }
+                  }
+                  return merged;
                 });
-                setAvailableLanguages(langs);
               }
             })
             .catch(() => {});
