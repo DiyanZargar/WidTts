@@ -2,6 +2,7 @@
 
 import re
 import json
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
@@ -74,6 +75,33 @@ async def get_active_bot():
 @router.get("/speech-models/{provider_type}")
 async def list_speech_models(provider_type: str):
     return _get_speech_models(provider_type)
+
+
+@router.get("/speech-voices/{provider_id}")
+async def list_speech_voices(provider_id: str):
+    """Fetch actual voice names from a speech provider's API (e.g. Fish Audio voice library)."""
+    from app.modules.provider.infrastructure.persistence.postgres_speech_provider_repository import PostgresSpeechProviderRepository
+    from app.shared.security.envelope_encryption import load_and_decrypt
+    from app.entrypoints.http.admin.speech_provider_routes import _fetch_fish_models_sync
+
+    speech_repo = PostgresSpeechProviderRepository()
+    provider = await speech_repo.get_by_id(provider_id)
+    if not provider:
+        return {"voices": []}
+
+    provider_type = provider.get("provider_type", "")
+    if provider_type != "fishaudio":
+        return {"voices": []}
+
+    try:
+        creds = await load_and_decrypt(provider["credentials_enc"], provider.get("key_version", 1))
+        api_key = creds.get("api_key", "")
+        if not api_key:
+            return {"voices": []}
+        _, voices, _ = await asyncio.to_thread(_fetch_fish_models_sync, api_key)
+        return {"voices": voices}
+    except Exception:
+        return {"voices": []}
 
 
 @router.get("/{bot_id}")

@@ -181,6 +181,7 @@ def _fetch_fish_models_sync(api_key: str):
 
     Returns (tts_models, tts_voices, is_valid).
     Fish Audio has no STT — STT models list is always empty.
+    tts_voices include language info for frontend grouping.
     """
     tts_models = [
         {"id": "s2.1-pro", "name": "S2.1 Pro (83 Languages, Recommended)"},
@@ -193,24 +194,28 @@ def _fetch_fish_models_sync(api_key: str):
     if not api_key:
         return tts_models, voices, False
 
-    # Fetch voices from Fish Audio voice library
+    # Fetch all voices from Fish Audio voice library (no language filter)
     try:
         req = urllib.request.Request(
-            "https://api.fish.audio/model?language=zh&page_size=50",
+            "https://api.fish.audio/model?page_size=100",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Accept": "application/json",
             },
             method="GET",
         )
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             items = data.get("items") or data.get("data") or []
+            seen = set()
             for v in items:
                 vid = v.get("_id") or v.get("id") or ""
                 name = v.get("title") or v.get("name") or "Voice"
-                if vid:
-                    voices.append({"id": vid, "name": name})
+                lang = v.get("language") or "en"
+                # Deduplicate by voice ID
+                if vid and vid not in seen:
+                    seen.add(vid)
+                    voices.append({"id": vid, "name": name, "language": lang})
     except Exception:
         pass  # voice fetch is best-effort
 

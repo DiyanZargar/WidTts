@@ -545,15 +545,43 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
         const models = data.tts || [];
         setTtsModels(models);
         setTtsByLanguage(data.tts_by_language || {});
-        // Update available languages from TTS voices
         if (data.languages?.length) setAvailableLanguages(data.languages);
-        // Fire-and-forget: batch prewarm all TTS models in the backend cache
-        if (models.length > 0) {
-          fetch('/admin/api/speech-providers/prewarm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider_id: form.tts_provider_id, models: models.map(m => m.id) }),
-          }).catch(() => {});
+
+        // For Fish Audio: fetch real voices from the voice library API
+        if (provider.provider_type === 'fishaudio') {
+          fetch(`/admin/api/bots/speech-voices/${form.tts_provider_id}`)
+            .then(r => r.json())
+            .then(voiceData => {
+              const voices = voiceData.voices || [];
+              if (voices.length > 0) {
+                // Build tts_by_language from fetched voices
+                const byLang = {};
+                const langSet = new Set();
+                for (const v of voices) {
+                  const lang = v.language || 'en';
+                  langSet.add(lang);
+                  if (!byLang[lang]) byLang[lang] = { language: { code: lang, name: lang }, voices: [] };
+                  byLang[lang].voices.push({ id: v.id, name: v.name });
+                }
+                setTtsByLanguage(byLang);
+                // Update languages list from voice data
+                const langs = [...langSet].map(code => {
+                  const names = { en:'English', zh:'Chinese', ja:'Japanese', ko:'Korean', de:'German', fr:'French', es:'Spanish', pt:'Portuguese', ar:'Arabic', hi:'Hindi', ru:'Russian', it:'Italian', nl:'Dutch', pl:'Polish', tr:'Turkish', sv:'Swedish', da:'Danish', fi:'Finnish', no:'Norwegian', nb:'Norwegian', vi:'Vietnamese', th:'Thai', id:'Indonesian', ms:'Malay', uk:'Ukrainian', cs:'Czech', el:'Greek', hu:'Hungarian', ro:'Romanian', bg:'Bulgarian', sk:'Slovak', hr:'Croatian', sr:'Serbian', sl:'Slovenian', et:'Estonian', lv:'Latvian', lt:'Lithuanian', tl:'Filipino', bn:'Bengali', ta:'Tamil', te:'Telugu', ur:'Urdu', fa:'Persian', he:'Hebrew', sw:'Swahili', af:'Afrikaans', cy:'Welsh', eu:'Basque', gl:'Galician', ka:'Georgian', km:'Khmer', lo:'Lao', ml:'Malayalam', mn:'Mongolian', my:'Burmese', si:'Sinhala', uz:'Uzbek', zu:'Zulu' };
+                  return { code, name: names[code] || code.toUpperCase() };
+                });
+                setAvailableLanguages(langs);
+              }
+            })
+            .catch(() => {});
+        } else {
+          // Fire-and-forget: batch prewarm for Deepgram/ElevenLabs
+          if (models.length > 0) {
+            fetch('/admin/api/speech-providers/prewarm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ provider_id: form.tts_provider_id, models: models.map(m => m.id) }),
+            }).catch(() => {});
+          }
         }
       });
     } else {
