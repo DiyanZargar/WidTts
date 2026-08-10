@@ -264,22 +264,27 @@ def _get_speech_models(provider_type: str) -> dict:
             {"id": "aura-2-izanami-ja", "name": "Aura 2 Izanami"},
         ]
 
-        # Dynamically parse language from model name: [family]-[voice]-[lang]
-        # Complete language name map from Deepgram docs
+        # Languages verified from official docs:
+        # Deepgram Nova-3 STT: 50+ languages
+        # Deepgram Aura-2 TTS: en, es, nl, fr, de, it, ja (7 languages)
+        # ElevenLabs TTS v2: 29 languages. Flash v2.5: 32 languages (adds hu, no, vi)
+        # ElevenLabs STT (Scribe): supports same language set as their TTS
+        # Only languages verified from both providers' official documentation
         lang_names = {
-            "en": "English", "es": "Spanish", "nl": "Dutch", "fr": "French",
-            "de": "German", "it": "Italian", "ja": "Japanese", "ko": "Korean",
-            "pt": "Portuguese", "zh": "Chinese", "ar": "Arabic", "hi": "Hindi",
-            "ru": "Russian", "tr": "Turkish", "pl": "Polish", "sv": "Swedish",
-            "no": "Norwegian", "da": "Danish", "fi": "Finnish", "cs": "Czech",
-            "el": "Greek", "he": "Hebrew", "th": "Thai", "vi": "Vietnamese",
-            "id": "Indonesian", "ms": "Malay", "ro": "Romanian", "hu": "Hungarian",
-            "uk": "Ukrainian", "ca": "Catalan", "tl": "Tagalog", "bn": "Bengali",
-            "ta": "Tamil", "te": "Telugu", "ur": "Urdu", "fa": "Persian",
-            "hr": "Croatian", "sk": "Slovak", "sl": "Slovenian", "sr": "Serbian",
-            "bg": "Bulgarian", "lt": "Lithuanian", "lv": "Latvian", "et": "Estonian",
-            "be": "Belarusian", "bs": "Bosnian", "mk": "Macedonian", "mr": "Marathi",
-            "ne": "Nepali", "gu": "Gujarati", "kn": "Kannada", "pa": "Punjabi",
+            "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+            "hi": "Hindi", "ja": "Japanese", "zh": "Chinese", "ko": "Korean",
+            "pt": "Portuguese", "it": "Italian", "id": "Indonesian", "nl": "Dutch",
+            "tr": "Turkish", "tl": "Filipino", "pl": "Polish", "sv": "Swedish",
+            "bg": "Bulgarian", "ro": "Romanian", "ar": "Arabic", "cs": "Czech",
+            "el": "Greek", "fi": "Finnish", "hr": "Croatian", "ms": "Malay",
+            "sk": "Slovak", "da": "Danish", "ta": "Tamil", "uk": "Ukrainian",
+            "ru": "Russian", "hu": "Hungarian", "no": "Norwegian", "vi": "Vietnamese",
+            # Deepgram STT only (no ElevenLabs TTS/STT support)
+            "be": "Belarusian", "bn": "Bengali", "bs": "Bosnian", "ca": "Catalan",
+            "et": "Estonian", "gu": "Gujarati", "he": "Hebrew", "kn": "Kannada",
+            "lt": "Lithuanian", "lv": "Latvian", "mk": "Macedonian", "mr": "Marathi",
+            "ne": "Nepali", "fa": "Persian", "pa": "Punjabi", "sl": "Slovenian",
+            "sr": "Serbian", "te": "Telugu", "th": "Thai", "ur": "Urdu",
         }
         tts_by_lang = {}
         for v in tts_voices:
@@ -357,22 +362,36 @@ def _get_speech_models(provider_type: str) -> dict:
         }
     elif provider_type == "elevenlabs":
         tts_voices = [
+            {"id": "eleven_v3", "name": "Eleven v3 (Latest)"},
             {"id": "eleven_multilingual_v2", "name": "Multilingual v2"},
-            {"id": "eleven_turbo_v2", "name": "Turbo v2"},
+            {"id": "eleven_flash_v2_5", "name": "Flash v2.5 (Low Latency)"},
             {"id": "eleven_turbo_v2_5", "name": "Turbo v2.5"},
-            {"id": "eleven_flash_v2_5", "name": "Flash v2.5"},
-            {"id": "eleven_monolingual_v1", "name": "Monolingual v1"},
+            {"id": "eleven_turbo_v2", "name": "Turbo v2"},
+            {"id": "eleven_monolingual_v1", "name": "Monolingual v1 (English)"},
         ]
         # ElevenLabs models are language-agnostic; language is set via API param
+        # ElevenLabs: 32 languages verified from official docs (Flash v2.5)
+        # Multilingual v2: 29 languages. Flash v2.5: +hu, +no, +vi = 32
         eleven_langs = [
-            {"code": "en", "name": "English"}, {"code": "es", "name": "Spanish"},
-            {"code": "fr", "name": "French"}, {"code": "de", "name": "German"},
-            {"code": "it", "name": "Italian"}, {"code": "pt", "name": "Portuguese"},
-            {"code": "pl", "name": "Polish"}, {"code": "nl", "name": "Dutch"},
-            {"code": "tr", "name": "Turkish"}, {"code": "sv", "name": "Swedish"},
-            {"code": "ja", "name": "Japanese"}, {"code": "ko", "name": "Korean"},
-            {"code": "zh", "name": "Chinese"}, {"code": "ar", "name": "Arabic"},
-            {"code": "hi", "name": "Hindi"}, {"code": "ru", "name": "Russian"},
+            {"code": "en", "name": "English"}, {"code": "ja", "name": "Japanese"},
+            {"code": "zh", "name": "Chinese"}, {"code": "de", "name": "German"},
+            {"code": "hi", "name": "Hindi"}, {"code": "fr", "name": "French"},
+            {"code": "ko", "name": "Korean"}, {"code": "pt", "name": "Portuguese"},
+            {"code": "it", "name": "Italian"}, {"code": "es", "name": "Spanish"},
+            {"code": "id", "name": "Indonesian"}, {"code": "nl", "name": "Dutch"},
+            {"code": "tr", "name": "Turkish"}, {"code": "tl", "name": "Filipino"},
+            {"code": "pl", "name": "Polish"}, {"code": "sv", "name": "Swedish"},
+            {"code": "bg", "name": "Bulgarian"}, {"code": "ro", "name": "Romanian"},
+            {"code": "ar", "name": "Arabic"}, {"code": "cs", "name": "Czech"},
+            {"code": "el", "name": "Greek"}, {"code": "fi", "name": "Finnish"},
+            {"code": "hr", "name": "Croatian"}, {"code": "ms", "name": "Malay"},
+            {"code": "sk", "name": "Slovak"}, {"code": "da", "name": "Danish"},
+            {"code": "ta", "name": "Tamil"}, {"code": "uk", "name": "Ukrainian"},
+            {"code": "ru", "name": "Russian"},
+            # Flash v2.5 adds these 3:
+            {"code": "hu", "name": "Hungarian"},
+            {"code": "no", "name": "Norwegian"},
+            {"code": "vi", "name": "Vietnamese"},
         ]
         # All ElevenLabs models are available for all languages
         tts_by_lang = {}
