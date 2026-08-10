@@ -871,7 +871,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   label="Model"
                   options={[
                     { value: '', label: 'Default' },
-                    ...(sttByLanguage[form.stt_primary_language]?.models || sttModels).map(m => ({ value: m.id, label: m.name }))
+                    ...(sttByLanguage[form.stt_primary_language]?.models || []).map(m => ({ value: m.id, label: m.name }))
                   ]}
                   value={form.stt_model}
                   onChange={(val) => setForm({ ...form, stt_model: val })}
@@ -922,7 +922,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   label="Voice"
                   options={[
                     { value: '', label: 'Default' },
-                    ...(ttsByLanguage[form.tts_primary_language]?.voices || ttsModels).map(m => ({ value: m.id, label: m.name }))
+                    ...(ttsByLanguage[form.tts_primary_language]?.voices || []).map(m => ({ value: m.id, label: m.name }))
                   ]}
                   value={form.tts_model}
                   onChange={(val) => {

@@ -176,6 +176,47 @@ def _fetch_deepgram_data_sync(api_key: str):
     return stt_models, tts_models, True
 
 
+def _fetch_fish_models_sync(api_key: str):
+    """Fetch voices from Fish Audio's voice library API.
+
+    Returns (tts_models, tts_voices, is_valid).
+    Fish Audio has no STT — STT models list is always empty.
+    """
+    tts_models = [
+        {"id": "s2.1-pro", "name": "S2.1 Pro (83 Languages, Recommended)"},
+        {"id": "s2.1-pro-free", "name": "S2.1 Pro Free (83 Languages)"},
+        {"id": "s2-pro", "name": "S2 Pro (80+ Languages)"},
+        {"id": "s1", "name": "S1 (13 Languages)"},
+    ]
+    voices = []
+
+    if not api_key:
+        return tts_models, voices, False
+
+    # Fetch voices from Fish Audio voice library
+    try:
+        req = urllib.request.Request(
+            "https://api.fish.audio/model?language=zh&page_size=50",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Accept": "application/json",
+            },
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            items = data.get("items") or data.get("data") or []
+            for v in items:
+                vid = v.get("_id") or v.get("id") or ""
+                name = v.get("title") or v.get("name") or "Voice"
+                if vid:
+                    voices.append({"id": vid, "name": name})
+    except Exception:
+        pass  # voice fetch is best-effort
+
+    return tts_models, voices, True
+
+
 _SAMPLE_AUDIO_CACHE: Dict[Tuple[str, str, str, str], Tuple[bytes, str]] = {}
 
 
@@ -202,6 +243,28 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         }
         request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
         with urllib.request.urlopen(request, timeout=5) as response:
+            audio_bytes = response.read()
+            res = (audio_bytes, "audio/mpeg")
+            _SAMPLE_AUDIO_CACHE[cache_key] = res
+            return res
+    elif provider_type == "fishaudio":
+        target_model = model or "s2.1-pro"
+        payload: dict = {"text": text}
+        if voice_id:
+            payload["reference_id"] = voice_id
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "model": target_model,
+        }
+        data_bytes = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            "https://api.fish.audio/v1/tts",
+            data=data_bytes,
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=8) as response:
             audio_bytes = response.read()
             res = (audio_bytes, "audio/mpeg")
             _SAMPLE_AUDIO_CACHE[cache_key] = res
@@ -313,6 +376,14 @@ async def fetch_speech_models(req: SpeechModelFetchRequest):
                 ],
                 "tts_models": final_tts_models,
                 "tts_voices": final_tts_voices,
+                "fetched": is_valid,
+            }
+        elif provider_type == "fishaudio":
+            tts_models, voices, is_valid = await asyncio.to_thread(_fetch_fish_models_sync, api_key)
+            return {
+                "stt_models": [],
+                "tts_models": tts_models,
+                "tts_voices": voices,
                 "fetched": is_valid,
             }
         else:  # Deepgram

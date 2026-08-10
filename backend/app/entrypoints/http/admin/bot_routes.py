@@ -407,4 +407,78 @@ def _get_speech_models(provider_type: str) -> dict:
             "tts_by_language": tts_by_lang,
             "languages": eleven_langs,
         }
-    return {"stt": [], "tts": [], "languages": [], "tts_by_language": {}}
+    elif provider_type == "fishaudio":
+        tts_voices = [
+            {"id": "s2.1-pro", "name": "S2.1 Pro (83 Languages, Recommended)"},
+            {"id": "s2.1-pro-free", "name": "S2.1 Pro Free (83 Languages)"},
+            {"id": "s2-pro", "name": "S2 Pro (80+ Languages)"},
+            {"id": "s1", "name": "S1 (13 Languages)"},
+        ]
+        # Fish Audio voice selection is via reference_id (voice library ID)
+        # tts_voice_id in bot config holds the reference_id
+        # All models are language-agnostic (auto-detect or specify language param)
+        # s2.1-pro / s2.1-pro-free / s2-pro: 83 languages (same as Deepgram Nova-3 set)
+        # s1: 13 languages only
+        fish_full_langs = [
+            {"code": "en", "name": "English"}, {"code": "es", "name": "Spanish"},
+            {"code": "fr", "name": "French"}, {"code": "de", "name": "German"},
+            {"code": "hi", "name": "Hindi"}, {"code": "ja", "name": "Japanese"},
+            {"code": "zh", "name": "Chinese"}, {"code": "ko", "name": "Korean"},
+            {"code": "pt", "name": "Portuguese"}, {"code": "it", "name": "Italian"},
+            {"code": "id", "name": "Indonesian"}, {"code": "nl", "name": "Dutch"},
+            {"code": "tr", "name": "Turkish"}, {"code": "tl", "name": "Filipino"},
+            {"code": "pl", "name": "Polish"}, {"code": "sv", "name": "Swedish"},
+            {"code": "bg", "name": "Bulgarian"}, {"code": "ro", "name": "Romanian"},
+            {"code": "ar", "name": "Arabic"}, {"code": "cs", "name": "Czech"},
+            {"code": "el", "name": "Greek"}, {"code": "fi", "name": "Finnish"},
+            {"code": "hr", "name": "Croatian"}, {"code": "ms", "name": "Malay"},
+            {"code": "sk", "name": "Slovak"}, {"code": "da", "name": "Danish"},
+            {"code": "ta", "name": "Tamil"}, {"code": "uk", "name": "Ukrainian"},
+            {"code": "ru", "name": "Russian"}, {"code": "hu", "name": "Hungarian"},
+            {"code": "no", "name": "Norwegian"}, {"code": "vi", "name": "Vietnamese"},
+            {"code": "be", "name": "Belarusian"}, {"code": "bn", "name": "Bengali"},
+            {"code": "bs", "name": "Bosnian"}, {"code": "ca", "name": "Catalan"},
+            {"code": "et", "name": "Estonian"}, {"code": "gu", "name": "Gujarati"},
+            {"code": "he", "name": "Hebrew"}, {"code": "kn", "name": "Kannada"},
+            {"code": "lt", "name": "Lithuanian"}, {"code": "lv", "name": "Latvian"},
+            {"code": "mk", "name": "Macedonian"}, {"code": "mr", "name": "Marathi"},
+            {"code": "ne", "name": "Nepali"}, {"code": "fa", "name": "Persian"},
+            {"code": "pa", "name": "Punjabi"}, {"code": "sl", "name": "Slovenian"},
+            {"code": "sr", "name": "Serbian"}, {"code": "te", "name": "Telugu"},
+            {"code": "th", "name": "Thai"}, {"code": "ur", "name": "Urdu"},
+            # Additional 83-language set languages
+            {"code": "af", "name": "Afrikaans"}, {"code": "am", "name": "Amharic"},
+            {"code": "as", "name": "Assamese"}, {"code": "az", "name": "Azerbaijani"},
+            {"code": "cy", "name": "Welsh"}, {"code": "eu", "name": "Basque"},
+            {"code": "gl", "name": "Galician"}, {"code": "ka", "name": "Georgian"},
+            {"code": "km", "name": "Khmer"}, {"code": "lo", "name": "Lao"},
+            {"code": "ml", "name": "Malayalam"}, {"code": "mn", "name": "Mongolian"},
+            {"code": "my", "name": "Burmese"}, {"code": "si", "name": "Sinhala"},
+            {"code": "sw", "name": "Swahili"}, {"code": "ta", "name": "Tamil"},
+            {"code": "te", "name": "Telugu"}, {"code": "uz", "name": "Uzbek"},
+            {"code": "zu", "name": "Zulu"},
+        ]
+        fish_s1_codes = {"en", "zh", "ja", "de", "fr", "es", "ko", "ar", "ru", "nl", "it", "pl", "pt"}
+        s1_langs = [l for l in fish_full_langs if l["code"] in fish_s1_codes]
+        s2_langs = [l for l in fish_full_langs if l["code"] not in fish_s1_codes or True]  # s2 models support all
+
+        tts_by_lang = {}
+        # s2.1-pro, s2.1-pro-free, s2-pro support all full langs
+        s2_models = [v for v in tts_voices if v["id"] in {"s2.1-pro", "s2.1-pro-free", "s2-pro"}]
+        s1_models = [v for v in tts_voices if v["id"] == "s1"]
+
+        for lang in fish_full_langs:
+            code = lang["code"]
+            voices = list(s2_models)  # s2 models support all
+            if code in fish_s1_codes:
+                voices = voices + s1_models
+            tts_by_lang[code] = {"language": lang, "voices": voices}
+
+        return {
+            "stt": [],
+            "stt_by_language": {},
+            "tts": tts_voices,
+            "tts_by_language": tts_by_lang,
+            "languages": fish_full_langs,
+        }
+    return {"stt": [], "tts": [], "languages": [], "tts_by_language": {}, "stt_by_language": {}}

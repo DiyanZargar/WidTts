@@ -203,10 +203,263 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
             kwargs["language"] = language
         return _el.TTS(**kwargs)
 
+    elif provider_type == "fishaudio":
+        api_key: str = creds["api_key"]
+        model: str = config.get("tts_model") or "s2.1-pro"
+        reference_id: str = config.get("tts_voice_id") or ""
+        language: str = config.get("tts_language") or ""
+
+        logger.info("[PLUGIN_FACTORY] Fish Audio TTS  model=%s  reference_id=%s  language=%s",
+                     model, _mask(reference_id), language)
+        return _build_fish_audio_tts(api_key, model, reference_id, language)
+
     else:
         raise UnsupportedProviderError(
             f"Unsupported speech provider type for TTS: {provider_type!r}"
         )
+
+
+# ── Fish Audio custom TTS adapter ───────────────────────────────────
+
+def _build_fish_audio_tts(
+    api_key: str, model: str, reference_id: str, language: str
+) -> "FishAudioTTS":
+    """Build a custom LiveKit-compatible TTS instance for Fish Audio."""
+    return FishAudioTTS(
+        api_key=api_key,
+        model=model,
+        reference_id=reference_id,
+        language=language,
+    )
+
+
+class FishAudioTTS:
+    """Custom LiveKit-compatible TTS wrapper for Fish Audio REST API.
+
+    Fish Audio has no official LiveKit plugin, so this implements the
+    ``livekit.agents.tts.TTS`` interface (``synthesize()`` returns a
+    ``ChunkedStream``) by calling their HTTP API and decoding the mp3
+    response via the LiveKit AudioEmitter's built-in mp3 codec support.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str = "s2.1-pro",
+        reference_id: str = "",
+        language: str = "",
+    ) -> None:
+        self._api_key = api_key
+        self._model = model
+        self._reference_id = reference_id
+        self._language = language
+        self._session = None  # lazily created aiohttp session
+
+    # -- LiveKit TTS interface compatibility --
+
+    def synthesize(self, text: str, *, conn_options=None):
+        """Return a ChunkedStream compatible with LiveKit AgentSession."""
+        from livekit.agents.tts import ChunkedStream
+
+        if conn_options is None:
+            from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS
+            conn_options = DEFAULT_API_CONNECT_OPTIONS
+
+        return _FishAudioChunkedStream(
+            tts=self,
+            input_text=text,
+            conn_options=conn_options,
+            api_key=self._api_key,
+            model=self._model,
+            reference_id=self._reference_id,
+            language=self._language,
+        )
+
+    @property
+    def capabilities(self):
+        from livekit.agents.tts import TTSCapabilities
+        return TTSCapabilities(streaming=False)
+
+    @property
+    def sample_rate(self) -> int:
+        return 24000
+
+    @property
+    def num_channels(self) -> int:
+        return 1
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def provider(self) -> str:
+        return "Fish Audio"
+
+    @property
+    def label(self) -> str:
+        return f"fishaudio.{self._model}"
+
+    def _ensure_session(self):
+        if self._session is None:
+            import aiohttp
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    def prewarm(self) -> None:
+        pass
+
+    async def aclose(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
+
+    # EventEmitter compatibility (AgentSession may call emit/on)
+    _handlers: dict = {}
+
+    def on(self, event: str, handler=None):
+        if handler is None:
+            def decorator(fn):
+                self._handlers.setdefault(event, []).append(fn)
+                return fn
+            return decorator
+        self._handlers.setdefault(event, []).append(handler)
+        return handler
+
+    def emit(self, event: str, *args, **kwargs):
+        for handler in self._handlers.get(event, []):
+            try:
+                handler(*args, **kwargs)
+            except Exception:
+                pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.aclose()
+
+    def __del__(self):
+        # Best-effort cleanup
+        if self._session and not self._session.closed:
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self._session.close())
+            except Exception:
+                pass
+
+
+class _FishAudioChunkedStream:
+    """ChunkedStream-compatible wrapper that calls Fish Audio's REST API.
+
+    Follows the same pattern as the Deepgram/ElevenLabs ChunkedStream:
+    - ``_run(output_emitter)`` is called by the LiveKit framework
+    - We POST to Fish Audio, get mp3 bytes, push to the emitter
+    - The AudioEmitter handles mp3 -> PCM decoding internally
+    """
+
+    def __init__(
+        self,
+        *,
+        tts: FishAudioTTS,
+        input_text: str,
+        conn_options,
+        api_key: str,
+        model: str,
+        reference_id: str,
+        language: str,
+    ) -> None:
+        self._tts = tts
+        self._input_text = input_text
+        self._conn_options = conn_options
+        self._api_key = api_key
+        self._model = model
+        self._reference_id = reference_id
+        self._language = language
+
+    @property
+    def input_text(self) -> str:
+        return self._input_text
+
+    @property
+    def done(self) -> bool:
+        return True  # synchronous HTTP, done after _run completes
+
+    @property
+    def exception(self):
+        return None
+
+    async def _run(self, output_emitter) -> None:
+        """Call Fish Audio REST API and push mp3 audio to the emitter."""
+        import asyncio
+        import aiohttp
+        from livekit.agents import APIConnectionError, APITimeoutError, APIStatusError, utils
+
+        try:
+            session = self._tts._ensure_session()
+
+            payload: dict = {"text": self._input_text}
+            if self._reference_id:
+                payload["reference_id"] = self._reference_id
+            if self._language:
+                payload["language"] = self._language
+
+            # Fish Audio uses model in request header, not body
+            headers = {
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+                "model": self._model,
+            }
+
+            logger.info(
+                "[PLUGIN_FACTORY] Fish Audio synthesize  model=%s  text_len=%d",
+                self._model, len(self._input_text),
+            )
+
+            timeout_sec = self._conn_options.timeout if self._conn_options else 15
+            async with session.post(
+                "https://api.fish.audio/v1/tts",
+                json=payload,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=30, sock_connect=timeout_sec),
+            ) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    raise APIStatusError(
+                        message=f"Fish Audio API error: {resp.status}",
+                        status_code=resp.status,
+                        request_id=None,
+                        body=body[:200],
+                    )
+
+                # Initialize emitter with audio/mpeg — LiveKit's
+                # AudioStreamDecoder will handle mp3 -> PCM conversion
+                output_emitter.initialize(
+                    request_id=utils.shortuuid(),
+                    sample_rate=24000,
+                    num_channels=1,
+                    mime_type="audio/mpeg",
+                )
+
+                async for data, _ in resp.content.iter_chunks():
+                    if data:
+                        output_emitter.push(data)
+
+                output_emitter.flush()
+
+        except asyncio.TimeoutError:
+            raise APITimeoutError() from None
+        except aiohttp.ClientResponseError as e:
+            raise APIStatusError(
+                message=e.message, status_code=e.status, request_id=None, body=None
+            ) from None
+        except (APIConnectionError, APITimeoutError, APIStatusError):
+            raise
+        except Exception as e:
+            raise APIConnectionError(message=str(e)) from e
 
 
 async def build_plugins(

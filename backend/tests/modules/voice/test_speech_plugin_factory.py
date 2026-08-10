@@ -83,3 +83,36 @@ async def test_build_tts_unknown_provider(mock_decrypt):
     config = _make_config("unknown_provider")
     with pytest.raises(UnsupportedProviderError):
         await build_tts_plugin(config)
+
+
+@pytest.mark.asyncio
+@patch("app.modules.voice.infrastructure.external.speech_plugin_factory._decrypt_credentials",
+       new_callable=AsyncMock, return_value={"api_key": "test-key"})
+async def test_build_tts_fishaudio(mock_decrypt):
+    config = _make_config("fishaudio", tts_model="s2.1-pro", tts_voice_id="test-ref-id")
+    result = await build_tts_plugin(config)
+    assert result is not None
+    assert result.model == "s2.1-pro"
+    assert result.provider == "Fish Audio"
+    assert result.sample_rate == 24000
+    mock_decrypt.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.modules.voice.infrastructure.external.speech_plugin_factory._decrypt_credentials",
+       new_callable=AsyncMock, return_value={"api_key": "test-key"})
+async def test_build_tts_fishaudio_defaults(mock_decrypt):
+    config = _make_config("fishaudio")
+    result = await build_tts_plugin(config)
+    assert result is not None
+    assert result.model == "s2.1-pro"  # default model
+
+
+@pytest.mark.asyncio
+@patch("app.modules.voice.infrastructure.external.speech_plugin_factory._decrypt_credentials",
+       new_callable=AsyncMock, return_value={"api_key": "test-key"})
+async def test_build_stt_fishaudio_unsupported(mock_decrypt):
+    """Fish Audio has no STT — build_stt_plugin should raise UnsupportedProviderError."""
+    config = _make_config("fishaudio")
+    with pytest.raises(UnsupportedProviderError, match="fishaudio"):
+        await build_stt_plugin(config)

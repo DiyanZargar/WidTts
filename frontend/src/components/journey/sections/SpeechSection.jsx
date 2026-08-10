@@ -91,7 +91,7 @@ export function SpeechSection({ onProviderCreated }) {
     setForm((prev) => ({
       ...prev,
       provider_type: type,
-      name: prev.name || (type === 'deepgram' ? 'Deepgram Speech' : 'ElevenLabs Speech'),
+      name: prev.name || (type === 'deepgram' ? 'Deepgram Speech' : type === 'elevenlabs' ? 'ElevenLabs Speech' : 'Fish Audio Speech'),
     }));
     setTestResult(null);
     setConnectionValid(false);
@@ -227,7 +227,7 @@ export function SpeechSection({ onProviderCreated }) {
 
         {/* Provider selection buttons */}
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-          {['deepgram', 'elevenlabs'].map((type) => (
+          {['deepgram', 'elevenlabs', 'fishaudio'].map((type) => (
             <button
               key={type}
               onClick={() => selectProvider(type)}
@@ -242,10 +242,10 @@ export function SpeechSection({ onProviderCreated }) {
               }}
             >
               <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: '16px', fontWeight: 400, color: selectedType === type ? 'var(--accent-bright)' : 'var(--ink-60)', marginBottom: '6px' }}>
-                {type === 'deepgram' ? 'Deepgram' : 'ElevenLabs'}
+                {type === 'deepgram' ? 'Deepgram' : type === 'elevenlabs' ? 'ElevenLabs' : 'Fish Audio'}
               </span>
               <span className="type-micro" style={{ fontSize: '10px' }}>
-                {type === 'deepgram' ? 'Nova STT + Aura TTS' : 'Scribe STT + Flash TTS'}
+                {type === 'deepgram' ? 'Nova STT + Aura TTS' : type === 'elevenlabs' ? 'Scribe STT + Flash TTS' : 'TTS Only (83 Languages)'}
               </span>
             </button>
           ))}
@@ -256,7 +256,7 @@ export function SpeechSection({ onProviderCreated }) {
           <div className="glass-pane">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <span className="type-micro">
-                {editingProviderId ? `Edit "${form.name}"` : `Configure ${selectedType === 'deepgram' ? 'Deepgram' : 'ElevenLabs'}`}
+                {editingProviderId ? `Edit "${form.name}"` : `Configure ${selectedType === 'deepgram' ? 'Deepgram' : selectedType === 'elevenlabs' ? 'ElevenLabs' : 'Fish Audio'}`}
               </span>
               {editingProviderId && (
                 <button type="button" onClick={resetFormToNew} style={{ background: 'none', border: 'none', color: 'var(--ink-60)', fontSize: '11px', cursor: 'pointer' }}>
@@ -346,7 +346,7 @@ export function SpeechSection({ onProviderCreated }) {
         <div className="section-hint">
           <div className="section-hint__title">Supported Providers</div>
           <div className="section-hint__body">
-            Deepgram (Nova STT, Aura TTS) and ElevenLabs (Scribe STT, Flash TTS).
+            Deepgram (Nova STT, Aura TTS), ElevenLabs (Scribe STT, Flash TTS), and Fish Audio (TTS Only).
           </div>
         </div>
 

@@ -104,12 +104,15 @@ class LiveKitSession:
                         await self.destroy()
                     asyncio.create_task(_disconnect_inactivity())
 
-            # Build system instructions with bot identity
+            # Build system instructions with bot identity and language
             bot_name = self.snapshot.bot_name or "Assistant"
             bot_desc = self.snapshot.bot_description or ""
+            lang = self.snapshot.tts_primary_language or "en"
             identity = f"You are {bot_name}."
             if bot_desc:
                 identity += f" {bot_desc}"
+            if lang and lang != "en":
+                identity += f" Always respond in {lang}."
             instructions = f"{identity}\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else identity
             agent = Agent(instructions=instructions)
             await self._agent_session.start(
@@ -122,9 +125,10 @@ class LiveKitSession:
 
             # Let the LLM generate its own greeting based on the system prompt
             # by injecting a bootstrap trigger — the agent responds with a greeting
-            # naturally, the way it "likes", as itself
+            # naturally, the way it "likes", as itself, in the configured language
+            lang_hint = f" Respond in {self.snapshot.tts_primary_language}." if self.snapshot.tts_primary_language and self.snapshot.tts_primary_language != "en" else ""
             self._agent_session.generate_reply(
-                user_input=f"You are {bot_name}. A new user has just joined. Introduce yourself and greet them warmly in character.",
+                user_input=f"You are {bot_name}. A new user has just joined. Introduce yourself and greet them warmly in character.{lang_hint}",
             )
 
             duration_ms = int((time.monotonic() - self._started_at) * 1000)
