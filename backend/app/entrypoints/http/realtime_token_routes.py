@@ -202,6 +202,7 @@ async def _start_session_adapter(
             session_id=session_id,
             bot_id=bot["id"],
             bot_name=bot.get("name", "Assistant"),
+            bot_description=bot.get("description", ""),
             system_prompt=bot.get("system_prompt", ""),
             greeting=bot.get("greeting", ""),
             stt_provider_type=stt_provider.get("provider_type", "") if stt_provider else "",

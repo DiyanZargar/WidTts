@@ -16,6 +16,7 @@ class SessionSnapshot:
     session_id: str
     bot_id: str
     bot_name: str
+    bot_description: str
     system_prompt: str
     stt_provider_type: str
     stt_model: str
@@ -105,7 +106,11 @@ class LiveKitSession:
 
             # Build system instructions with bot identity
             bot_name = self.snapshot.bot_name or "Assistant"
-            instructions = f"You are {bot_name}.\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else f"You are {bot_name}."
+            bot_desc = self.snapshot.bot_description or ""
+            identity = f"You are {bot_name}."
+            if bot_desc:
+                identity += f" {bot_desc}"
+            instructions = f"{identity}\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else identity
             agent = Agent(instructions=instructions)
             await self._agent_session.start(
                 room=room,
