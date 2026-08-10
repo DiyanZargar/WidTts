@@ -1,15 +1,19 @@
 # widTTS — Voice Platform
 
-A state-of-the-art, real-time AI voice assistant platform built using Clean Architecture on the backend (FastAPI, PostgreSQL, LiveKit Agents, LiteLLM) and a modern 3D interactive visualizer on the frontend (React 18, Three.js / React Three Fiber, Vite 5, Tailwind CSS, Framer Motion).
+A multi-tenant, real-time AI voice assistant platform built using Clean Architecture on the backend (FastAPI, PostgreSQL, LiveKit Agents, LiteLLM) and a modern 3D interactive visualizer on the frontend (React 18, Three.js / React Three Fiber, Vite 5, Tailwind CSS).
+
+Each bot is independently configurable with its own LLM, TTS voice, STT model, system prompt, and languages. Deployed bots get unique shareable URLs (`/bot/{slug}`).
 
 ---
 
 ## 🏗️ Architectural Overview
 
-* **Zero Hardcoding Policy**: All LLM, Speech (STT/TTS), and Realtime Transport settings are managed dynamically via PostgreSQL using Envelope Encryption (AES-256-GCM). No provider secrets or server endpoints exist in application code.
-* **LiveKit Infrastructure Integration**: Realtime WebRTC audio processing runs entirely server-side via official LiveKit plugins (`livekit-plugins-silero` VAD, `livekit-plugins-deepgram`, `livekit-plugins-elevenlabs`).
-* **Single Seam LLM Bridge**: widTTS integrates with LiveKit via a custom `WidTTSLLMBridge` implementing `livekit.agents.llm.LLM`. It enforces business policies (STOP/REPEAT/CORRECTION/END) before delegating token streaming to the bot's configured LLM.
-* **Continuous 3D Admin Journey**: Admin portal features a 7-stage interactive 3D scroll experience (`Overview` → `LLM` → `Realtime` → `Speech` → `Bot` → `Activate` → `Live`) with glassmorphism UI, real-time connection verification, and multi-provider selection.
+* **Multi-Bot, Multi-Tenant**: Create multiple bots, each with independent LLM/TTS/STT config. Deploy each bot to a unique public URL. No shared state between bots.
+* **Zero Hardcoding Policy**: All provider settings are managed dynamically via PostgreSQL with Envelope Encryption (AES-256-GCM). No secrets in application code.
+* **LiveKit Infrastructure**: Realtime WebRTC audio runs server-side via official LiveKit plugins (Silero VAD, Deepgram, ElevenLabs). LiveKit is transport only — the app owns its architecture.
+* **Single Seam LLM Bridge**: `WidTTSLLMBridge` implements `livekit.agents.llm.LLM`. It enforces conversation policies (STOP/REPEAT/CORRECTION/END) before delegating to the bot's configured LLM via LiteLLM.
+* **LLM-Driven Personality**: Each bot generates its own greeting and goodbye based on its system prompt — no hardcoded text. The bot's identity (`"You are {bot_name}."`) is prepended to instructions.
+* **3D Admin Journey**: Admin portal features a 7-stage interactive 3D scroll experience with glassmorphism UI, real-time connection verification, and per-bot configuration.
 
 ---
 
@@ -17,167 +21,184 @@ A state-of-the-art, real-time AI voice assistant platform built using Clean Arch
 
 ```
 widTts/
-├── backend/                  # FastAPI Modular Monolith (Clean Architecture)
+├── backend/
 │   ├── app/
-│   │   ├── entrypoints/      # HTTP REST APIs (Admin, Realtime Token, Health)
-│   │   ├── modules/          # Domain, Application, Infrastructure modules (bot, conversation, provider, session, voice)
-│   │   └── shared/           # Database, Envelope Encryption, Event Bus, Structured Logging
-│   ├── tests/                # Automated pytest suite (84 tests)
-│   ├── requirements.txt      # Python dependencies (livekit-agents, livekit-api, etc.)
-│   └── main.py               # FastAPI application entrypoint with startup validation
-├── frontend/                 # React 18 SPA (Vite 5)
+│   │   ├── entrypoints/http/
+│   │   │   ├── admin/               # Admin REST APIs (bots, providers, runtime)
+│   │   │   ├── public_bot_routes.py # Public bot endpoints (/api/bot/{slug})
+│   │   │   └── realtime_token_routes.py
+│   │   ├── modules/
+│   │   │   ├── bot/                 # Bot domain, repository, persistence
+│   │   │   ├── conversation/        # Conversation policy, validation, prompts
+│   │   │   ├── provider/            # LLM & Speech provider management
+│   │   │   ├── session/             # Session tracking
+│   │   │   └── voice/               # LiveKit session adapter, LLM bridge, speech plugin factory
+│   │   └── shared/                  # Database, encryption, logging, config
+│   ├── migrations/                  # SQL migration files
+│   ├── tests/                       # pytest suite
+│   ├── requirements.txt
+│   └── main.py                      # FastAPI entrypoint
+├── frontend/
 │   ├── src/
-│   │   ├── components/       # 3D Journey, HolographicOrb, Controls, Glass UI
-│   │   ├── context/          # ConversationContext state management
-│   │   ├── hooks/            # useLiveKitRoom, useVoiceSession
-│   │   └── pages/            # HomePage (User Voice Widget), AdminJourney
-│   └── package.json          # Frontend dependencies (livekit-client, three, etc.)
-├── docker-compose.yml        # Local PostgreSQL (5432) + LiveKit Server (7880)
-├── livekit.yaml              # Local LiveKit OSS configuration
-└── readme.md                 # Technical setup & developer guide
+│   │   ├── components/journey/
+│   │   │   ├── sections/            # LLMSection, SpeechSection, BotIdentitySection, DeploySection, LiveSection
+│   │   │   ├── CoreSphere.jsx       # 3D orb (admin + user portal)
+│   │   │   └── AdminJourney.jsx     # Main orchestrator
+│   │   ├── context/                 # ConversationContext state management
+│   │   ├── hooks/                   # useLiveKitRoom, useVoiceSession
+│   │   └── pages/
+│   │       ├── BotLanding.jsx       # Public bot landing page (/bot/:slug)
+│   │       └── HomePage.jsx         # Voice session UI (/bot/:slug/session)
+│   └── package.json
+├── docker-compose.yml               # PostgreSQL (5432) + LiveKit Server (7880)
+├── livekit.yaml                     # LiveKit OSS configuration
+└── README.md
 ```
 
 ---
 
-## 🔑 Obtaining LiveKit API Keys
+## 🔑 LiveKit API Keys
 
-### Option A: Local Development (Docker Container)
+### Local Development (Docker)
 
-When running the local Docker container (`docker-compose up -d`), LiveKit operates in local development mode with pre-configured keys defined in `livekit.yaml`:
+```bash
+docker-compose up -d
+```
 
+Pre-configured in `livekit.yaml`:
 * **Server URL**: `ws://localhost:7880`
 * **API Key**: `devkey`
 * **API Secret**: `secret`
 
-> **Note**: No registration or internet connection is required for local Docker mode.
+### LiveKit Cloud (Production)
+
+1. Sign up at [cloud.livekit.io](https://cloud.livekit.io)
+2. Go to **Project Settings → Keys**
+3. Copy WebSocket URL, API Key, API Secret into `backend/.env`
 
 ---
 
-### Option B: LiveKit Cloud (Production / Staging)
+## ⚡ Quick Start
 
-To connect widTTS to a cloud-managed LiveKit server:
-
-1. Sign up or log into [cloud.livekit.io](https://cloud.livekit.io).
-2. Create a new Project (or select your existing project).
-3. In the left navigation, go to **Project Settings → Keys**.
-4. Copy the following credentials from your dashboard:
-   * **WebSocket URL**: `wss://your-project-subdomain.livekit.cloud`
-   * **API Key**: `APIxxxxxxxxxxxx`
-   * **API Secret**: `secretxxxxxxxxxxxxxxxx`
-5. Configure these credentials in `backend/.env` under `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`.
-
----
-
-## ⚡ Quick Start & Execution Guide
-
-### Step 1: Start Background Services (Docker)
-
-Start the local PostgreSQL database and LiveKit OSS server:
+### 1. Start Services
 
 ```bash
-# From the project root directory:
 docker-compose up -d
+# PostgreSQL: localhost:5432 (db: widtts, user: widtts, pass: widtts_dev_password)
+# LiveKit:    localhost:7880
 ```
 
-This starts:
-* **PostgreSQL**: `localhost:5432` (database: `widtts`, user: `widtts`, password: `widtts_dev_password`)
-* **LiveKit Server**: `localhost:7880` (RTC port range `50000-50100`)
-
----
-
-### Step 2: Configure & Start the Backend
-
-1. **Environment File (`backend/.env`)**:
-   Verify or create `backend/.env`:
-
-   ```env
-   POSTGRES_USER=widtts
-   POSTGRES_PASSWORD=widtts_dev_password
-   POSTGRES_HOST=localhost
-   POSTGRES_PORT=5432
-   POSTGRES_DB=widtts
-
-   DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-   MASTER_ENCRYPTION_KEY=PGe4qntNrj9RGqhna1JwmRfjm7WPr2e2njV6fT3r8PM=
-   APP_SECRET=dev-secret-change-in-production
-   PORT=8000
-
-   # LiveKit Realtime Transport
-   LIVEKIT_URL=ws://localhost:7880
-   LIVEKIT_API_KEY=devkey
-   LIVEKIT_API_SECRET=secret
-   LIVEKIT_TOKEN_TTL_SECONDS=3600
-   LIVEKIT_AUDIO_SAMPLE_RATE=16000
-   ```
-
-   *(To generate a new 32-byte Master Encryption Key, run: `python3 -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"`)*
-
-2. **Install Dependencies & Launch Server**:
-
-   ```bash
-   cd backend
-
-   # Activate virtual environment
-   source venv/bin/activate
-
-   # Install dependencies
-   pip install -r requirements.txt
-
-   # Start the FastAPI backend server
-   uvicorn main:app --reload --port 8000
-   ```
-
-   * Backend health check endpoint: `http://localhost:8000/health`
-
----
-
-### Step 3: Start the Frontend Application
-
-Open a separate terminal window and execute:
-
-```bash
-cd frontend
-
-# Install packages
-npm install
-
-# Start Vite developer server
-npm run dev
-```
-
-* The application will run locally at **`http://localhost:3000/`**.
-
----
-
-## 🛠️ Configuring Providers & Activating a Bot
-
-1. Open `http://localhost:3000/` in your browser and click **Enter as Admin**.
-2. **Step 1 (LLM)**: Add an LLM provider (e.g. OpenAI, Anthropic, or OpenAI-Compatible) and enter your API key.
-3. **Step 2 (Realtime)**: Click **Realtime Transport**:
-   * For **Local Docker**: Server URL `ws://localhost:7880`, API Key `devkey`, API Secret `secret`.
-   * For **LiveKit Cloud**: Server URL `wss://your-subdomain.livekit.cloud`, API Key `APIxxx`, API Secret `secretxxx`.
-   * Click **Test Connection** to verify handshake, then **Save Transport Provider**.
-4. **Step 3 (Speech)**: Add a speech provider (Deepgram or ElevenLabs) with STT/TTS models.
-5. **Step 4 (Bot)**: Select the configured LLM, Speech Provider, system prompt, and voice ID, then click **Create AI Bot**.
-6. **Step 5 (Activate)**: Click **Activate Bot** to make it active for all sessions.
-7. **Test User Experience**: Navigate to `http://localhost:3000/user` to interact with your live AI voice bot!
-
----
-
-## 🧪 Verification & Testing
-
-### Running Backend Tests
-
-The backend contains a comprehensive unit and integration test suite:
+### 2. Configure & Start Backend
 
 ```bash
 cd backend
-venv/bin/pytest tests/ -v
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-### Building Frontend Production Bundle
+Verify: `http://localhost:8000/health`
+
+### 3. Start Frontend
 
 ```bash
+cd frontend
+npm install
+npm run dev
+```
+
+App runs at `http://localhost:3000/`
+
+---
+
+## 🤖 Bot Workflow
+
+### Admin Setup (Steps 1–4)
+
+1. **LLM** — Add an LLM provider (OpenAI, Anthropic, OpenAI-Compatible) with API key
+2. **Speech** — Add Deepgram or ElevenLabs speech provider with API key
+3. **Bot** — Create a bot:
+   - Name, description
+   - LLM provider + model
+   - STT provider + model + languages
+   - TTS provider + model + languages
+   - System prompt (defines personality, greeting style, conversation flow)
+4. **Deploy** — Deploy the bot to get a shareable URL: `/bot/{slug}`
+
+### User Experience
+
+- Visit `/bot/{slug}` → landing page with bot name
+- Click **Enter** → voice session at `/bot/{slug}/session`
+- Bot greets the user in character (LLM-generated, not hardcoded)
+- Bot says goodbye in character when the conversation ends
+
+### Per-Bot Independence
+
+Each bot maintains its own:
+- LLM model + provider (api key, base URL)
+- TTS model (Flux voices → Aura mapping for Deepgram, voice ID for ElevenLabs)
+- STT model + languages
+- System prompt + greeting behavior
+- Deploy URL
+
+---
+
+## 🔒 Cascade Delete Protection
+
+Deleting resources is protected to prevent breaking deployed bots:
+
+| Resource | Protection |
+|---|---|
+| Deployed bot | Cannot delete — must undeploy first |
+| LLM provider | Cannot delete if referenced by any bot |
+| Speech provider | Cannot delete if referenced by any bot |
+
+Backend returns `409 Conflict` with a descriptive message listing affected bots.
+
+---
+
+## 🗄️ Database Migrations
+
+Migrations are stored in `backend/migrations/`. Run manually against PostgreSQL:
+
+```bash
+PGPASSWORD=widtts_dev_password psql -h localhost -U widtts -d widtts -f backend/migrations/001_bot_language_and_greeting.sql
+```
+
+### Migration 001: Bot Language & Greeting
+
+Adds per-bot STT/TTS language configuration and greeting field:
+
+```sql
+ALTER TABLE bots ADD COLUMN IF NOT EXISTS stt_languages TEXT DEFAULT '["en"]';
+ALTER TABLE bots ADD COLUMN IF NOT EXISTS stt_primary_language TEXT DEFAULT 'en';
+ALTER TABLE bots ADD COLUMN IF NOT EXISTS tts_languages TEXT DEFAULT '["en"]';
+ALTER TABLE bots ADD COLUMN IF NOT EXISTS tts_primary_language TEXT DEFAULT 'en';
+ALTER TABLE bots ADD COLUMN IF NOT EXISTS greeting TEXT DEFAULT '';
+```
+
+---
+
+## 🎨 Key Frontend Sections
+
+| Section | Purpose |
+|---|---|
+| **LLM** | Configure LLM provider (API key, base URL, model list) |
+| **Speech** | Configure speech provider (Deepgram / ElevenLabs API key) |
+| **Bot** | Create/edit bots with independent config per section |
+| **Deploy** | Deploy/undeploy bots, get shareable links |
+| **Live** | Monitor active sessions and runtime health |
+
+---
+
+## 🧪 Testing
+
+```bash
+# Backend tests
+cd backend
+venv/bin/pytest tests/ -v
+
+# Frontend production build
 cd frontend
 npm run build
 ```
