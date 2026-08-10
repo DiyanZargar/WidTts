@@ -436,18 +436,15 @@ def _get_speech_models(provider_type: str) -> dict:
             "languages": eleven_langs,
         }
     elif provider_type == "fishaudio":
-        tts_voices = [
+        # TTS engine models (shown in the Model dropdown)
+        tts_models = [
             {"id": "s2.1-pro", "name": "S2.1 Pro (83 Languages, Recommended)"},
             {"id": "s2.1-pro-free", "name": "S2.1 Pro Free (83 Languages)"},
             {"id": "s2-pro", "name": "S2 Pro (80+ Languages)"},
             {"id": "s1", "name": "S1 (13 Languages)"},
         ]
-        # Fish Audio voice selection is via reference_id (voice library ID)
-        # tts_voice_id in bot config holds the reference_id
-        # All models are language-agnostic (auto-detect or specify language param)
-        # s2.1-pro / s2.1-pro-free / s2-pro: 83 languages (same as Deepgram Nova-3 set)
-        # s1: 13 languages only
-        fish_full_langs = [
+        # Languages supported by Fish Audio
+        fish_langs = [
             {"code": "en", "name": "English"}, {"code": "es", "name": "Spanish"},
             {"code": "fr", "name": "French"}, {"code": "de", "name": "German"},
             {"code": "hi", "name": "Hindi"}, {"code": "ja", "name": "Japanese"},
@@ -474,7 +471,6 @@ def _get_speech_models(provider_type: str) -> dict:
             {"code": "pa", "name": "Punjabi"}, {"code": "sl", "name": "Slovenian"},
             {"code": "sr", "name": "Serbian"}, {"code": "te", "name": "Telugu"},
             {"code": "th", "name": "Thai"}, {"code": "ur", "name": "Urdu"},
-            # Additional 83-language set languages
             {"code": "af", "name": "Afrikaans"}, {"code": "am", "name": "Amharic"},
             {"code": "as", "name": "Assamese"}, {"code": "az", "name": "Azerbaijani"},
             {"code": "cy", "name": "Welsh"}, {"code": "eu", "name": "Basque"},
@@ -482,31 +478,16 @@ def _get_speech_models(provider_type: str) -> dict:
             {"code": "km", "name": "Khmer"}, {"code": "lo", "name": "Lao"},
             {"code": "ml", "name": "Malayalam"}, {"code": "mn", "name": "Mongolian"},
             {"code": "my", "name": "Burmese"}, {"code": "si", "name": "Sinhala"},
-            {"code": "sw", "name": "Swahili"}, {"code": "ta", "name": "Tamil"},
-            {"code": "te", "name": "Telugu"}, {"code": "uz", "name": "Uzbek"},
+            {"code": "sw", "name": "Swahili"}, {"code": "uz", "name": "Uzbek"},
             {"code": "zu", "name": "Zulu"},
         ]
-        fish_s1_codes = {"en", "zh", "ja", "de", "fr", "es", "ko", "ar", "ru", "nl", "it", "pl", "pt"}
-        s1_langs = [l for l in fish_full_langs if l["code"] in fish_s1_codes]
-        s2_langs = [l for l in fish_full_langs if l["code"] not in fish_s1_codes or True]  # s2 models support all
-
-        tts_by_lang = {}
-        # s2.1-pro, s2.1-pro-free, s2-pro support all full langs
-        s2_models = [v for v in tts_voices if v["id"] in {"s2.1-pro", "s2.1-pro-free", "s2-pro"}]
-        s1_models = [v for v in tts_voices if v["id"] == "s1"]
-
-        for lang in fish_full_langs:
-            code = lang["code"]
-            voices = list(s2_models)  # s2 models support all
-            if code in fish_s1_codes:
-                voices = voices + s1_models
-            tts_by_lang[code] = {"language": lang, "voices": voices}
-
+        # tts_by_language is empty — real voices are fetched dynamically from
+        # the Fish Audio voice library API via /bots/speech-voices/{provider_id}
         return {
             "stt": [],
             "stt_by_language": {},
-            "tts": tts_voices,
-            "tts_by_language": tts_by_lang,
-            "languages": fish_full_langs,
+            "tts": tts_models,
+            "tts_by_language": {},
+            "languages": fish_langs,
         }
     return {"stt": [], "tts": [], "languages": [], "tts_by_language": {}, "stt_by_language": {}}
