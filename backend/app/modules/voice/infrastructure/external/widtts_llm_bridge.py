@@ -214,14 +214,10 @@ _END_ACK = "Thanks for chatting! Goodbye."
 _REPEAT_FALLBACK = "I don't have a previous response to repeat."
 _ERROR_ACK = "I'm sorry, something went wrong. Could you try again?"
 
-# Farewell indicators — if the LLM response contains these, the session is ending
-_FAREWELL_PATTERNS = [
-    "goodbye", "good bye", "bye bye", "bye!", "bye.", "see you", "take care",
-    "have a great day", "have a wonderful day", "have a fantastic day",
-    "thanks for chatting", "thank you for chatting", "session is complete",
-    "session is over", "that's all", " signing off", "farewell",
-    "until next time", "catch you later", "talk to you later",
-]
+# The system prompt instructs the LLM to append this marker when it's
+# ending the conversation. This is language-agnostic — the LLM says
+# goodbye in whatever language it's configured for, then appends the marker.
+_FAREWELL_MARKER = "[END_SESSION]"
 
 
 # ── LLMStream subclass ──────────────────────────────────────────────
@@ -361,8 +357,8 @@ class WidTTSLLMStream(LLMStream):
                 classification=action.value,
             )
 
-            # Check if the response sounds like a farewell → schedule session end
-            if self._bridge._on_session_end and _is_farewell(full_response):
+            # Check if the response contains the farewell marker
+            if self._bridge._on_session_end and _FAREWELL_MARKER in full_response:
                 logger.info("[BRIDGE] Farewell detected — scheduling session end in 5s")
                 self._bridge._on_session_end()
 
@@ -587,7 +583,4 @@ def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
     return messages
 
 
-def _is_farewell(text: str) -> bool:
-    """Check if the response text contains farewell indicators."""
-    lower = text.lower().strip()
-    return any(pattern in lower for pattern in _FAREWELL_PATTERNS)
+

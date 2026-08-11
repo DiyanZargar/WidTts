@@ -115,8 +115,22 @@ class LiveKitSession:
             if bot_desc:
                 identity += f" {bot_desc}"
             if lang and lang != "en":
-                identity += f" Always respond in {lang}."
+                identity += (
+                    f" You MUST ALWAYS respond in language '{lang}' and no other language."
+                    f" This is non-negotiable — every response, every word, must be in '{lang}'."
+                    f" When you need to end the conversation or say goodbye, append the marker [END_SESSION] at the very end of your response."
+                )
+            else:
+                identity += " When you need to end the conversation or say goodbye, append the marker [END_SESSION] at the very end of your response."
             instructions = f"{identity}\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else identity
+
+            # Store the FULL instructions (with language directive) so the
+            # LLM bridge uses the same prompt for every conversation turn.
+            # Previously only the Agent got the enhanced instructions while
+            # the bridge received the raw system_prompt — causing the LLM
+            # to revert to English after the first greeting.
+            self._enhanced_instructions = instructions
+
             agent = Agent(instructions=instructions)
             await self._agent_session.start(
                 room=room,
@@ -126,12 +140,11 @@ class LiveKitSession:
                 ),
             )
 
-            # Let the LLM generate its own greeting based on the system prompt
-            # by injecting a bootstrap trigger — the agent responds with a greeting
-            # naturally, the way it "likes", as itself, in the configured language
-            lang_hint = f" Respond in {self.snapshot.tts_primary_language}." if self.snapshot.tts_primary_language and self.snapshot.tts_primary_language != "en" else ""
+            # Let the LLM generate its own greeting based on the system prompt.
+            # The system prompt already enforces language — the LLM will greet
+            # in the configured language naturally.
             self._agent_session.generate_reply(
-                user_input=f"You are {bot_name}. A new user has just joined. Introduce yourself and greet them warmly in character.{lang_hint}",
+                user_input=f"You are {bot_name}. A new user has just joined. Introduce yourself and greet them warmly in character.",
             )
 
             duration_ms = int((time.monotonic() - self._started_at) * 1000)
@@ -198,6 +211,11 @@ class LiveKitSession:
         )
         import asyncio
 
+        # Use the enhanced instructions (with language directive) if available,
+        # falling back to raw system_prompt. This ensures the LLM sees the
+        # language instruction on EVERY turn, not just the first greeting.
+        effective_prompt = getattr(self, '_enhanced_instructions', None) or self.snapshot.system_prompt
+
         llm_config = {
             "api_key": self.snapshot.llm_api_key,
             "base_url": self.snapshot.llm_base_url,
@@ -207,7 +225,7 @@ class LiveKitSession:
 
         policy = ConversationPolicy()
         bot_config = {
-            "system_prompt": self.snapshot.system_prompt,
+            "system_prompt": effective_prompt,
             "llm_model": self.snapshot.llm_model,
             "llm_provider_id": self.snapshot.llm_provider_id,
             "api_key": self.snapshot.llm_api_key,
