@@ -150,7 +150,7 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
         from livekit.plugins import deepgram as _dg
 
         api_key: str = creds["api_key"]
-        model: str = config.get("tts_model") or "aura-asteria-en"
+        model: str = config.get("tts_custom_model") or config.get("tts_model") or "aura-asteria-en"
 
         # Map flux-* model names to valid Deepgram Aura voices for LiveKit
         if model.startswith("flux-"):
@@ -191,10 +191,16 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
         from livekit.plugins import elevenlabs as _el
 
         api_key: str = creds["api_key"]
-        voice_id: str = config.get("tts_voice_id") or ""
+        voice_id: str = config.get("tts_custom_voice_id") or config.get("tts_voice_id") or ""
 
-        if not voice_id:
-            raise ValueError("ElevenLabs TTS requires tts_voice_id in the provider config")
+        # Extract 20-char voice ID from tts_model if passed there
+        if not voice_id and config.get("tts_model"):
+            m = config["tts_model"]
+            if len(m) == 20 and m.isalnum() and not m.startswith("eleven_") and not m.startswith("scribe_"):
+                voice_id = m
+
+        # Fallback to Sarah (EXAVITQu4vr4xnSDxMaL) which is available on all tiers
+        voice_id = voice_id or "EXAVITQu4vr4xnSDxMaL"
 
         language: str = config.get("tts_language") or ""
         logger.info("[PLUGIN_FACTORY] ElevenLabs TTS  voice_id=%s  language=%s", _mask(voice_id), language)
@@ -205,13 +211,14 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
 
     elif provider_type == "fishaudio":
         api_key: str = creds["api_key"]
-        model: str = config.get("tts_model") or "s2.1-pro"
-        reference_id: str = config.get("tts_voice_id") or ""
+        model: str = config.get("tts_custom_model") or config.get("tts_model") or "s2.1-pro"
+        reference_id: str = config.get("tts_custom_voice_id") or config.get("tts_voice_id") or ""
         language: str = config.get("tts_language") or ""
+        custom_endpoint: str = config.get("tts_custom_endpoint") or ""
 
-        logger.info("[PLUGIN_FACTORY] Fish Audio TTS  model=%s  reference_id=%s  language=%s",
-                     model, _mask(reference_id), language)
-        return _build_fish_audio_tts(api_key, model, reference_id, language)
+        logger.info("[PLUGIN_FACTORY] Fish Audio TTS  model=%s  reference_id=%s  language=%s  endpoint=%s",
+                     model, _mask(reference_id), language, custom_endpoint or "(default)")
+        return _build_fish_audio_tts(api_key, model, reference_id, language, custom_endpoint)
 
     else:
         raise UnsupportedProviderError(
@@ -222,7 +229,7 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
 # ── Fish Audio custom TTS adapter ───────────────────────────────────
 
 def _build_fish_audio_tts(
-    api_key: str, model: str, reference_id: str, language: str
+    api_key: str, model: str, reference_id: str, language: str, custom_endpoint: str = ""
 ) -> "FishAudioTTS":
     """Build a custom LiveKit-compatible TTS instance for Fish Audio."""
     return FishAudioTTS(
@@ -230,10 +237,15 @@ def _build_fish_audio_tts(
         model=model,
         reference_id=reference_id,
         language=language,
+        custom_endpoint=custom_endpoint,
     )
 
 
-class FishAudioTTS:
+# Import LiveKit TTS base class for FishAudioTTS inheritance
+from livekit.agents.tts import TTS as _LiveKitTTS, TTSCapabilities, ChunkedStream  # noqa: E402
+
+
+class FishAudioTTS(_LiveKitTTS):
     """Custom LiveKit-compatible TTS wrapper for Fish Audio REST API.
 
     Fish Audio has no official LiveKit plugin, so this implements the
@@ -249,19 +261,23 @@ class FishAudioTTS:
         model: str = "s2.1-pro",
         reference_id: str = "",
         language: str = "",
+        custom_endpoint: str = "",
     ) -> None:
+        super().__init__(
+            capabilities=TTSCapabilities(streaming=False),
+            sample_rate=24000,
+            num_channels=1,
+        )
         self._api_key = api_key
         self._model = model
         self._reference_id = reference_id
         self._language = language
+        self._custom_endpoint = custom_endpoint
         self._session = None  # lazily created aiohttp session
 
     # -- LiveKit TTS interface compatibility --
 
     def synthesize(self, text: str, *, conn_options=None):
-        """Return a ChunkedStream compatible with LiveKit AgentSession."""
-        from livekit.agents.tts import ChunkedStream
-
         if conn_options is None:
             from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS
             conn_options = DEFAULT_API_CONNECT_OPTIONS
@@ -274,20 +290,8 @@ class FishAudioTTS:
             model=self._model,
             reference_id=self._reference_id,
             language=self._language,
+            custom_endpoint=self._custom_endpoint,
         )
-
-    @property
-    def capabilities(self):
-        from livekit.agents.tts import TTSCapabilities
-        return TTSCapabilities(streaming=False)
-
-    @property
-    def sample_rate(self) -> int:
-        return 24000
-
-    @property
-    def num_channels(self) -> int:
-        return 1
 
     @property
     def model(self) -> str:
@@ -352,7 +356,8 @@ class FishAudioTTS:
                 pass
 
 
-class _FishAudioChunkedStream:
+
+class _FishAudioChunkedStream(ChunkedStream):
     """ChunkedStream-compatible wrapper that calls Fish Audio's REST API.
 
     Follows the same pattern as the Deepgram/ElevenLabs ChunkedStream:
@@ -371,14 +376,14 @@ class _FishAudioChunkedStream:
         model: str,
         reference_id: str,
         language: str,
+        custom_endpoint: str = "",
     ) -> None:
-        self._tts = tts
-        self._input_text = input_text
-        self._conn_options = conn_options
+        super().__init__(tts=tts, input_text=input_text, conn_options=conn_options)
         self._api_key = api_key
         self._model = model
         self._reference_id = reference_id
         self._language = language
+        self._custom_endpoint = custom_endpoint
 
     @property
     def input_text(self) -> str:
@@ -415,13 +420,14 @@ class _FishAudioChunkedStream:
             }
 
             logger.info(
-                "[PLUGIN_FACTORY] Fish Audio synthesize  model=%s  text_len=%d",
-                self._model, len(self._input_text),
+                "[PLUGIN_FACTORY] Fish Audio synthesize  model=%s  text_len=%d  endpoint=%s",
+                self._model, len(self._input_text), self._custom_endpoint or "(default)",
             )
 
             timeout_sec = self._conn_options.timeout if self._conn_options else 15
+            api_url = self._custom_endpoint.rstrip("/") + "/v1/tts" if self._custom_endpoint else "https://api.fish.audio/v1/tts"
             async with session.post(
-                "https://api.fish.audio/v1/tts",
+                api_url,
                 json=payload,
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=30, sock_connect=timeout_sec),

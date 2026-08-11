@@ -32,6 +32,9 @@ class SessionSnapshot:
     stt_language: str = "en"
     tts_voice_id: str = ""
     tts_language: str = "en"
+    tts_custom_model: str = ""
+    tts_custom_voice_id: str = ""
+    tts_custom_endpoint: str = ""
     stt_languages: list = field(default_factory=lambda: ["en"])
     stt_primary_language: str = "en"
     tts_languages: list = field(default_factory=lambda: ["en"])
@@ -176,6 +179,9 @@ class LiveKitSession:
             "tts_model": self.snapshot.tts_model,
             "tts_voice_id": self.snapshot.tts_voice_id,
             "tts_language": self.snapshot.tts_language,
+            "tts_custom_model": self.snapshot.tts_custom_model,
+            "tts_custom_voice_id": self.snapshot.tts_custom_voice_id,
+            "tts_custom_endpoint": self.snapshot.tts_custom_endpoint,
             "credentials_enc": self.snapshot.encrypted_tts_credentials,
             "key_version": self.snapshot.tts_key_version,
         }

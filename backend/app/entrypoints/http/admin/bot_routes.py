@@ -79,10 +79,10 @@ async def list_speech_models(provider_type: str):
 
 @router.get("/speech-voices/{provider_id}")
 async def list_speech_voices(provider_id: str):
-    """Fetch actual voice names from a speech provider's API (e.g. Fish Audio voice library)."""
+    """Fetch actual voice names from a speech provider's API (e.g. Fish Audio voice library, ElevenLabs voices)."""
     from app.modules.provider.infrastructure.persistence.postgres_speech_provider_repository import PostgresSpeechProviderRepository
     from app.shared.security.envelope_encryption import load_and_decrypt
-    from app.entrypoints.http.admin.speech_provider_routes import _fetch_fish_models_sync
+    from app.entrypoints.http.admin.speech_provider_routes import _fetch_fish_models_sync, _fetch_elevenlabs_data_sync
 
     speech_repo = PostgresSpeechProviderRepository()
     provider = await speech_repo.get_by_id(provider_id)
@@ -90,16 +90,24 @@ async def list_speech_voices(provider_id: str):
         return {"voices": []}
 
     provider_type = provider.get("provider_type", "")
-    if provider_type != "fishaudio":
-        return {"voices": []}
 
     try:
         creds = await load_and_decrypt(provider["credentials_enc"], provider.get("key_version", 1))
         api_key = creds.get("api_key", "")
         if not api_key:
             return {"voices": []}
-        _, voices, _ = await asyncio.to_thread(_fetch_fish_models_sync, api_key)
-        return {"voices": voices}
+
+        if provider_type == "fishaudio":
+            _, voices, _ = await asyncio.to_thread(_fetch_fish_models_sync, api_key)
+            return {"voices": voices}
+        elif provider_type == "elevenlabs":
+            _, voices, _ = await asyncio.to_thread(_fetch_elevenlabs_data_sync, api_key)
+            # ElevenLabs voices don't have language info; tag them as 'multi'
+            for v in voices:
+                v["language"] = "en"
+            return {"voices": voices}
+        else:
+            return {"voices": []}
     except Exception:
         return {"voices": []}
 

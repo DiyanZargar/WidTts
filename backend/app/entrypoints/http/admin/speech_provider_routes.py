@@ -237,8 +237,13 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         return _SAMPLE_AUDIO_CACHE[cache_key]
 
     if provider_type == "elevenlabs":
-        voice_id = voice_id or "21m00Tcm4TlvDq8ikWAM"
-        model_id = model or "eleven_turbo_v2_5"
+        # Detect if model is actually a 20-char voice ID (e.g. EXAVITQu4vr4xnSDxMaL)
+        if model and len(model) == 20 and model.isalnum() and not model.startswith("eleven_") and not model.startswith("scribe_"):
+            voice_id = model
+            model = ""
+        # Default working voice: Sarah (EXAVITQu4vr4xnSDxMaL) which works on free tier
+        voice_id = voice_id or "EXAVITQu4vr4xnSDxMaL"
+        model_id = model if (model and model.startswith("eleven_")) else "eleven_turbo_v2_5"
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128"
         payload = json.dumps({"text": text, "model_id": model_id}).encode("utf-8")
         headers = {
@@ -253,7 +258,11 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             _SAMPLE_AUDIO_CACHE[cache_key] = res
             return res
     elif provider_type == "fishaudio":
-        target_model = model or "s2.1-pro"
+        # Detect if model is actually a 24-char hex voice profile ID
+        if model and len(model) == 24 and all(c in "0123456789abcdef" for c in model.lower()):
+            voice_id = model
+            model = ""
+        target_model = model if (model and not len(model) == 24) else "s2.1-pro"
         payload: dict = {"text": text}
         if voice_id:
             payload["reference_id"] = voice_id
@@ -276,6 +285,8 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             return res
     else:  # Deepgram REST (Real Neural Voice)
         target_model = model or "aura-asteria-en"
+
+        # Flux → Aura-1 mapping (Flux models are streaming-only, map to REST equivalents)
         flux_map = {
             "flux-rufus-en": "aura-orion-en",
             "flux-aura-en": "aura-asteria-en",
@@ -289,13 +300,33 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             "flux-zeus-en": "aura-zeus-en",
         }
 
-        mapped_rest_model = target_model
-        if target_model.lower() in flux_map:
-            mapped_rest_model = flux_map[target_model.lower()]
-        elif target_model.lower().startswith("flux-"):
-            mapped_rest_model = "aura-" + target_model[5:]
+        # Determine the best API version per model family (from dev branch)
+        primary_v = "v2" if target_model.lower().startswith("flux") else "v1"
+        fallback_v = "v1" if primary_v == "v2" else "v2"
 
-        attempts = [mapped_rest_model, target_model, "aura-asteria-en", "aura-orion-en"]
+        # Build mapped alternative model name
+        alt_model = ""
+        if target_model.lower() in flux_map:
+            alt_model = flux_map[target_model.lower()]
+        elif target_model.lower().startswith("flux-"):
+            alt_model = "aura-" + target_model[5:]
+        elif target_model.lower().startswith("aura-"):
+            alt_model = "flux-" + target_model[5:]
+
+        # Build attempt list: primary version + model first, then fallbacks
+        attempts = [
+            (primary_v, target_model),
+            (fallback_v, target_model),
+        ]
+        if alt_model:
+            alt_v = "v2" if alt_model.lower().startswith("flux") else "v1"
+            attempts.append((alt_v, alt_model))
+        attempts.extend([
+            ("v2", "flux-rufus-en"),
+            ("v1", "aura-asteria-en"),
+            ("v1", "aura-orion-en"),
+        ])
+
         payload = json.dumps({"text": text}).encode("utf-8")
         headers = {
             "Authorization": f"Token {api_key}",
@@ -304,13 +335,13 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         }
 
         last_err = None
-        for m_name in attempts:
+        for version, m_name in attempts:
             if not m_name:
                 continue
             try:
-                url = f"https://api.deepgram.com/v1/speak?model={m_name}&encoding=linear16&sample_rate=24000"
+                url = f"https://api.deepgram.com/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
                 request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                with urllib.request.urlopen(request, timeout=4) as response:
+                with urllib.request.urlopen(request, timeout=10) as response:
                     audio_bytes = response.read()
                     res = (audio_bytes, "audio/wav")
                     _SAMPLE_AUDIO_CACHE[cache_key] = res
@@ -346,7 +377,9 @@ async def list_speech_providers():
                 api_key = creds.get("api_key", "")
                 if api_key:
                     ptype = p.get("provider_type") or "deepgram"
-                    asyncio.create_task(_trigger_prewarm(api_key, ptype, ["flux-rufus-en", "flux-aura-en", "aura-asteria-en", "aura-orion-en"]))
+                    # Only prewarm Deepgram — model names are Deepgram-specific
+                    if ptype == "deepgram":
+                        asyncio.create_task(_trigger_prewarm(api_key, ptype, ["flux-rufus-en", "flux-aura-en", "aura-asteria-en", "aura-orion-en"]))
             except Exception:
                 pass
         p["credentials_enc"] = {"encrypted": True}

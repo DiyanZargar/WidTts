@@ -206,6 +206,28 @@ async def _start_session_adapter(
                 llm_provider.get("key_version", 1),
             )
 
+        # Detect when tts_model is actually a voice profile ID rather than an engine model:
+        # - Fish Audio voice profiles: 24-char hex (MongoDB ObjectIds)
+        # - ElevenLabs voice profiles: 20-char alphanumeric (not starting with eleven_ or scribe_)
+        bot_tts_model = bot.get("tts_model", "")
+        bot_tts_voice_id = ""
+        if tts_provider and bot_tts_model:
+            ptype = tts_provider.get("provider_type", "")
+            if (ptype == "fishaudio"
+                    and len(bot_tts_model) == 24
+                    and all(c in "0123456789abcdef" for c in bot_tts_model.lower())):
+                # Fish Audio voice profile → use as voice_id, fall back to provider engine model
+                bot_tts_voice_id = bot_tts_model
+                bot_tts_model = tts_provider.get("tts_model", "") or "s2.1-pro"
+            elif (ptype == "elevenlabs"
+                    and len(bot_tts_model) == 20
+                    and bot_tts_model.isalnum()
+                    and not bot_tts_model.startswith("eleven_")
+                    and not bot_tts_model.startswith("scribe_")):
+                # ElevenLabs voice profile → use as voice_id, use default model
+                bot_tts_voice_id = bot_tts_model
+                bot_tts_model = ""
+
         snapshot = SessionSnapshot(
             session_id=session_id,
             bot_id=bot["id"],
@@ -223,11 +245,14 @@ async def _start_session_adapter(
             tts_provider_type=(
                 tts_provider.get("provider_type", "") if tts_provider else ""
             ),
-            tts_model=bot.get("tts_model") or (tts_provider.get("tts_model", "") if tts_provider else ""),
-            tts_voice_id=tts_provider.get("tts_voice_id", "") if tts_provider else "",
+            tts_model=bot_tts_model or bot.get("tts_model") or (tts_provider.get("tts_model", "") if tts_provider else ""),
+            tts_voice_id=bot_tts_voice_id or (tts_provider.get("tts_voice_id", "") if tts_provider else ""),
             tts_language=bot.get("tts_primary_language", "en"),
             tts_languages=bot.get("tts_languages", ["en"]),
             tts_primary_language=bot.get("tts_primary_language", "en"),
+            tts_custom_model=bot.get("tts_custom_model", ""),
+            tts_custom_voice_id=bot.get("tts_custom_voice_id", ""),
+            tts_custom_endpoint=bot.get("tts_custom_endpoint", ""),
             llm_provider_id=bot.get("llm_provider_id", ""),
             llm_model=bot.get("llm_model", ""),
             server_url=server_url,

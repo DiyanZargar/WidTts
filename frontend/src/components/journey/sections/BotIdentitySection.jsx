@@ -212,6 +212,149 @@ function GlassSelect({ options, value, onChange, label, placeholder, disabled })
   );
 }
 
+/**
+ * GlassComboBox — Searchable dropdown that allows custom text input.
+ * Typing filters the list; pressing Enter or blurring accepts the typed value.
+ * Selecting from the list works like a normal dropdown.
+ */
+function GlassComboBox({ options, value, onChange, label, placeholder, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target) && panelRef.current && !panelRef.current.contains(e.target)) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      if (ref.current) {
+        const rect = ref.current.getBoundingClientRect();
+        setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      }
+    };
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => { window.removeEventListener('scroll', updatePos, true); window.removeEventListener('resize', updatePos); };
+  }, [open]);
+
+  const openPanel = () => {
+    if (disabled) return;
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+    setOpen(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const selectedOption = options.find(o => o.value === value);
+  const displayLabel = selectedOption ? selectedOption.label : value || '';
+
+  const filtered = search.trim()
+    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()) || o.value.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  const handleSelect = (opt) => {
+    onChange(opt.value);
+    setOpen(false);
+    setSearch('');
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && search.trim()) {
+      // Use typed value as custom input
+      onChange(search.trim());
+      setOpen(false);
+      setSearch('');
+    }
+    if (e.key === 'Escape') {
+      setOpen(false);
+      setSearch('');
+    }
+  };
+
+  return (
+    <div ref={ref} className="glass-dropdown">
+      {label && <label className="type-micro" style={{ display: 'block', marginBottom: '4px', fontSize: '9px' }}>{label}</label>}
+      <div
+        onClick={() => open ? setOpen(false) : openPanel()}
+        className={`glass-input glass-dropdown__trigger ${disabled ? 'glass-dropdown__trigger--disabled' : ''}`}
+        style={disabled ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+      >
+        <span className={`glass-dropdown__trigger-text ${!displayLabel ? 'glass-dropdown__trigger-text--empty' : ''}`}>
+          {displayLabel || placeholder || 'Select or type...'}
+        </span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.4 }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+
+      {open && createPortal(
+        <div
+          ref={panelRef}
+          className="glass-dropdown__panel"
+          style={{ position: 'fixed', top: panelPos.top, left: panelPos.left, width: panelPos.width, maxHeight: '320px', overflowY: 'auto' }}
+        >
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)', position: 'sticky', top: 0, background: '#111113', zIndex: 1 }}>
+            <input
+              ref={inputRef}
+              className="glass-input"
+              placeholder="Search or type custom name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{ width: '100%', fontSize: '12px', padding: '6px 8px', boxSizing: 'border-box' }}
+            />
+          </div>
+          {filtered.map((opt) => {
+            const isSelected = value === opt.value;
+            return (
+              <div
+                key={opt.value}
+                className={`glass-dropdown__item ${isSelected ? 'glass-dropdown__item--selected' : ''}`}
+                onClick={() => handleSelect(opt)}
+              >
+                <div className={`glass-dropdown__radio ${isSelected ? 'glass-dropdown__radio--selected' : ''}`}>
+                  {isSelected && <div className="glass-dropdown__radio-dot" />}
+                </div>
+                <span className={`glass-dropdown__label ${isSelected ? 'glass-dropdown__label--selected' : ''}`}>
+                  {opt.label}
+                </span>
+              </div>
+            );
+          })}
+          {search.trim() && !options.some(o => o.value === search.trim() || o.label.toLowerCase() === search.toLowerCase()) && (
+            <div
+              className="glass-dropdown__item"
+              onClick={() => { onChange(search.trim()); setOpen(false); setSearch(''); }}
+              style={{ color: 'var(--accent-bright)', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="glass-dropdown__radio" />
+              <span className="glass-dropdown__label" style={{ color: 'var(--accent-bright)' }}>
+                Use "{search.trim()}"
+              </span>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 const DEFAULT_SYSTEM_PROMPT = `You are a warm, highly engaging, and intelligent voice assistant companion. You speak naturally, concisely, and conversationally. Your primary mission is to guide the user through a structured 5-question check-in journey, validating their answers turn by turn before advancing to the next question.
 
 ### SPEECH & TONE RULES:
@@ -254,12 +397,16 @@ const EMPTY_FORM = {
   name: '',
   description: '',
   system_prompt: '',
+  greeting: '',
   llm_provider_id: '',
   llm_model: '',
   stt_provider_id: '',
   tts_provider_id: '',
   stt_model: '',
   tts_model: '',
+  tts_custom_model: '',
+  tts_custom_voice_id: '',
+  tts_custom_endpoint: '',
   stt_languages: ['en'],
   stt_primary_language: 'en',
   tts_languages: ['en'],
@@ -299,90 +446,12 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
   // Audio preview (Ported from dev branch SpeechSection)
   const [previewingModel, setPreviewingModel] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
   const currentAudioRef = useRef(null);
   const abortControllerRef = useRef(null);
   const previewDebounceRef = useRef(null);
 
-  // Dynamic Voice Profile calculation from dev branch
-  const getVoiceProfile = useCallback((modelOrVoiceId = '') => {
-    const id = modelOrVoiceId.toLowerCase();
-    if (id.includes('flux')) return { pitch: 1.0, rate: 1.15, gender: 'unisex', freq: 320 };
-    if (
-      id.includes('asteria') || id.includes('luna') || id.includes('stella') ||
-      id.includes('athena') || id.includes('hera') || id.includes('rachel') ||
-      id.includes('domi') || id.includes('bella') || id.includes('elli')
-    ) {
-      if (id.includes('luna') || id.includes('elli')) return { pitch: 1.45, rate: 0.95, gender: 'female', freq: 440 };
-      if (id.includes('stella') || id.includes('bella')) return { pitch: 1.25, rate: 1.05, gender: 'female', freq: 400 };
-      if (id.includes('athena')) return { pitch: 1.15, rate: 0.9, gender: 'female', freq: 380 };
-      if (id.includes('domi')) return { pitch: 1.35, rate: 1.1, gender: 'female', freq: 420 };
-      return { pitch: 1.3, rate: 1.0, gender: 'female', freq: 410 };
-    }
-    if (
-      id.includes('orion') || id.includes('arcas') || id.includes('perseus') ||
-      id.includes('zeus') || id.includes('arnold') || id.includes('adam') ||
-      id.includes('sam') || id.includes('rufus')
-    ) {
-      if (id.includes('arnold') || id.includes('zeus')) return { pitch: 0.58, rate: 0.85, gender: 'male', freq: 160 };
-      if (id.includes('arcas') || id.includes('adam')) return { pitch: 0.78, rate: 1.02, gender: 'male', freq: 220 };
-      if (id.includes('sam')) return { pitch: 0.85, rate: 1.1, gender: 'male', freq: 240 };
-      return { pitch: 0.7, rate: 0.95, gender: 'male', freq: 190 };
-    }
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) hash = (hash << 5) - hash + id.charCodeAt(i);
-    const pitch = 0.65 + (Math.abs(hash) % 85) / 100;
-    const rate = 0.85 + (Math.abs(hash >> 3) % 40) / 100;
-    const freq = 180 + (Math.abs(hash >> 2) % 300);
-    return { pitch, rate, gender: pitch > 1.0 ? 'female' : 'male', freq };
-  }, []);
-
-  // Distinct voice profile synthesizer fallback from dev branch
-  const playSynthesizedVoiceProfile = useCallback((voiceName = '') => {
-    const profile = getVoiceProfile(voiceName);
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (AudioContext) {
-        const ctx = new AudioContext();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = profile.pitch < 0.9 ? 'sawtooth' : 'sine';
-        osc.frequency.setValueAtTime(profile.freq, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(profile.freq * 1.2, ctx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      }
-    } catch (e) {}
-
-    if (!('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance("Hey, how's it going!");
-      utterance.rate = profile.rate;
-      utterance.pitch = profile.pitch;
-
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        const genderMatches = voices.filter((v) => {
-          const name = v.name.toLowerCase();
-          if (profile.gender === 'female') return name.includes('female') || name.includes('samantha') || name.includes('victoria') || name.includes('zira');
-          if (profile.gender === 'male') return name.includes('male') || name.includes('alex') || name.includes('daniel') || name.includes('david') || name.includes('fred');
-          return true;
-        });
-        if (genderMatches.length > 0) {
-          let hash = 0;
-          for (let i = 0; i < voiceName.length; i++) hash = (hash << 5) - hash + voiceName.charCodeAt(i);
-          utterance.voice = genderMatches[Math.abs(hash) % genderMatches.length];
-        }
-      }
-      setTimeout(() => { try { window.speechSynthesis.speak(utterance); } catch (e) {} }, 20);
-    } catch (e) {}
-  }, [getVoiceProfile]);
-
-  // Cancel any active audio or HTTP request immediately (from dev branch)
+  // Cancel any active audio or HTTP request immediately
   const terminateActiveAudio = useCallback(() => {
     if (previewDebounceRef.current) {
       clearTimeout(previewDebounceRef.current);
@@ -401,10 +470,8 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       }
       currentAudioRef.current = null;
     }
-    if ('speechSynthesis' in window) {
-      try { window.speechSynthesis.cancel(); } catch (e) {}
-    }
     setPreviewingModel(null);
+    setPreviewError(null);
   }, []);
 
   // Hybrid audio sample greeting player from dev branch with immediate cancellation
@@ -412,15 +479,35 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     if (!form.tts_provider_id || !ttsModel) return;
     terminateActiveAudio();
     setPreviewingModel(ttsModel);
+    setPreviewError(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Look up the provider's configured voice if none explicitly passed
+    const provider = speechProviders.find(p => p.id === form.tts_provider_id);
+    const providerVoiceId = provider?.tts_voice_id || '';
+
+    // Detect voice profile IDs vs engine model IDs:
+    // - Fish Audio voice profiles: 24-char hex (MongoDB ObjectIds)
+    // - ElevenLabs voice profiles: 20-char alphanumeric
+    let resolvedModel = ttsModel;
+    let resolvedVoiceId = voiceId || providerVoiceId;
+    if (/^[0-9a-f]{24}$/i.test(ttsModel)) {
+      // Fish Audio voice profile
+      resolvedVoiceId = ttsModel;
+      resolvedModel = '';
+    } else if (/^[a-zA-Z0-9]{20}$/.test(ttsModel) && !ttsModel.startsWith('eleven_') && !ttsModel.startsWith('scribe_')) {
+      // ElevenLabs voice profile (20-char alphanumeric, not a model ID)
+      resolvedVoiceId = ttsModel;
+      resolvedModel = '';
+    }
+
     try {
       const payload = {
         provider_id: form.tts_provider_id,
-        tts_model: ttsModel,
-        tts_voice_id: voiceId,
+        tts_model: resolvedModel,
+        tts_voice_id: resolvedVoiceId,
         text: "Hey, how's it going!",
       };
 
@@ -433,6 +520,10 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
       if (res.ok) {
         const arrayBuffer = await res.arrayBuffer();
+        // Detect content type from response for correct playback
+        const contentType = res.headers.get('content-type') || 'audio/wav';
+        const isMp3 = contentType.includes('mpeg') || contentType.includes('mp3');
+
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (AudioCtx) {
           try {
@@ -458,7 +549,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
           }
         }
 
-        const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+        const blob = new Blob([arrayBuffer], { type: isMp3 ? 'audio/mpeg' : 'audio/wav' });
         const audioUrl = URL.createObjectURL(blob);
         const audio = new Audio(audioUrl);
         currentAudioRef.current = audio;
@@ -471,17 +562,29 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
         await audio.play();
       } else {
+        // Extract the actual API error message
+        let errorMsg = 'Voice preview failed';
+        try {
+          const errData = await res.json();
+          errorMsg = errData.detail || `API error (${res.status})`;
+          // Simplify common error patterns
+          if (errorMsg.includes('payment_required') || errorMsg.includes('paid_plan_required')) {
+            errorMsg = 'ElevenLabs: Free plan cannot use library voices — upgrade or use a custom voice';
+          } else if (errorMsg.includes('Insufficient API credit')) {
+            errorMsg = 'Fish Audio: Insufficient API credit — add funds at fish.audio/app/developers';
+          }
+        } catch { errorMsg = `API error (${res.status})`; }
         setPreviewingModel(null);
-        playSynthesizedVoiceProfile(ttsModel);
+        setPreviewError(errorMsg);
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.warn('[BotIdentity] Live preview failed, using profile fallback:', err);
+        console.warn('[BotIdentity] Live preview failed:', err);
         setPreviewingModel(null);
-        playSynthesizedVoiceProfile(ttsModel);
+        setPreviewError(err.message || 'Voice preview failed — check network');
       }
     }
-  }, [form.tts_provider_id, terminateActiveAudio, playSynthesizedVoiceProfile]);
+  }, [form.tts_provider_id, speechProviders, terminateActiveAudio]);
 
   const fetchBotsList = useCallback(() => {
     fetch('/admin/api/bots')
@@ -547,8 +650,8 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
         setTtsByLanguage(data.tts_by_language || {});
         if (data.languages?.length) setAvailableLanguages(data.languages);
 
-        // For Fish Audio: also fetch real voice names from the library
-        if (provider.provider_type === 'fishaudio') {
+        // For Fish Audio & ElevenLabs: fetch real voice profiles from the provider API
+        if (provider.provider_type === 'fishaudio' || provider.provider_type === 'elevenlabs') {
           fetch(`/admin/api/bots/speech-voices/${form.tts_provider_id}`)
             .then(r => r.json())
             .then(voiceData => {
@@ -570,8 +673,8 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
               }
             })
             .catch(() => {});
-        } else {
-          // Fire-and-forget: batch prewarm for Deepgram/ElevenLabs
+        }
+          // Fire-and-forget: batch prewarm for all providers
           if (models.length > 0) {
             fetch('/admin/api/speech-providers/prewarm', {
               method: 'POST',
@@ -579,7 +682,6 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
               body: JSON.stringify({ provider_id: form.tts_provider_id, models: models.map(m => m.id) }),
             }).catch(() => {});
           }
-        }
       });
     } else {
       setTtsModels([]);
@@ -620,6 +722,10 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       tts_provider_id: bot.tts_provider_id || '',
       stt_model: bot.stt_model || '',
       tts_model: bot.tts_model || '',
+      tts_custom_model: bot.tts_custom_model || '',
+      tts_custom_voice_id: bot.tts_custom_voice_id || '',
+      tts_custom_endpoint: bot.tts_custom_endpoint || '',
+      greeting: bot.greeting || '',
       stt_languages: bot.stt_languages || bot.languages || ['en'],
       stt_primary_language: bot.stt_primary_language || bot.primary_language || 'en',
       tts_languages: bot.tts_languages || bot.languages || ['en'],
@@ -881,14 +987,10 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   primary={form.stt_primary_language}
                   onChange={(selected) => {
                     const newPrimary = selected.includes(form.stt_primary_language) ? form.stt_primary_language : (selected[0] || 'en');
-                    const langModels = sttByLanguage[newPrimary]?.models || [];
-                    const modelStillValid = form.stt_model === '' || langModels.some(m => m.id === form.stt_model);
-                    setForm({ ...form, stt_languages: selected, stt_primary_language: newPrimary, stt_model: modelStillValid ? form.stt_model : '' });
+                    setForm({ ...form, stt_languages: selected, stt_primary_language: newPrimary });
                   }}
                   onSetPrimary={(code) => {
-                    const langModels = sttByLanguage[code]?.models || [];
-                    const modelStillValid = form.stt_model === '' || langModels.some(m => m.id === form.stt_model);
-                    setForm({ ...form, stt_primary_language: code, stt_model: modelStillValid ? form.stt_model : '' });
+                    setForm({ ...form, stt_primary_language: code });
                   }}
                   label="Language"
                 />
@@ -896,7 +998,12 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   label="Model"
                   options={[
                     { value: '', label: 'Default' },
-                    ...(sttByLanguage[form.stt_primary_language]?.models || []).map(m => ({ value: m.id, label: m.name }))
+                    // Language-matching models first
+                    ...(sttByLanguage[form.stt_primary_language]?.models || []).map(m => ({ value: m.id, label: m.name })),
+                    // Then all other models (deduplicated)
+                    ...sttModels
+                      .filter(m => !(sttByLanguage[form.stt_primary_language]?.models || []).some(x => x.id === m.id))
+                      .map(m => ({ value: m.id, label: m.name })),
                   ]}
                   value={form.stt_model}
                   onChange={(val) => setForm({ ...form, stt_model: val })}
@@ -916,6 +1023,21 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   </span>
                 )}
               </label>
+              {previewError && (
+                <div style={{
+                  marginBottom: '0.75rem', padding: '8px 12px', borderRadius: '6px',
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+                  fontSize: '11px', color: '#f87171', lineHeight: '1.4',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                }}>
+                  <span style={{ fontWeight: 700, flexShrink: 0 }}>⚠</span>
+                  <span>{previewError}</span>
+                  <button
+                    onClick={() => setPreviewError(null)}
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '14px', padding: '0 4px', opacity: 0.7 }}
+                  >×</button>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                 <GlassSelect
                   label="Provider *"
@@ -930,24 +1052,29 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   primary={form.tts_primary_language}
                   onChange={(selected) => {
                     const newPrimary = selected.includes(form.tts_primary_language) ? form.tts_primary_language : (selected[0] || 'en');
-                    // Clear TTS model if it's not available in the new primary language
-                    const langVoices = ttsByLanguage[newPrimary]?.voices || [];
-                    const modelStillValid = form.tts_model === '' || langVoices.some(v => v.id === form.tts_model);
-                    setForm({ ...form, tts_languages: selected, tts_primary_language: newPrimary, tts_model: modelStillValid ? form.tts_model : '' });
+                    setForm({ ...form, tts_languages: selected, tts_primary_language: newPrimary });
                   }}
                   onSetPrimary={(code) => {
-                    // Clear TTS model if it's not available in the new primary language
-                    const langVoices = ttsByLanguage[code]?.voices || [];
-                    const modelStillValid = form.tts_model === '' || langVoices.some(v => v.id === form.tts_model);
-                    setForm({ ...form, tts_primary_language: code, tts_model: modelStillValid ? form.tts_model : '' });
+                    setForm({ ...form, tts_primary_language: code });
                   }}
                   label="Language"
                 />
-                <GlassSelect
+                <GlassComboBox
                   label="Voice"
                   options={[
                     { value: '', label: 'Default' },
-                    ...(ttsByLanguage[form.tts_primary_language]?.voices || []).map(m => ({ value: m.id, label: m.name }))
+                    // TTS engine models (e.g. Fish Audio s2.1-pro, ElevenLabs eleven_v3)
+                    ...ttsModels.map(m => ({ value: m.id, label: m.name })),
+                    // Language-matching voices first
+                    ...(ttsByLanguage[form.tts_primary_language]?.voices || [])
+                      .filter(v => !ttsModels.some(m => m.id === v.id))
+                      .map(m => ({ value: m.id, label: m.name })),
+                    // Then all other voices (deduplicated)
+                    ...Object.entries(ttsByLanguage)
+                      .filter(([lang]) => lang !== form.tts_primary_language)
+                      .flatMap(([, group]) => group.voices || [])
+                      .filter(v => !ttsModels.some(m => m.id === v.id) && !(ttsByLanguage[form.tts_primary_language]?.voices || []).some(x => x.id === v.id))
+                      .map(m => ({ value: m.id, label: m.name })),
                   ]}
                   value={form.tts_model}
                   onChange={(val) => {
@@ -960,7 +1087,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                       playAudioGreeting(val);
                     }, 300);
                   }}
-                  placeholder="Default"
+                  placeholder="Select or type custom..."
                   disabled={!form.tts_provider_id}
                 />
               </div>

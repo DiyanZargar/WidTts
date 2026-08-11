@@ -14,8 +14,9 @@ class PostgresBotRepository(BotRepositoryInterface):
                 """INSERT INTO bots (id, name, description, personality, system_prompt,
                    llm_provider_id, llm_model, stt_provider_id, tts_provider_id,
                    stt_model, tts_model, stt_languages, stt_primary_language,
-                   tts_languages, tts_primary_language, greeting, is_active)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)""",
+                   tts_languages, tts_primary_language, greeting,
+                   tts_custom_model, tts_custom_voice_id, tts_custom_endpoint, is_active)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)""",
                 bid, bot["name"], bot.get("description", ""),
                 bot.get("personality", ""), bot.get("system_prompt", ""),
                 bot.get("llm_provider_id"), bot.get("llm_model", ""),
@@ -26,6 +27,9 @@ class PostgresBotRepository(BotRepositoryInterface):
                 json.dumps(bot.get("tts_languages", ["en"])),
                 bot.get("tts_primary_language", "en"),
                 bot.get("greeting", ""),
+                bot.get("tts_custom_model", ""),
+                bot.get("tts_custom_voice_id", ""),
+                bot.get("tts_custom_endpoint", ""),
                 bot.get("is_active", False),
             )
         return bid
@@ -48,7 +52,7 @@ class PostgresBotRepository(BotRepositoryInterface):
             "name", "description", "personality", "system_prompt",
             "llm_provider_id", "llm_model", "stt_provider_id", "tts_provider_id",
             "stt_model", "tts_model", "stt_primary_language", "tts_primary_language",
-            "greeting", "is_active",
+            "greeting", "tts_custom_model", "tts_custom_voice_id", "tts_custom_endpoint", "is_active",
         ]
         json_keys = ["stt_languages", "tts_languages"]
 
