@@ -10,6 +10,12 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from app.modules.provider.infrastructure.persistence.postgres_speech_provider_repository import PostgresSpeechProviderRepository
 from app.shared.security.envelope_encryption import encrypt_and_store, load_and_decrypt
+from app.shared.constants.provider_urls import ELEVENLABS_API_URL, DEEPGRAM_API_URL, FISH_AUDIO_API_URL
+from app.shared.constants.model_catalogs import (
+    DEEPGRAM_STT_MODELS, DEEPGRAM_TTS_MODELS,
+    ELEVENLABS_FALLBACK_MODELS, ELEVENLABS_FALLBACK_VOICES,
+    FISH_AUDIO_TTS_MODELS,
+)
 
 router = APIRouter(prefix="/speech-providers", tags=["speech-providers"])
 _repo = PostgresSpeechProviderRepository()
@@ -52,68 +58,8 @@ class SampleAudioRequest(BaseModel):
     tts_model: Optional[str] = ""
     tts_voice_id: Optional[str] = ""
     text: Optional[str] = "Hey, how's it going!"
-
-
-DEEPGRAM_STT_MODELS = [
-    {"id": "flux", "name": "Flux (Ultra-Fast Conversational STT & Agent Loop)"},
     {"id": "nova-3", "name": "Nova-3 / Flux (Latest Ultra-Fast & High Accuracy)"},
     {"id": "nova-3-general", "name": "Nova-3 General"},
-    {"id": "nova-3-conversationalai", "name": "Nova-3 Conversational AI"},
-    {"id": "nova-3-medical", "name": "Nova-3 Medical"},
-    {"id": "nova-2", "name": "Nova-2 (Fast & Reliable)"},
-    {"id": "nova-2-general", "name": "Nova-2 General"},
-    {"id": "nova-2-meeting", "name": "Nova-2 Meeting"},
-    {"id": "nova-2-phonecall", "name": "Nova-2 Phone Call"},
-    {"id": "nova-2-finance", "name": "Nova-2 Finance"},
-    {"id": "nova-2-conversationalai", "name": "Nova-2 Conversational AI"},
-    {"id": "nova-2-medical", "name": "Nova-2 Medical"},
-    {"id": "nova", "name": "Nova v1"},
-    {"id": "enhanced", "name": "Enhanced"},
-    {"id": "base", "name": "Base"},
-]
-
-DEEPGRAM_TTS_MODELS = [
-    {"id": "flux-rufus-en", "name": "Flux Rufus (Conversational Male)"},
-    {"id": "flux-asteria-en", "name": "Flux Asteria (Conversational Female)"},
-    {"id": "flux-stella-en", "name": "Flux Stella (Conversational Female)"},
-    {"id": "flux-luna-en", "name": "Flux Luna (Conversational Female)"},
-    {"id": "flux-arcas-en", "name": "Flux Arcas (Conversational Male)"},
-    {"id": "flux-orion-en", "name": "Flux Orion (Conversational Male)"},
-    {"id": "flux-zeus-en", "name": "Flux Zeus (Conversational Male)"},
-    {"id": "aura-asteria-en", "name": "Aura Asteria (US Female)"},
-    {"id": "aura-luna-en", "name": "Aura Luna (US Female)"},
-    {"id": "aura-stella-en", "name": "Aura Stella (US Female)"},
-    {"id": "aura-athena-en", "name": "Aura Athena (UK Female)"},
-    {"id": "aura-hera-en", "name": "Aura Hera (US Female)"},
-    {"id": "aura-orion-en", "name": "Aura Orion (US Male)"},
-    {"id": "aura-arcas-en", "name": "Aura Arcas (US Male)"},
-    {"id": "aura-perseus-en", "name": "Aura Perseus (US Male)"},
-    {"id": "aura-angus-en", "name": "Aura Angus (UK Male)"},
-    {"id": "aura-orpheus-en", "name": "Aura Orpheus (US Male)"},
-    {"id": "aura-helios-en", "name": "Aura Helios (UK Male)"},
-    {"id": "aura-zeus-en", "name": "Aura Zeus (US Male)"},
-]
-
-ELEVENLABS_FALLBACK_MODELS = [
-    {"id": "eleven_flash_v2_5", "name": "Eleven Flash v2.5 (75ms Ultra-Low Latency Streaming)"},
-    {"id": "eleven_turbo_v2_5", "name": "Eleven Turbo v2.5 (Low Latency Real-time TTS)"},
-    {"id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2 (High Quality Conversational)"},
-    {"id": "eleven_multilingual_v1", "name": "Eleven Multilingual v1"},
-    {"id": "eleven_monolingual_v1", "name": "Eleven Monolingual v1"},
-]
-
-ELEVENLABS_FALLBACK_VOICES = [
-    {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (Expressive Female)"},
-    {"id": "AZnzlk1XvdvUeBnXmlld", "name": "Domi (Confident Female)"},
-    {"id": "EXAVITQu4vr4xnSDxMaL", "name": "Bella (Warm Female)"},
-    {"id": "ErXwobaYiN019PkySvjV", "name": "Antoni (Friendly Male)"},
-    {"id": "MF3mGyEYCl7XYWbV9V6O", "name": "Elli (Soft Female)"},
-    {"id": "TxGEqnHWrfWFTfGW9XjX", "name": "Josh (Conversational Male)"},
-    {"id": "VR6AewLTigWG4xSOukaG", "name": "Arnold (Deep Male)"},
-    {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (Clear Male)"},
-    {"id": "yoZ06aMxZJJ28mfd3POQ", "name": "Sam (Dynamic Male)"},
-]
-
 
 def _fetch_elevenlabs_data_sync(api_key: str):
     models = ELEVENLABS_FALLBACK_MODELS
@@ -123,7 +69,7 @@ def _fetch_elevenlabs_data_sync(api_key: str):
 
     # Fetch dynamic voices
     req = urllib.request.Request(
-        "https://api.elevenlabs.io/v1/voices",
+        f"{ELEVENLABS_API_URL}/voices",
         headers={"xi-api-key": api_key, "Accept": "application/json"},
         method="GET",
     )
@@ -147,7 +93,7 @@ def _fetch_deepgram_data_sync(api_key: str):
         return stt_models, tts_models, False
 
     req = urllib.request.Request(
-        "https://api.deepgram.com/v1/models",
+        f"{DEEPGRAM_API_URL}/v1/models",
         headers={"Authorization": f"Token {api_key}", "Accept": "application/json"},
         method="GET",
     )
@@ -197,7 +143,7 @@ def _fetch_fish_models_sync(api_key: str):
     # Fetch all voices from Fish Audio voice library (no language filter)
     try:
         req = urllib.request.Request(
-            "https://api.fish.audio/model?page_size=100",
+            f"{FISH_AUDIO_API_URL}/model?page_size=100",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Accept": "application/json",
@@ -222,7 +168,24 @@ def _fetch_fish_models_sync(api_key: str):
     return tts_models, voices, True
 
 
-_SAMPLE_AUDIO_CACHE: Dict[Tuple[str, str, str, str], Tuple[bytes, str]] = {}
+from collections import OrderedDict
+
+_SAMPLE_AUDIO_CACHE: OrderedDict[tuple[str, str, str, str], tuple[bytes, str]] = OrderedDict()
+_SAMPLE_AUDIO_CACHE_MAX = 50  # Max cached audio samples
+
+
+def _cache_get(key: tuple[str, str, str, str]) -> tuple[bytes, str] | None:
+    if key in _SAMPLE_AUDIO_CACHE:
+        _SAMPLE_AUDIO_CACHE.move_to_end(key)
+        return _SAMPLE_AUDIO_CACHE[key]
+    return None
+
+
+def _cache_set(key: tuple[str, str, str, str], value: tuple[bytes, str]) -> None:
+    _SAMPLE_AUDIO_CACHE[key] = value
+    _SAMPLE_AUDIO_CACHE.move_to_end(key)
+    while len(_SAMPLE_AUDIO_CACHE) > _SAMPLE_AUDIO_CACHE_MAX:
+        _SAMPLE_AUDIO_CACHE.popitem(last=False)
 
 
 def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
@@ -233,8 +196,9 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
     voice_id = req.tts_voice_id or ""
 
     cache_key = (provider_type, model, voice_id, text)
-    if cache_key in _SAMPLE_AUDIO_CACHE:
-        return _SAMPLE_AUDIO_CACHE[cache_key]
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
 
     if provider_type == "elevenlabs":
         # Detect if model is actually a 20-char voice ID (e.g. EXAVITQu4vr4xnSDxMaL)
@@ -244,7 +208,7 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         # Default working voice: Sarah (EXAVITQu4vr4xnSDxMaL) which works on free tier
         voice_id = voice_id or "EXAVITQu4vr4xnSDxMaL"
         model_id = model if (model and model.startswith("eleven_")) else "eleven_turbo_v2_5"
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128"
+        url = f"{ELEVENLABS_API_URL}/text-to-speech/{voice_id}?output_format=mp3_44100_128"
         payload = json.dumps({"text": text, "model_id": model_id}).encode("utf-8")
         headers = {
             "xi-api-key": api_key,
@@ -255,7 +219,7 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         with urllib.request.urlopen(request, timeout=5) as response:
             audio_bytes = response.read()
             res = (audio_bytes, "audio/mpeg")
-            _SAMPLE_AUDIO_CACHE[cache_key] = res
+            _cache_set(cache_key, res)
             return res
     elif provider_type == "fishaudio":
         # Detect if model is actually a 24-char hex voice profile ID
@@ -273,7 +237,7 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         }
         data_bytes = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            "https://api.fish.audio/v1/tts",
+            f"{FISH_AUDIO_API_URL}/v1/tts",
             data=data_bytes,
             headers=headers,
             method="POST",
@@ -281,7 +245,7 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         with urllib.request.urlopen(request, timeout=8) as response:
             audio_bytes = response.read()
             res = (audio_bytes, "audio/mpeg")
-            _SAMPLE_AUDIO_CACHE[cache_key] = res
+            _cache_set(cache_key, res)
             return res
     else:  # Deepgram REST (Real Neural Voice)
         target_model = model or "aura-asteria-en"
@@ -339,12 +303,12 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             if not m_name:
                 continue
             try:
-                url = f"https://api.deepgram.com/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
+                url = f"{DEEPGRAM_API_URL}/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
                 request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
                 with urllib.request.urlopen(request, timeout=10) as response:
                     audio_bytes = response.read()
                     res = (audio_bytes, "audio/wav")
-                    _SAMPLE_AUDIO_CACHE[cache_key] = res
+                    _cache_set(cache_key, res)
                     return res
             except Exception as e:
                 last_err = e
@@ -556,12 +520,12 @@ async def delete_speech_provider(provider_id: str):
     existing = await _repo.get_by_id(provider_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Speech provider not found")
-    # Check if any bots reference this provider
+    # Check if any deployed bot references this provider
     from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
     bot_repo = PostgresBotRepository()
     bots = await bot_repo.list_all()
-    using_bots = [b["name"] for b in bots if b.get("stt_provider_id") == provider_id or b.get("tts_provider_id") == provider_id]
+    using_bots = [b["name"] for b in bots if b.get("is_deployed") and (b.get("stt_provider_id") == provider_id or b.get("tts_provider_id") == provider_id)]
     if using_bots:
-        raise HTTPException(status_code=409, detail=f"Cannot delete — used by bot(s): {', '.join(using_bots)}")
+        raise HTTPException(status_code=409, detail=f"Cannot delete — used by deployed bot(s): {', '.join(using_bots)}. Undeploy them first.")
     await _repo.delete(provider_id)
     return {"status": "deleted"}

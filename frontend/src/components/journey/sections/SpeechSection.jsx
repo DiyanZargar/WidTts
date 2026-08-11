@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 /**
@@ -22,6 +22,10 @@ export function SpeechSection({ onProviderCreated }) {
 
   // Deletion modal state
   const [deletingProviderId, setDeletingProviderId] = useState(null);
+  const [deployedBotWarning, setDeployedBotWarning] = useState(null);
+  const [showAllProviders, setShowAllProviders] = useState(false);
+  const formRef = useRef(null);
+  const PROVIDERS_VISIBLE = 3;
 
   const fetchProvidersList = useCallback(() => {
     fetch('/admin/api/speech-providers')
@@ -141,6 +145,21 @@ export function SpeechSection({ onProviderCreated }) {
     setSaving(false);
   };
 
+  const handleRemoveClick = async (providerId) => {
+    try {
+      const res = await fetch('/admin/api/bots');
+      const bots = await res.json();
+      const usingBots = (bots || []).filter(b => b.is_deployed && (b.stt_provider_id === providerId || b.tts_provider_id === providerId));
+      if (usingBots.length > 0) {
+        setDeployedBotWarning({ providerId, botNames: usingBots.map(b => b.name) });
+        return;
+      }
+    } catch {
+      // If check fails, fall through to normal confirmation
+    }
+    setDeletingProviderId(providerId);
+  };
+
   const confirmDelete = async () => {
     if (!deletingProviderId) return;
     try {
@@ -183,14 +202,23 @@ export function SpeechSection({ onProviderCreated }) {
         {providers.length > 0 && (
           <div className="glass-pane" style={{ marginBottom: '1.5rem', padding: '1rem 1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span className="type-micro">Active Speech Providers (Click to Edit)</span>
-              {editingProviderId && (
-                <button onClick={resetFormToNew} style={{ background: 'none', border: 'none', color: 'var(--accent-bright)', fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}>
-                  + Create New Provider
-                </button>
-              )}
+              <span className="type-micro">Active Speech Providers ({providers.length})</span>
+              <button
+                onClick={() => { resetFormToNew(); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); }}
+                style={{
+                  background: 'var(--accent-bright)', border: 'none', color: '#000',
+                  fontSize: '11px', padding: '5px 14px', borderRadius: '6px',
+                  cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
+                  transition: 'opacity 200ms',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Provider
+              </button>
             </div>
-            {providers.map((p) => {
+            {(showAllProviders ? providers : providers.slice(0, PROVIDERS_VISIBLE)).map((p) => {
               const isSelected = editingProviderId === p.id;
               return (
                 <div
@@ -217,16 +245,32 @@ export function SpeechSection({ onProviderCreated }) {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <button type="button" onClick={(e) => { e.stopPropagation(); handleSelectForEdit(p); }} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--ink-90)', fontSize: '11px', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer' }}>Edit</button>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setDeletingProviderId(p.id); }} style={{ background: 'none', border: 'none', color: 'var(--ink-35)', fontSize: '12px', cursor: 'pointer' }} onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--warn)')} onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-35)')}>Remove</button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); handleRemoveClick(p.id); }} style={{ background: 'none', border: 'none', color: 'var(--ink-35)', fontSize: '12px', cursor: 'pointer' }} onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--warn)')} onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-35)')}>Remove</button>
                   </div>
                 </div>
               );
             })}
+
+            {providers.length > PROVIDERS_VISIBLE && (
+              <button
+                onClick={() => setShowAllProviders(!showAllProviders)}
+                style={{
+                  width: '100%', padding: '8px', marginTop: '4px',
+                  background: 'none', border: '1px dashed rgba(255,255,255,0.1)',
+                  borderRadius: '6px', color: 'var(--ink-60)', fontSize: '11px',
+                  cursor: 'pointer', transition: 'color 200ms',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-bright)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-60)')}
+              >
+                {showAllProviders ? 'Show less' : `Show ${providers.length - PROVIDERS_VISIBLE} more`}
+              </button>
+            )}
           </div>
         )}
 
         {/* Provider selection buttons */}
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div ref={formRef} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
           {['deepgram', 'elevenlabs', 'fishaudio'].map((type) => (
             <button
               key={type}
@@ -318,6 +362,71 @@ export function SpeechSection({ onProviderCreated }) {
           </div>
         )}
       </div>
+
+      {/* Cannot Delete Warning Modal — deployed bot uses this provider */}
+      {deployedBotWarning && createPortal(
+        <div
+          style={{
+            position: 'fixed', inset: 0,
+            width: '100vw', height: '100vh',
+            background: 'rgba(0,0,0,0.8)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            display: 'grid', placeItems: 'center', zIndex: 99999,
+          }}
+        >
+          <div
+            className="glass-pane"
+            style={{
+              width: '90%', maxWidth: '420px', padding: '2rem',
+              textAlign: 'center',
+              border: '1px solid rgba(255,255,255,0.18)',
+              boxShadow: '0 0 50px rgba(0,0,0,0.9), 0 0 20px rgba(255,255,255,0.05)',
+            }}
+          >
+            <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--ink-100)', marginBottom: '0.75rem' }}>
+              Cannot Delete
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--ink-60)', marginBottom: '1rem' }}>
+              This provider is currently used by deployed bot(s). Undeploy them first before deleting.
+            </p>
+            <details style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+              <summary style={{
+                fontSize: '12px', color: 'var(--accent-bright)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                listStyle: 'none', userSelect: 'none', justifyContent: 'center',
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 200ms' }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                {deployedBotWarning.botNames.length} deployed {deployedBotWarning.botNames.length === 1 ? 'bot' : 'bots'}
+              </summary>
+              <div style={{ marginTop: '0.5rem' }}>
+                {deployedBotWarning.botNames.map((name, i) => (
+                  <div key={i} style={{
+                    fontSize: '12px', color: 'var(--ink-90)', padding: '4px 0',
+                    borderBottom: i < deployedBotWarning.botNames.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                  }}>
+                    {name}
+                  </div>
+                ))}
+              </div>
+            </details>
+            <button
+              onClick={() => setDeployedBotWarning(null)}
+              style={{
+                padding: '8px 18px',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: 'var(--ink-100)', borderRadius: '6px',
+                cursor: 'pointer', fontSize: '12px',
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Delete Confirmation Modal */}
       {deletingProviderId && createPortal(

@@ -432,6 +432,9 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
   }, [result]);
   const [customModelInput, setCustomModelInput] = useState(false);
   const [deletingBotId, setDeletingBotId] = useState(null);
+  const [showAllBots, setShowAllBots] = useState(false);
+  const formRef = useRef(null);
+  const BOTS_VISIBLE = 3;
 
   // LLM models
   const [availableLlmModels, setAvailableLlmModels] = useState([]);
@@ -875,14 +878,31 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
         {bots.length > 0 && (
           <div className="glass-pane" style={{ marginBottom: '1.5rem', padding: '1rem 1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span className="type-micro">Configured Bots (Click to Edit)</span>
-              {editingBotId && (
-                <button onClick={resetFormToNew} style={{ background: 'none', border: 'none', color: 'var(--accent-bright)', fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}>
-                  + Create New Bot
-                </button>
-              )}
+              <span className="type-micro">Configured Bots ({bots.length})</span>
+              <button
+                onClick={() => { resetFormToNew(); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); }}
+                style={{
+                  background: 'var(--accent-bright)',
+                  border: 'none',
+                  color: '#000',
+                  fontSize: '11px',
+                  padding: '5px 14px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'opacity 200ms',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Bot
+              </button>
             </div>
-            {bots.map((b) => {
+            {(showAllBots ? bots : bots.slice(0, BOTS_VISIBLE)).map((b) => {
               const isSelected = editingBotId === b.id;
               const llmP = llmProviders.find((p) => p.id === b.llm_provider_id);
               const sttP = speechProviders.find((p) => p.id === b.stt_provider_id);
@@ -918,11 +938,27 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                 </div>
               );
             })}
+
+            {bots.length > BOTS_VISIBLE && (
+              <button
+                onClick={() => setShowAllBots(!showAllBots)}
+                style={{
+                  width: '100%', padding: '8px', marginTop: '4px',
+                  background: 'none', border: '1px dashed rgba(255,255,255,0.1)',
+                  borderRadius: '6px', color: 'var(--ink-60)', fontSize: '11px',
+                  cursor: 'pointer', transition: 'color 200ms',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-bright)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-60)')}
+              >
+                {showAllBots ? 'Show less' : `Show ${bots.length - BOTS_VISIBLE} more`}
+              </button>
+            )}
           </div>
         )}
 
         {/* Identity & Provider Selection */}
-        <div className="glass-pane" style={{ marginBottom: '1.5rem' }}>
+        <div className="glass-pane" ref={formRef} style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <span className="type-micro">{editingBotId ? 'Edit Bot Identity & Provider Setup' : 'Identity & Provider Setup'}</span>
             {editingBotId && <button type="button" onClick={resetFormToNew} style={{ background: 'none', border: 'none', color: 'var(--ink-60)', fontSize: '11px', cursor: 'pointer' }}>Cancel Editing</button>}

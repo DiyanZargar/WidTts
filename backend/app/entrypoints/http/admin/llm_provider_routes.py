@@ -9,6 +9,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.modules.provider.infrastructure.persistence.postgres_llm_provider_repository import PostgresLLMProviderRepository
 from app.shared.security.envelope_encryption import encrypt_and_store, load_and_decrypt
+from app.shared.constants.provider_urls import (
+    OPENAI_API_URL, ANTHROPIC_API_URL, MISTRAL_API_URL, MOONSHOT_API_URL,
+    OPENROUTER_API_URL, OLLAMA_API_URL, GOOGLE_API_URL,
+)
 
 router = APIRouter(prefix="/llm-providers", tags=["llm-providers"])
 _repo = PostgresLLMProviderRepository()
@@ -81,17 +85,17 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
     url = (base_url or "").lstrip("=").strip().rstrip("/")
     if not url:
         if provider_type == "openai":
-            url = "https://api.openai.com/v1"
+            url = OPENAI_API_URL
         elif provider_type == "anthropic":
-            url = "https://api.anthropic.com/v1"
+            url = ANTHROPIC_API_URL
         elif provider_type == "mistral":
-            url = "https://api.mistral.ai/v1"
+            url = MISTRAL_API_URL
         elif provider_type == "moonshot":
-            url = "https://api.moonshot.cn/v1"
+            url = MOONSHOT_API_URL
         elif provider_type == "openrouter":
-            url = "https://openrouter.ai/api/v1"
+            url = OPENROUTER_API_URL
         elif provider_type == "ollama":
-            url = "http://localhost:11434/v1"
+            url = OLLAMA_API_URL
 
     if url and not url.startswith("http://") and not url.startswith("https://"):
         if "localhost" in url or "127.0.0.1" in url:
@@ -100,14 +104,14 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
             url = f"https://{url}"
 
     if provider_type == "anthropic":
-        endpoint = "https://api.anthropic.com/v1/models"
+        endpoint = f"{ANTHROPIC_API_URL}/models"
         headers = {
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
             "Accept": "application/json",
         }
     elif provider_type == "google":
-        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+        endpoint = f"{GOOGLE_API_URL}/models?key={api_key}"
         headers = {"Accept": "application/json"}
     else:
         # Standard OpenAI / OpenAI-compatible / Groq / OpenRouter / Ollama
@@ -234,12 +238,12 @@ async def delete_llm_provider(provider_id: str):
     existing = await _repo.get_by_id(provider_id)
     if not existing:
         raise HTTPException(status_code=404, detail="LLM provider not found")
-    # Check if any bots reference this provider
+    # Check if any deployed bot references this provider
     from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
     bot_repo = PostgresBotRepository()
     bots = await bot_repo.list_all()
-    using_bots = [b["name"] for b in bots if b.get("llm_provider_id") == provider_id]
+    using_bots = [b["name"] for b in bots if b.get("is_deployed") and b.get("llm_provider_id") == provider_id]
     if using_bots:
-        raise HTTPException(status_code=409, detail=f"Cannot delete — used by bot(s): {', '.join(using_bots)}")
+        raise HTTPException(status_code=409, detail=f"Cannot delete — used by deployed bot(s): {', '.join(using_bots)}. Undeploy them first.")
     await _repo.delete(provider_id)
     return {"status": "deleted"}

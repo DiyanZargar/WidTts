@@ -183,7 +183,7 @@ export function AdminJourney() {
           <pointLight position={[4, -20, 2]} intensity={0.5} color="hsl(155, 95%, 58%)" />
           <pointLight position={[0, -40, 3]} intensity={0.4} color="hsl(160, 90%, 42%)" />
 
-          <ScrollControls pages={7} damping={0.15}>
+          <ScrollControls pages={8} damping={0.15}>
             {/* 3D content layer */}
             <Scroll>
               <CameraRig />
