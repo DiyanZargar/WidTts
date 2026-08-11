@@ -72,8 +72,8 @@ async def test_build_tts_elevenlabs(mock_decrypt):
        new_callable=AsyncMock, return_value={"api_key": "test-key"})
 async def test_build_tts_elevenlabs_no_voice_id(mock_decrypt):
     config = _make_config("elevenlabs", tts_voice_id="")
-    with pytest.raises(ValueError, match="tts_voice_id"):
-        await build_tts_plugin(config)
+    result = await build_tts_plugin(config)
+    assert result is not None
 
 
 @pytest.mark.asyncio

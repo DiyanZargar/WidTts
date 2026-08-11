@@ -1,4 +1,4 @@
 import logging
 
-logger = logging.getLogger("conversation_widget")
+logger = logging.getLogger("widtts")
 logging.basicConfig(level=logging.INFO)

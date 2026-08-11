@@ -273,23 +273,6 @@ export default function HomePage() {
         >
           {bot.name}
         </h1>
-        {bot.description && (
-          <p
-            style={{
-              fontFamily: tokens.font.body,
-              fontWeight: 600,
-              fontSize: '11px',
-              color: 'rgba(255,255,255,0.7)',
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              marginTop: '6px',
-              marginBottom: 0,
-              textShadow: '0 0 10px rgba(255,255,255,0.2)',
-            }}
-          >
-            {bot.description}
-          </p>
-        )}
         {(bot.llmModel || bot.speechModel) && (
           <div
             style={{

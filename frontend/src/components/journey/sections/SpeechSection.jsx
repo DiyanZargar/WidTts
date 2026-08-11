@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 export function SpeechSection({ onProviderCreated }) {
   const [providers, setProviders] = useState([]);
   const [editingProviderId, setEditingProviderId] = useState(null);
+  const [deployedProviderIds, setDeployedProviderIds] = useState(new Set());
   const [selectedType, setSelectedType] = useState(null);
   const [form, setForm] = useState({
     name: '',
@@ -31,6 +32,18 @@ export function SpeechSection({ onProviderCreated }) {
     fetch('/admin/api/speech-providers')
       .then((r) => r.json())
       .then((data) => setProviders(data || []))
+      .catch(() => {});
+    // Track which providers are used by deployed bots
+    fetch('/admin/api/bots')
+      .then((r) => r.json())
+      .then((bots) => {
+        const ids = new Set();
+        (bots || []).filter(b => b.is_deployed).forEach(b => {
+          if (b.stt_provider_id) ids.add(b.stt_provider_id);
+          if (b.tts_provider_id) ids.add(b.tts_provider_id);
+        });
+        setDeployedProviderIds(ids);
+      })
       .catch(() => {});
   }, []);
 
@@ -237,6 +250,18 @@ export function SpeechSection({ onProviderCreated }) {
                     <div>
                       <div style={{ color: isSelected ? 'var(--accent-bright)' : 'var(--ink-100)', fontSize: '14px', fontWeight: 500 }}>
                         {p.name} {isSelected && <span style={{ fontSize: '11px', opacity: 0.8 }}>(Editing)</span>}
+                        {deployedProviderIds.has(p.id) && (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            marginLeft: '8px', padding: '1px 6px', fontSize: '8px', fontWeight: 600,
+                            letterSpacing: '0.06em', borderRadius: '3px',
+                            background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)',
+                            color: 'var(--accent-bright)',
+                          }}>
+                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-bright)' }} />
+                            IN USE
+                          </span>
+                        )}
                       </div>
                       <div className="type-micro" style={{ fontSize: '10px', marginTop: '2px' }}>
                         {p.provider_type}

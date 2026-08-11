@@ -15,6 +15,9 @@ import { ReviewSection } from './sections/ReviewSection';
 import { DeploySection } from './sections/DeploySection';
 import { LiveSection } from './sections/LiveSection';
 
+/** Base scroll pages — enough for 6 sections at min-height 100vh. */
+const BASE_PAGES = 7.3;
+
 /**
  * ScrollTracker — Internal component that reads useScroll() inside Canvas context
  * and calls back with offset/section for the outer TopNav.
@@ -86,6 +89,21 @@ function ScrollGlow({ scrollOffset }) {
 }
 
 /**
+ * Find the ScrollControls scroll container — the div with overflowY: auto
+ * that ScrollControls creates as a sibling of the canvas.
+ */
+function findScrollContainer() {
+  const candidates = document.querySelectorAll('div');
+  for (const el of candidates) {
+    const style = window.getComputedStyle(el);
+    if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+      return el;
+    }
+  }
+  return null;
+}
+
+/**
  * AdminJourney — Main orchestrator.
  * One route, one Canvas, one scrollbar.
  * Composed of: EntryGate → Canvas (3D) + ScrollControls (HTML sections).
@@ -97,6 +115,8 @@ export function AdminJourney() {
   const [setupProgress, setSetupProgress] = useState(0);
   const [activated, setActivated] = useState(false);
   const scrollRef = useRef();
+  const [highlightBotId, setHighlightBotId] = useState(null);
+  const [scrollPages, setScrollPages] = useState(BASE_PAGES);
 
   // Provider state for passing to BotIdentitySection
   const [llmProviders, setLlmProviders] = useState([]);
@@ -135,12 +155,41 @@ export function AdminJourney() {
   }, []);
 
   const handleBotCreated = useCallback((data) => {
-    // Refresh deploy section — don't touch orb progress on saves
     setBotRefreshTrigger(t => t + 1);
   }, []);
 
   const handleActivated = useCallback(() => {
     setActivated(true);
+  }, []);
+
+  /**
+   * Called by DeploySection when the "Show more" dropdown toggles.
+   * extraPages: additional pages needed beyond BASE_PAGES.
+   */
+  const handleExtraPages = useCallback((extraPages) => {
+    setScrollPages(BASE_PAGES + extraPages);
+  }, []);
+
+  /**
+   * Navigate to Deploy section and scroll to a specific bot card.
+   * 1. Set highlightBotId so DeploySection expands the dropdown if needed
+   * 2. Wait for expansion, then scroll the ScrollControls container to the bot
+   */
+  const handleNavigateToDeploy = useCallback((botId) => {
+    setHighlightBotId(botId || null);
+    // Give DeploySection time to expand dropdown and render the bot card
+    setTimeout(() => {
+      const container = findScrollContainer();
+      if (!container || !botId) return;
+      // Find the bot card element
+      const card = document.querySelector(`[data-bot-id="${botId}"]`);
+      if (!card) return;
+      // Calculate the card's position relative to the scroll container
+      const cardTop = card.offsetTop;
+      const containerTop = container.scrollTop;
+      const cardRelativeTop = cardTop - container.offsetTop;
+      container.scrollTo({ top: cardRelativeTop - 60, behavior: 'smooth' });
+    }, 300);
   }, []);
 
   return (
@@ -183,7 +232,7 @@ export function AdminJourney() {
           <pointLight position={[4, -20, 2]} intensity={0.5} color="hsl(155, 95%, 58%)" />
           <pointLight position={[0, -40, 3]} intensity={0.4} color="hsl(160, 90%, 42%)" />
 
-          <ScrollControls pages={8} damping={0.15}>
+          <ScrollControls pages={scrollPages} damping={0.15}>
             {/* 3D content layer */}
             <Scroll>
               <CameraRig />
@@ -206,8 +255,14 @@ export function AdminJourney() {
                   llmProviders={llmProviders}
                   speechProviders={speechProviders}
                   onBotCreated={handleBotCreated}
+                  onNavigateToDeploy={handleNavigateToDeploy}
                 />
-                <DeploySection onActivated={handleActivated} refreshTrigger={botRefreshTrigger} />
+                <DeploySection
+                  onActivated={handleActivated}
+                  refreshTrigger={botRefreshTrigger}
+                  highlightBotId={highlightBotId}
+                  onExtraPages={handleExtraPages}
+                />
                 <LiveSection />
               </div>
             </Scroll>

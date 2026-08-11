@@ -101,18 +101,6 @@ export default function BotLanding() {
         >
           {bot.name}
         </h1>
-        {bot.description && (
-          <p
-            style={{
-              fontSize: '13px',
-              letterSpacing: '0.1em',
-              color: 'var(--ink-35)',
-              textTransform: 'uppercase',
-            }}
-          >
-            {bot.description}
-          </p>
-        )}
       </div>
 
       {/* Enter button */}

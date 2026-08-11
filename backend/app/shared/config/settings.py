@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     # ── Application ──
     app_secret: str = "dev-secret-change-in-production"
     port: int = 8000
+    room_inactivity_timeout_seconds: float = Field(default=30, alias="ROOM_INACTIVITY_TIMEOUT_SECONDS")
+    agent_token_ttl_seconds: int = Field(default=7200, alias="AGENT_TOKEN_TTL_SECONDS")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

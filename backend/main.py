@@ -88,14 +88,12 @@ async def on_startup():
     # 4. Active bot check
     logger.info("[STARTUP] Checking for active bot...")
     try:
-        from app.shared.database.db import get_pool
-        pool = await get_pool()
-        if pool:
-            row = await pool.fetchrow("SELECT id, name FROM bots WHERE is_active = true LIMIT 1")
-            if row:
-                logger.info("[STARTUP] ✅ Active bot: %s (id=%s)", row["name"], row["id"])
-            else:
-                logger.warning("[STARTUP] ⚠️ No active bot configured — voice sessions require an active bot")
+        from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
+        bot = await PostgresBotRepository().get_active()
+        if bot:
+            logger.info("[STARTUP] ✅ Active bot: %s (id=%s)", bot["name"], bot["id"])
+        else:
+            logger.warning("[STARTUP] ⚠️ No active bot configured — voice sessions require an active bot")
     except Exception as e:
         logger.warning("[STARTUP] ⚠️ Active bot check failed: %s (non-fatal)", e)
 

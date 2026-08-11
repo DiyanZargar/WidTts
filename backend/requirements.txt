@@ -7,7 +7,6 @@ httpx
 litellm
 asyncpg
 cryptography
-openai
 pytest
 pytest-asyncio
 livekit-api

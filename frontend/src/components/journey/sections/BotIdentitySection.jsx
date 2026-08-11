@@ -417,7 +417,7 @@ const EMPTY_FORM = {
  * BotIdentitySection — Bot name, description, voice selection, system prompt,
  * speech model selection, and language configuration.
  */
-export function BotIdentitySection({ llmProviders = [], speechProviders = [], onBotCreated }) {
+export function BotIdentitySection({ llmProviders = [], speechProviders = [], onBotCreated, onNavigateToDeploy }) {
   const [bots, setBots] = useState([]);
   const [editingBotId, setEditingBotId] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -925,6 +925,20 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                     <div>
                       <div style={{ color: isSelected ? 'var(--accent-bright)' : 'var(--ink-100)', fontSize: '14px', fontWeight: 500 }}>
                         {b.name} {isSelected && <span style={{ fontSize: '11px', opacity: 0.8 }}>(Editing)</span>}
+                        {b.is_deployed && (
+                          <span
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '3px',
+                              marginLeft: '8px', padding: '1px 6px', fontSize: '8px', fontWeight: 600,
+                              letterSpacing: '0.06em', borderRadius: '3px',
+                              background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)',
+                              color: 'var(--accent-bright)',
+                            }}
+                          >
+                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-bright)' }} />
+                            DEPLOYED
+                          </span>
+                        )}
                       </div>
                       <div className="type-micro" style={{ fontSize: '10px', marginTop: '2px' }}>
                         LLM: {llmP?.name || 'N/A'} • STT: {sttP?.name || 'N/A'}{b.stt_model ? ` (${b.stt_model})` : ''} • TTS: {ttsP?.name || 'N/A'}{b.tts_model ? ` (${b.tts_model})` : ''}

@@ -21,6 +21,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Tuple
 
+from app.shared.constants.provider_urls import FISH_AUDIO_API_URL
+from app.shared.constants.model_catalogs import FLUX_TO_AURA_MAP
+
 logger = logging.getLogger("speech_plugin_factory")
 
 
@@ -154,19 +157,7 @@ async def build_tts_plugin(config: Dict[str, Any]) -> Any:
 
         # Map flux-* model names to valid Deepgram Aura voices for LiveKit
         if model.startswith("flux-"):
-            flux_map = {
-                "flux-rufus-en": "aura-orion-en",
-                "flux-aura-en": "aura-asteria-en",
-                "flux-asteria-en": "aura-asteria-en",
-                "flux-orion-en": "aura-orion-en",
-                "flux-luna-en": "aura-luna-en",
-                "flux-arcas-en": "aura-arcas-en",
-                "flux-stella-en": "aura-stella-en",
-                "flux-athena-en": "aura-athena-en",
-                "flux-helios-en": "aura-helios-en",
-                "flux-zeus-en": "aura-zeus-en",
-            }
-            mapped = flux_map.get(model)
+            mapped = FLUX_TO_AURA_MAP.get(model)
             if mapped is None:
                 # Try generic flux-X → aura-X mapping for any new flux voices
                 candidate = "aura-" + model[5:]
@@ -425,7 +416,7 @@ class _FishAudioChunkedStream(ChunkedStream):
             )
 
             timeout_sec = self._conn_options.timeout if self._conn_options else 15
-            api_url = self._custom_endpoint.rstrip("/") + "/v1/tts" if self._custom_endpoint else "https://api.fish.audio/v1/tts"
+            api_url = self._custom_endpoint.rstrip("/") + "/v1/tts" if self._custom_endpoint else f"{FISH_AUDIO_API_URL}/v1/tts"
             async with session.post(
                 api_url,
                 json=payload,

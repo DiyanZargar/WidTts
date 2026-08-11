@@ -16,17 +16,17 @@ class SessionSnapshot:
     session_id: str
     bot_id: str
     bot_name: str
-    bot_description: str
-    system_prompt: str
-    stt_provider_type: str
-    stt_model: str
-    tts_provider_type: str
-    tts_model: str
-    llm_provider_id: str
-    llm_model: str
-    server_url: str
-    room_name: str
-    audio_sample_rate: int
+    bot_description: str = ""
+    system_prompt: str = ""
+    stt_provider_type: str = ""
+    stt_model: str = ""
+    tts_provider_type: str = ""
+    tts_model: str = ""
+    llm_provider_id: str = ""
+    llm_model: str = ""
+    server_url: str = ""
+    room_name: str = ""
+    audio_sample_rate: int = 16000
     # Fields with defaults
     greeting: str = ""
     stt_language: str = "en"
@@ -79,8 +79,8 @@ class LiveKitSession:
                 activation_threshold=0.45,
                 min_speech_duration=0.05,
             )
-            import os
-            timeout_sec = float(os.getenv("ROOM_INACTIVITY_TIMEOUT_SECONDS", "30"))
+            from app.shared.config.settings import settings
+            timeout_sec = settings.room_inactivity_timeout_seconds
 
             self._agent_session = AgentSession(
                 vad=self._vad_plugin,
@@ -123,6 +123,22 @@ class LiveKitSession:
             else:
                 identity += " When you need to end the conversation or say goodbye, append the marker [END_SESSION] at the very end of your response."
             instructions = f"{identity}\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else identity
+
+            # Default behavioral guidelines — these complement the user's system prompt.
+            # They only apply when the user's prompt does not specify otherwise.
+            _default_guidelines = (
+                "\n\n## RESPONSE STYLE\n"
+                "Unless the system prompt above says otherwise: "
+                "keep spoken responses short, direct, and meaningful — one or two sentences. "
+                "No filler, no repetition, no over-explanation.\n\n"
+                "## ANSWER HANDLING\n"
+                "Unless the system prompt above specifies different behavior:\n"
+                "- Clear, relevant answer: acknowledge briefly, then continue to the next topic or question in the same turn.\n"
+                "- Off-topic or unclear answer: acknowledge what was said, then redirect back.\n"
+                "- Self-correction: accept it naturally and move on.\n"
+                "- Wrapping up: brief personal summary, warm sign-off."
+            )
+            instructions += _default_guidelines
 
             # Store the FULL instructions (with language directive) so the
             # LLM bridge uses the same prompt for every conversation turn.

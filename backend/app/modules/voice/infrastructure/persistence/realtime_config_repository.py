@@ -60,10 +60,10 @@ class RealtimeConfigRepository:
 
         # Fallback to environment configuration (.env)
         from app.shared.config.settings import settings
-        from app.shared.security.envelope_encryption import encrypt_and_dump
+        from app.shared.security.envelope_encryption import encrypt_and_store
 
-        enc_key = await encrypt_and_dump(settings.livekit_api_key)
-        enc_secret = await encrypt_and_dump(settings.livekit_api_secret)
+        enc_key, _ = await encrypt_and_store({"value": settings.livekit_api_key})
+        enc_secret, _ = await encrypt_and_store({"value": settings.livekit_api_secret})
 
         return {
             "id": "00000000-0000-0000-0000-000000000000",
