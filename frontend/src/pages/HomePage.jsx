@@ -51,6 +51,16 @@ export default function HomePage() {
     speechModel: '',
   });
 
+  // Update page title with bot name
+  useEffect(() => {
+    if (bot.name && bot.name !== 'Voice Assistant') {
+      document.title = `${bot.name} — widTTS`;
+    }
+    return () => {
+      document.title = 'widTTS — Voice Platform';
+    };
+  }, [bot.name]);
+
   useEffect(() => {
     if (botSlug) {
       // Bot-specific route — fetch from public API

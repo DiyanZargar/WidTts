@@ -111,7 +111,7 @@ class LiveKitSession:
             bot_name = self.snapshot.bot_name or "Assistant"
             bot_desc = self.snapshot.bot_description or ""
             lang = self.snapshot.tts_primary_language or "en"
-            identity = f"You are {bot_name}."
+            identity = f"Your name is \"{bot_name}\". You MUST use this name when introducing yourself — never invent, guess, or substitute a different name."
             if bot_desc:
                 identity += f" {bot_desc}"
             if lang and lang != "en":
@@ -144,7 +144,7 @@ class LiveKitSession:
             # The system prompt already enforces language — the LLM will greet
             # in the configured language naturally.
             self._agent_session.generate_reply(
-                user_input=f"You are {bot_name}. A new user has just joined. Introduce yourself and greet them warmly in character.",
+                user_input=f'A new user has just joined. Your name is "{bot_name}". Introduce yourself using that exact name and greet them warmly in character.',
             )
 
             duration_ms = int((time.monotonic() - self._started_at) * 1000)
