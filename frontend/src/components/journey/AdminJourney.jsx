@@ -15,8 +15,8 @@ import { ReviewSection } from './sections/ReviewSection';
 import { DeploySection } from './sections/DeploySection';
 import { LiveSection } from './sections/LiveSection';
 
-/** Base scroll pages — enough for 6 sections at min-height 100vh. */
-const BASE_PAGES = 7.3;
+/** Base scroll pages — enough for all sections including expanded deploy dropdown. */
+const SCROLL_PAGES = 7.3;
 
 /**
  * ScrollTracker — Internal component that reads useScroll() inside Canvas context
@@ -116,7 +116,6 @@ export function AdminJourney() {
   const [activated, setActivated] = useState(false);
   const scrollRef = useRef();
   const [highlightBotId, setHighlightBotId] = useState(null);
-  const [scrollPages, setScrollPages] = useState(BASE_PAGES);
 
   // Provider state for passing to BotIdentitySection
   const [llmProviders, setLlmProviders] = useState([]);
@@ -164,11 +163,9 @@ export function AdminJourney() {
 
   /**
    * Called by DeploySection when the "Show more" dropdown toggles.
-   * extraPages: additional pages needed beyond BASE_PAGES.
+   * No-op — kept for prop compatibility.
    */
-  const handleExtraPages = useCallback((extraPages) => {
-    setScrollPages(BASE_PAGES + extraPages);
-  }, []);
+  const handleExtraPages = useCallback(() => {}, []);
 
   /**
    * Navigate to Deploy section and scroll to a specific bot card.
@@ -232,7 +229,7 @@ export function AdminJourney() {
           <pointLight position={[4, -20, 2]} intensity={0.5} color="hsl(155, 95%, 58%)" />
           <pointLight position={[0, -40, 3]} intensity={0.4} color="hsl(160, 90%, 42%)" />
 
-          <ScrollControls pages={scrollPages} damping={0.15}>
+          <ScrollControls pages={SCROLL_PAGES} damping={0.15}>
             {/* 3D content layer */}
             <Scroll>
               <CameraRig />

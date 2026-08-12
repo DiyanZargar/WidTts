@@ -10,6 +10,7 @@ export function SpeechSection({ onProviderCreated }) {
   const [editingProviderId, setEditingProviderId] = useState(null);
   const [deployedProviderIds, setDeployedProviderIds] = useState(new Set());
   const [selectedType, setSelectedType] = useState(null);
+  const verifyTimerRef = useRef(null);
   const [form, setForm] = useState({
     name: '',
     provider_type: 'deepgram',
@@ -62,17 +63,19 @@ export function SpeechSection({ onProviderCreated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      let data;
+      try { data = await res.json(); } catch { data = null; }
       if (res.ok && data) {
         setConnectionValid(true);
-        setTestResult({ success: true, message: `Connected to ${form.provider_type}! API key verified.` });
+        setTestResult({ success: true, message: `Connected — API key verified` });
       } else {
         setConnectionValid(false);
-        setTestResult({ success: false, message: data.detail || `Invalid API key for ${form.provider_type}.` });
+        const detail = data?.detail || data?.error;
+        setTestResult({ success: false, message: detail || `Could not verify. Check your API key.` });
       }
-    } catch (err) {
+    } catch {
       setConnectionValid(false);
-      setTestResult({ success: false, message: `Connection error: ${err.message}` });
+      setTestResult({ success: false, message: 'Connection failed. Check your API key and try again.' });
     }
     setTesting(false);
   }, [form.provider_type]);
@@ -86,9 +89,7 @@ export function SpeechSection({ onProviderCreated }) {
       credentials: { api_key: '' },
     });
     setConnectionValid(true);
-    setTestResult({ success: true, message: `Editing "${provider.name}". Enter a new API key to update.` });
-    // Verify saved key still works
-    testConnection('', provider.id);
+    setTestResult({ success: true, message: `Editing "${provider.name}". Enter your API key and click Test to verify.` });
   };
 
   const resetFormToNew = () => {
@@ -352,8 +353,11 @@ export function SpeechSection({ onProviderCreated }) {
                   onChange={(e) => {
                     const key = e.target.value;
                     setForm({ ...form, credentials: { api_key: key } });
-                    if (key.trim().length > 10) {
-                      testConnection(key, null);
+                    clearTimeout(verifyTimerRef.current);
+                    if (key.trim()) {
+                      verifyTimerRef.current = setTimeout(() => {
+                        testConnection(key, null);
+                      }, 600);
                     } else {
                       setConnectionValid(false);
                       setTestResult(null);
@@ -363,15 +367,40 @@ export function SpeechSection({ onProviderCreated }) {
               </div>
 
               {testing && (
-                <p style={{ fontSize: '12px', color: 'var(--ink-60)', margin: 0 }}>
-                  ⏳ Verifying API key...
-                </p>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 12px', borderRadius: '6px',
+                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+                }}>
+                  <span style={{
+                    width: '6px', height: '6px', borderRadius: '50%',
+                    background: 'var(--ink-35)', animation: 'pulse 1.2s ease-in-out infinite',
+                  }} />
+                  <span style={{ fontSize: '11px', color: 'var(--ink-60)' }}>
+                    Verifying connection...
+                  </span>
+                </div>
               )}
 
               {testResult && (
-                <p style={{ fontSize: '13px', margin: 0, color: testResult.success ? 'var(--accent-bright)' : 'var(--warn)' }}>
-                  {testResult.success ? '✓ ' : '✗ '}{testResult.message}
-                </p>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 12px', borderRadius: '6px',
+                  background: testResult.success ? 'rgba(16,185,129,0.06)' : 'rgba(245,158,11,0.06)',
+                  border: `1px solid ${testResult.success ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}`,
+                }}>
+                  <span style={{
+                    width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+                    background: testResult.success ? 'var(--accent-bright)' : 'var(--warn)',
+                    boxShadow: testResult.success ? '0 0 6px var(--accent-mid)' : '0 0 6px rgba(245,158,11,0.4)',
+                  }} />
+                  <span style={{
+                    fontSize: '11px', fontWeight: 500,
+                    color: testResult.success ? 'var(--accent-bright)' : 'var(--warn)',
+                  }}>
+                    {testResult.message}
+                  </span>
+                </div>
               )}
 
               <button

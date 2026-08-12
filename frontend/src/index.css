@@ -627,6 +627,11 @@
 .flash-success { animation: flash-success 800ms var(--ease-expo) forwards; }
 .flash-error { animation: flash-error 800ms var(--ease-expo) forwards; }
 
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 /* ─── Toast Notification ─── */
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(16px); }
@@ -662,7 +667,7 @@
 }
 
 .journey-section:last-child {
-  min-height: 70vh;
+  min-height: 40vh;
   margin-bottom: 0;
 }
 

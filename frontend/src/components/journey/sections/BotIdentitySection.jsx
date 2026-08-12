@@ -423,6 +423,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
+  const [slugConfirm, setSlugConfirm] = useState(null); // { slug } when confirming new bot
 
   // Auto-dismiss result toast after 5 seconds
   useEffect(() => {
@@ -784,6 +785,17 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
   const handleSave = async () => {
     if (!isFormValid) return;
+    // On new bot creation, show slug confirmation first
+    if (!editingBotId) {
+      const slug = form.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'bot';
+      setSlugConfirm({ slug });
+      return;
+    }
+    await doSave();
+  };
+
+  const doSave = async () => {
+    setSlugConfirm(null);
     setSaving(true);
     setResult(null);
     try {
@@ -980,8 +992,28 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
           <div style={{ display: 'grid', gap: '1rem' }}>
             <div>
-              <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>Bot Name *</label>
-              <input className="glass-input" placeholder="Bot name (e.g. Sales Assistant)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>
+                Bot Name * {editingBotId && <span style={{ color: 'var(--ink-35)', fontSize: '9px' }}>(locked — endpoint is permanent)</span>}
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="glass-input"
+                  placeholder="Bot name (e.g. Sales Assistant)"
+                  value={form.name}
+                  disabled={Boolean(editingBotId)}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  style={editingBotId ? { opacity: 0.5, cursor: 'not-allowed', paddingRight: '36px' } : {}}
+                />
+                {editingBotId && (
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                )}
+              </div>
             </div>
             <div>
               <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>Description (Optional)</label>
@@ -1232,6 +1264,51 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
           document.body
         );
       })()}
+
+      {/* Slug Confirmation Modal — first-time bot creation */}
+      {slugConfirm && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)', display: 'grid', placeItems: 'center', zIndex: 99999 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSlugConfirm(null); }}
+        >
+          <div className="glass-pane" style={{ width: '90%', maxWidth: '440px', padding: '2rem', border: '1px solid rgba(16,185,129,0.2)' }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--ink-100)', marginBottom: '0.75rem', fontSize: '18px' }}>
+              Confirm bot endpoint
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--ink-60)', marginBottom: '1rem', lineHeight: '1.5' }}>
+              Your bot will be accessible at:
+            </p>
+            <div style={{
+              padding: '10px 14px', marginBottom: '1rem',
+              background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)',
+              borderRadius: '6px', fontFamily: 'monospace', fontSize: '13px',
+              color: 'var(--accent-bright)',
+            }}>
+              {window.location.origin}/bot/{slugConfirm.slug}
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--ink-35)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+              The endpoint <strong style={{ color: 'var(--ink-100)' }}>/bot/{slugConfirm.slug}</strong> will be permanent and cannot be changed after creation. The host URL adapts automatically wherever you deploy.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button
+                className="action-btn"
+                onClick={() => setSlugConfirm(null)}
+                style={{ fontSize: '12px', padding: '8px 16px' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="action-btn action-btn--primary"
+                onClick={() => doSave()}
+                style={{ fontSize: '12px', padding: '8px 20px' }}
+              >
+                Confirm & Save
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Sidebar hints */}
       <div className="journey-section__sidebar">

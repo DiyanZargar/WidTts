@@ -62,6 +62,7 @@ export function LLMSection({ onProviderCreated }) {
   }, [fetchProvidersList]);
 
   // Automatic connection verification
+  const verifyTimerRef = useRef(null);
   const autoTestAndFetchModels = useCallback(async (baseUrl, apiKey, providerType, providerId = null) => {
     const url = baseUrl !== undefined ? baseUrl : form.base_url;
     const key = apiKey !== undefined ? apiKey : form.credentials.api_key;
@@ -70,6 +71,7 @@ export function LLMSection({ onProviderCreated }) {
     if (!url && !providerId) return;
 
     setTestingConnection(true);
+    setTestResult(null);
     try {
       const bodyPayload = providerId && !key
         ? { provider_id: providerId, base_url: url, provider_type: type }
@@ -80,17 +82,19 @@ export function LLMSection({ onProviderCreated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyPayload),
       });
-      const data = await res.json();
+      let data;
+      try { data = await res.json(); } catch { data = null; }
       if (res.ok && data?.models) {
         setConnectionValid(true);
-        setTestResult({ success: true, message: `Connected! Discovered ${data.models?.length || 0} models dynamically.` });
+        setTestResult({ success: true, message: `Connected — ${data.models.length} models discovered` });
       } else {
         if (!providerId) setConnectionValid(false);
-        setTestResult({ success: false, message: 'Could not connect to provider. Verify base URL and API key.' });
+        const detail = data?.detail || data?.error;
+        setTestResult({ success: false, message: detail || 'Could not verify. Check your base URL and API key.' });
       }
-    } catch (err) {
+    } catch {
       if (!providerId) setConnectionValid(false);
-      setTestResult({ success: false, message: `Connection error: ${err.message}` });
+      setTestResult({ success: false, message: 'Connection failed. Check your base URL and try again.' });
     }
     setTestingConnection(false);
   }, [form.base_url, form.credentials.api_key, form.provider_type]);
@@ -104,10 +108,7 @@ export function LLMSection({ onProviderCreated }) {
       credentials: { api_key: '' }, // empty means keep saved encrypted key
     });
     setConnectionValid(true); // Existing configured provider is valid by default
-    setTestResult({ success: true, message: `Editing "${provider.name}". Change any field below and click Update.` });
-
-    // Verify connection using saved provider credentials in background
-    autoTestAndFetchModels(provider.base_url, '', provider.provider_type, provider.id);
+    setTestResult({ success: true, message: `Editing "${provider.name}". Enter your API key and click Test to verify.` });
   };
 
   const resetFormToNew = () => {
@@ -434,21 +435,55 @@ export function LLMSection({ onProviderCreated }) {
                 onChange={(e) => {
                   const key = e.target.value;
                   setForm({ ...form, credentials: { api_key: key } });
-                  autoTestAndFetchModels(form.base_url, key, form.provider_type, editingProviderId);
+                  // Debounce: verify 600ms after user stops typing, only if key is non-empty
+                  clearTimeout(verifyTimerRef.current);
+                  if (key.trim()) {
+                    verifyTimerRef.current = setTimeout(() => {
+                      autoTestAndFetchModels(form.base_url, key, form.provider_type, editingProviderId);
+                    }, 600);
+                  } else {
+                    setTestResult(null);
+                    setConnectionValid(false);
+                  }
                 }}
               />
             </div>
 
             {testingConnection && (
-              <p style={{ fontSize: '12px', color: 'var(--ink-60)', margin: 0 }}>
-                ⏳ Verifying API key & querying endpoint connection...
-              </p>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 12px', borderRadius: '6px',
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                <span style={{
+                  width: '6px', height: '6px', borderRadius: '50%',
+                  background: 'var(--ink-35)', animation: 'pulse 1.2s ease-in-out infinite',
+                }} />
+                <span style={{ fontSize: '11px', color: 'var(--ink-60)' }}>
+                  Verifying connection...
+                </span>
+              </div>
             )}
 
             {testResult && (
-              <p style={{ fontSize: '13px', margin: 0, color: testResult.success ? 'var(--accent-bright)' : 'var(--warn)' }}>
-                {testResult.success ? '✓ ' : '✗ '}{testResult.message}
-              </p>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 12px', borderRadius: '6px',
+                background: testResult.success ? 'rgba(16,185,129,0.06)' : 'rgba(245,158,11,0.06)',
+                border: `1px solid ${testResult.success ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}`,
+              }}>
+                <span style={{
+                  width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+                  background: testResult.success ? 'var(--accent-bright)' : 'var(--warn)',
+                  boxShadow: testResult.success ? '0 0 6px var(--accent-mid)' : '0 0 6px rgba(245,158,11,0.4)',
+                }} />
+                <span style={{
+                  fontSize: '11px', fontWeight: 500,
+                  color: testResult.success ? 'var(--accent-bright)' : 'var(--warn)',
+                }}>
+                  {testResult.message}
+                </span>
+              </div>
             )}
 
             <button
