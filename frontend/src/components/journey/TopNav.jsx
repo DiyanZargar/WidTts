@@ -19,7 +19,7 @@ export function TopNav({ scrollRef, currentSection = 0, visible = true }) {
 
   const handleJumpTo = (index, offset) => {
     let container = scrollRef?.current?.el;
-    
+
     if (!container) {
       const candidates = document.querySelectorAll('div');
       for (const el of candidates) {
@@ -32,11 +32,21 @@ export function TopNav({ scrollRef, currentSection = 0, visible = true }) {
     }
 
     if (container) {
-      const maxScroll = container.scrollHeight - container.clientHeight;
-      container.scrollTo({
-        top: maxScroll * offset,
-        behavior: 'smooth',
-      });
+      // Use actual section DOM position instead of hardcoded offset fraction.
+      // This works correctly even when form sections grow taller than 100vh.
+      const sections = document.querySelectorAll('.journey-section');
+      if (sections && sections[index]) {
+        // offsetTop is relative to the nearest positioned ancestor (the content wrapper).
+        // Scrolling the scroll container to this value shows that section at viewport top.
+        container.scrollTo({
+          top: sections[index].offsetTop,
+          behavior: 'smooth',
+        });
+      } else {
+        // Fallback to proportional offset if section not yet in DOM
+        const maxScroll = container.scrollHeight - container.clientHeight;
+        container.scrollTo({ top: maxScroll * offset, behavior: 'smooth' });
+      }
     } else {
       const sections = document.querySelectorAll('.journey-section');
       if (sections && sections[index]) {

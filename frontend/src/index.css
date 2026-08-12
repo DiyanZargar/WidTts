@@ -667,8 +667,9 @@
 }
 
 .journey-section:last-child {
-  min-height: 40vh;
+  min-height: 100vh;
   margin-bottom: 0;
+  padding-bottom: 6rem;
 }
 
 .journey-section__content {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ScrollControls, Scroll, useScroll } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import { EntryGate } from './EntryGate';
 import { TopNav } from './TopNav';
 import { ScrollMouseIndicator } from './ScrollMouseIndicator';
@@ -15,8 +16,72 @@ import { ReviewSection } from './sections/ReviewSection';
 import { DeploySection } from './sections/DeploySection';
 import { LiveSection } from './sections/LiveSection';
 
-/** Base scroll pages — enough for all sections including expanded deploy dropdown. */
+/**
+ * Initial scroll pages — must be large enough so the fill div lets users
+ * scroll to all sections even before ScrollPagesMeter corrects it.
+ * 7.3 = 6 sections × 100vh + 1.3 buffer, matching TopNav Live offset 0.833 = 5/6.
+ */
 const SCROLL_PAGES = 7.3;
+
+/**
+ * ScrollPagesMeter — Runs INSIDE the Canvas on every animation frame.
+ *
+ * WHY THIS EXISTS:
+ * drei's ScrollControls captures `scrollThreshold` ONCE on mount in a closure.
+ * If HTML sections later grow taller than 100vh (BotIdentity=1314 lines,
+ * LLM=664 lines), the Live section drifts past the stale threshold.
+ *
+ * Previous React-state approach caused drei's useEffect (pages in its deps)
+ * to re-run and reset el.scrollTop = 1 — teleporting user back to top.
+ *
+ * This component bypasses React state entirely:
+ * 1. Measures actual content height from the DOM wrapper every frame.
+ * 2. Updates data.fill.style.height (scrollable spacer) directly.
+ * 3. Updates data.pages (used in translation formula) directly.
+ * 4. Corrects data.scroll.current using ACTUAL threshold (not drei's stale one).
+ * 5. Applies the corrected CSS transform directly, bypassing delta > eps guard.
+ *
+ * No re-renders. No scroll resets. Smooth every frame.
+ */
+function ScrollPagesMeter() {
+  const data = useScroll();
+  const smoothRef = useRef(0);
+
+  useFrame(() => {
+    // The HTML content wrapper = first child of drei's sticky viewport div
+    const wrapper = data.fixed && data.fixed.firstElementChild;
+    if (!wrapper) return;
+
+    const contentH = wrapper.scrollHeight;
+    const viewportH = window.innerHeight;
+    if (!contentH || !viewportH) return;
+
+    // pages = viewport-heights in content (no buffer — last section visible at max scroll)
+    const correctPages = contentH / viewportH;
+
+    // Update fill height so max scrollTop covers all content
+    if (Math.abs(correctPages - data.pages) > 0.05) {
+      data.fill.style.height = correctPages * 100 + '%';
+      data.pages = correctPages;
+    }
+
+    // Correct raw offset using ACTUAL content height (not drei's stale captured threshold)
+    const correctThreshold = contentH - viewportH;
+    const rawOffset = correctThreshold > 0 ? data.el.scrollTop / correctThreshold : 0;
+
+    // Smooth the corrected offset (matches drei's 0.15 damping)
+    smoothRef.current += (rawOffset - smoothRef.current) * (data.damping || 0.15);
+
+    // Apply corrected translation, overriding drei's stale one
+    const translate = viewportH * (data.pages - 1) * -smoothRef.current;
+    wrapper.style.transform = 'translate3d(0,' + translate + 'px,0)';
+
+    // Keep data.scroll.current in sync so drei's damping also converges
+    data.scroll.current = rawOffset;
+  });
+
+  return null;
+}
 
 /**
  * ScrollTracker — Internal component that reads useScroll() inside Canvas context
@@ -74,17 +139,12 @@ function CorePositioned({ progress, activated }) {
 }
 
 /**
- * ScrollGlow — A radial glow that follows the user's scroll position,
- * creating a "spotlight" effect on the active section.
+ * ScrollGlow — A radial glow that follows the user's scroll position.
  */
 function ScrollGlow({ scrollOffset }) {
   const topPercent = 30 + scrollOffset * 40;
-
   return (
-    <div
-      className="scroll-glow"
-      style={{ top: `${topPercent}%` }}
-    />
+    <div className="scroll-glow" style={{ top: topPercent + '%' }} />
   );
 }
 
@@ -161,30 +221,20 @@ export function AdminJourney() {
     setActivated(true);
   }, []);
 
-  /**
-   * Called by DeploySection when the "Show more" dropdown toggles.
-   * No-op — kept for prop compatibility.
-   */
+  // No-op: ScrollPagesMeter handles resizing automatically every frame
   const handleExtraPages = useCallback(() => {}, []);
 
   /**
    * Navigate to Deploy section and scroll to a specific bot card.
-   * 1. Set highlightBotId so DeploySection expands the dropdown if needed
-   * 2. Wait for expansion, then scroll the ScrollControls container to the bot
    */
   const handleNavigateToDeploy = useCallback((botId) => {
     setHighlightBotId(botId || null);
-    // Give DeploySection time to expand dropdown and render the bot card
     setTimeout(() => {
       const container = findScrollContainer();
       if (!container || !botId) return;
-      // Find the bot card element
-      const card = document.querySelector(`[data-bot-id="${botId}"]`);
+      const card = document.querySelector('[data-bot-id="' + botId + '"]');
       if (!card) return;
-      // Calculate the card's position relative to the scroll container
-      const cardTop = card.offsetTop;
-      const containerTop = container.scrollTop;
-      const cardRelativeTop = cardTop - container.offsetTop;
+      const cardRelativeTop = card.offsetTop - container.offsetTop;
       container.scrollTo({ top: cardRelativeTop - 60, behavior: 'smooth' });
     }, 300);
   }, []);
@@ -239,12 +289,7 @@ export function AdminJourney() {
 
             {/* HTML content layer — moves with scroll */}
             <Scroll html style={{ width: '100%' }}>
-              <div
-                style={{
-                  width: '100%',
-                  position: 'relative',
-                }}
-              >
+              <div style={{ width: '100%', position: 'relative' }}>
                 <OverviewSection />
                 <LLMSection onProviderCreated={handleLLMCreated} />
                 <SpeechSection onProviderCreated={handleSpeechCreated} />
@@ -266,6 +311,12 @@ export function AdminJourney() {
 
             {/* Scroll tracker for nav sync */}
             <ScrollTracker onScroll={handleScroll} />
+
+            {/*
+              Corrects drei's stale scrollThreshold every frame.
+              No React state. No scroll position resets.
+            */}
+            <ScrollPagesMeter />
           </ScrollControls>
         </Canvas>
       </div>
