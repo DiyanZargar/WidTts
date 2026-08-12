@@ -180,9 +180,8 @@ cd widTts
 # Copy environment template
 cp .env.example .env
 
-# Generate a secure Base64 MASTER_ENCRYPTION_KEY into .env
-KEY=$(python3 -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())")
-sed -i '' "s|MASTER_ENCRYPTION_KEY=.*|MASTER_ENCRYPTION_KEY=${KEY}|" .env
+# Generate a secure Base64 MASTER_ENCRYPTION_KEY into .env (Cross-Platform)
+python3 -c "import os,base64; k=base64.b64encode(os.urandom(32)).decode(); open('.env','w').write(open('.env.example').read().replace('REPLACE_WITH_BASE64_32_BYTE_MASTER_KEY', k))"
 ```
 
 Verify the key was set:
