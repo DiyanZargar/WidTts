@@ -1,34 +1,97 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: widtts-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: widtts
-      POSTGRES_PASSWORD: widtts_dev_password
-      POSTGRES_DB: widtts
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-widtts}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-widtts_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-widtts}
     volumes:
       - widtts_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U widtts"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-widtts} -d ${POSTGRES_DB:-widtts}"]
+      interval: 3s
       timeout: 5s
       retries: 5
+    networks:
+      - widtts-network
 
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.9.12
     container_name: widtts-livekit
     restart: unless-stopped
+    command: --config /etc/livekit.yaml --dev
     ports:
       - "7880:7880"
       - "7881:7881"
-    command: --config /etc/livekit.yaml --dev
+      - "50000-50100:50000-50100/udp"
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml
+    networks:
+      - widtts-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: widtts-backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-widtts}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY}
+      APP_SECRET: ${APP_SECRET}
+      PORT: ${PORT:-8000}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_INTERNAL_URL: ${LIVEKIT_INTERNAL_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_TOKEN_TTL_SECONDS: ${LIVEKIT_TOKEN_TTL_SECONDS}
+      LIVEKIT_AUDIO_SAMPLE_RATE: ${LIVEKIT_AUDIO_SAMPLE_RATE}
+      AGENT_TOKEN_TTL_SECONDS: ${AGENT_TOKEN_TTL_SECONDS}
+      ROOM_INACTIVITY_TIMEOUT_SECONDS: ${ROOM_INACTIVITY_TIMEOUT_SECONDS}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - widtts-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: widtts-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - widtts-network
 
 volumes:
   widtts_pgdata:
+
+networks:
+  widtts-network:
+    driver: bridge

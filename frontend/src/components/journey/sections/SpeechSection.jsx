@@ -140,14 +140,11 @@ export function SpeechSection({ onProviderCreated }) {
       });
       const data = await res.json();
       if (res.ok) {
-        const savedId = data.id || editingProviderId;
-        setEditingProviderId(savedId);
-        setConnectionValid(true);
-        setForm((prev) => ({ ...prev, credentials: { api_key: '' } }));
         setTestResult({
           success: true,
           message: editingProviderId ? 'Provider updated!' : 'Provider saved!',
         });
+        resetFormToNew();
         onProviderCreated?.(data);
         fetchProvidersList();
       } else {

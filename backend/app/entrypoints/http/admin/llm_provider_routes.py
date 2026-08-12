@@ -1,6 +1,7 @@
 """LLM provider management endpoints."""
 
 import json
+import logging
 import urllib.request
 import urllib.error
 import asyncio
@@ -16,6 +17,7 @@ from app.shared.constants.provider_urls import (
 
 router = APIRouter(prefix="/llm-providers", tags=["llm-providers"])
 _repo = PostgresLLMProviderRepository()
+logger = logging.getLogger("llm_provider_routes")
 
 
 class LLMProviderCreateRequest(BaseModel):

@@ -56,6 +56,7 @@ class Settings(BaseSettings):
 
     # ── Realtime Voice Transport (LiveKit) ──
     livekit_url: str = Field(default="ws://localhost:7880", alias="LIVEKIT_URL")
+    livekit_internal_url: Optional[str] = Field(default=None, alias="LIVEKIT_INTERNAL_URL")
     livekit_api_key: str = Field(default="devkey", alias="LIVEKIT_API_KEY")
     livekit_api_secret: str = Field(default="secret", alias="LIVEKIT_API_SECRET")
     livekit_token_ttl_seconds: int = Field(default=3600, alias="LIVEKIT_TOKEN_TTL_SECONDS")

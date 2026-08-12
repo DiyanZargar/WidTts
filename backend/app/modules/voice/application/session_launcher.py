@@ -170,8 +170,10 @@ async def start_session(
         agent_jwt = agent_token.to_jwt()
 
         async with http_context.open():
-            await room.connect(server_url, agent_jwt)
-            logger.info("[SESSION] Agent connected to room=%s", room_name)
+            # Use internal URL for container-to-container connection when configured
+            agent_connect_url = settings.livekit_internal_url or server_url
+            await room.connect(agent_connect_url, agent_jwt)
+            logger.info("[SESSION] Agent connected to room=%s via %s", room_name, agent_connect_url)
 
             session = LiveKitSession(snapshot=snapshot)
             await session.start(room)

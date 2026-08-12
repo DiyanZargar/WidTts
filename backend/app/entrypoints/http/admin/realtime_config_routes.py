@@ -193,6 +193,8 @@ async def delete_realtime_config(config_id: str):
 @router.post("/test")
 async def test_realtime_connection(req: Optional[TestConnectionRequest] = None):
     """Test connection to a realtime transport provider."""
+    from app.shared.config.settings import settings
+
     server_url = None
     api_key = None
     api_secret = None
@@ -221,23 +223,26 @@ async def test_realtime_connection(req: Optional[TestConnectionRequest] = None):
         api_key = await _decrypt_value(config["encrypted_api_key"])
         api_secret = await _decrypt_value(config["encrypted_api_secret"])
 
+    # Use internal URL for backend container connectivity test when configured
+    test_connect_url = settings.livekit_internal_url or server_url
+
     try:
         from livekit.api import LiveKitAPI, ListRoomsRequest
 
-        api = LiveKitAPI(url=server_url, api_key=api_key, api_secret=api_secret)
+        api = LiveKitAPI(url=test_connect_url, api_key=api_key, api_secret=api_secret)
         await api.room.list_rooms(ListRoomsRequest())
         await api.aclose()
 
         if target_id:
             await _repo.update_test_status(target_id, "success")
 
-        logger.info(f"[ADMIN] Realtime connection test passed for {server_url}")
-        return {"ok": True, "status": "success", "message": f"Successfully connected to {server_url}"}
+        logger.info(f"[ADMIN] Realtime connection test passed for {test_connect_url}")
+        return {"ok": True, "status": "success", "message": f"Successfully connected to {test_connect_url}"}
 
     except Exception as e:
         error_msg = str(e)[:200]
         if target_id:
             await _repo.update_test_status(target_id, "failed", error_msg)
 
-        logger.warning(f"[ADMIN] Realtime connection test failed for {server_url}: {error_msg}")
+        logger.warning(f"[ADMIN] Realtime connection test failed for {test_connect_url}: {error_msg}")
         return {"ok": False, "status": "failed", "error": error_msg}

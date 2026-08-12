@@ -72,7 +72,16 @@ async def on_startup():
         logger.error(f"[STARTUP] ❌ {msg}")
         errors.append(msg)
 
-    # 3. Runtime configuration
+    # 3. Seed default realtime config (must run AFTER encryption key bootstrap)
+    logger.info("[STARTUP] Seeding default realtime config if needed...")
+    try:
+        from app.shared.database.init_db import seed_default_realtime_config
+        await seed_default_realtime_config()
+        logger.info("[STARTUP] ✅ Realtime config seed complete")
+    except Exception as e:
+        logger.warning("[STARTUP] ⚠️ Realtime config seed warning: %s (non-fatal)", e)
+
+    # 4. Runtime configuration
     logger.info("[STARTUP] Checking runtime configuration...")
     try:
         from app.modules.voice.infrastructure.persistence.realtime_config_repository import RealtimeConfigRepository

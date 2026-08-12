@@ -22,15 +22,16 @@ async def seed_default_realtime_config():
         repo = RealtimeConfigRepository()
         all_configs = await repo.get_all()
         if not all_configs:
-            encrypted_key, _ = await encrypt_and_store({"value": settings.livekit_api_key})
-            encrypted_secret, _ = await encrypt_and_store({"value": settings.livekit_api_secret})
+            encrypted_key_blob, key_version = await encrypt_and_store({"value": settings.livekit_api_key})
+            encrypted_secret_blob, _ = await encrypt_and_store({"value": settings.livekit_api_secret})
 
+            # Wrap in {blob, key_version} format expected by token routes
             await repo.create({
                 "name": "Environment Transport",
                 "provider_type": "livekit",
                 "server_url": settings.livekit_url,
-                "encrypted_api_key": encrypted_key,
-                "encrypted_api_secret": encrypted_secret,
+                "encrypted_api_key": {"blob": encrypted_key_blob, "key_version": key_version},
+                "encrypted_api_secret": {"blob": encrypted_secret_blob, "key_version": key_version},
                 "room_token_ttl_seconds": settings.livekit_token_ttl_seconds,
                 "audio_sample_rate": settings.livekit_audio_sample_rate,
                 "is_active": True,
@@ -41,14 +42,16 @@ async def seed_default_realtime_config():
 
 
 async def init_db():
-    """Initialize database: create pool, run migrations, and seed defaults."""
+    """Initialize database: create pool and run migrations.
+
+    Note: seed_default_realtime_config() is NOT called here because it
+    requires the encryption key to be bootstrapped first. Call
+    seed_default_realtime_config() separately after bootstrap_encryption_key().
+    """
     logger.info("Initializing PostgreSQL connection pool...")
     await get_pool()
 
     logger.info("Running pending migrations...")
     await run_migrations_pg()
-
-    logger.info("Seeding default transport configuration...")
-    await seed_default_realtime_config()
 
     logger.info("Database initialization complete")
