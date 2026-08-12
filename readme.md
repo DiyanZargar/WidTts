@@ -1,6 +1,6 @@
 # widTTS — Voice Platform
 
-A multi-tenant, real-time AI voice assistant platform built using Clean Architecture on the backend (FastAPI, PostgreSQL, LiveKit Agents, LiteLLM) and a modern 3D interactive visualizer on the frontend (React 18, Three.js / React Three Fiber, Vite 5, Tailwind CSS).
+A multi-tenant, real-time AI voice assistant platform built using Clean Architecture on the backend (FastAPI, SQLite, LiveKit Agents, LiteLLM) and a modern 3D interactive visualizer on the frontend (React 18, Three.js / React Three Fiber, Vite 5, Tailwind CSS).
 
 Each bot is independently configurable with its own LLM, TTS voice, STT model, system prompt, and languages. Deployed bots get unique shareable URLs (`/bot/{slug}`).
 
@@ -9,7 +9,7 @@ Each bot is independently configurable with its own LLM, TTS voice, STT model, s
 ## 🏗️ Architectural Overview
 
 * **Multi-Bot, Multi-Tenant**: Create multiple bots, each with independent LLM/TTS/STT config. Deploy each bot to a unique public URL. No shared state between bots.
-* **Zero Hardcoding Policy**: All provider settings are managed dynamically via PostgreSQL with Envelope Encryption (AES-256-GCM). No secrets in application code.
+* **Zero Hardcoding Policy**: All provider settings are managed dynamically via SQLite with Envelope Encryption (AES-256-GCM). No secrets in application code.
 * **LiveKit Infrastructure**: Realtime WebRTC audio runs server-side via official LiveKit plugins (Silero VAD, Deepgram, ElevenLabs). LiveKit is transport only — the app owns its architecture.
 * **Single Seam LLM Bridge**: `WidTTSLLMBridge` implements `livekit.agents.llm.LLM`. It enforces conversation policies (STOP/REPEAT/CORRECTION/END) before delegating to the bot's configured LLM via LiteLLM.
 * **LLM-Driven Personality**: Each bot generates its own greeting and goodbye based on its system prompt — no hardcoded text. The bot's identity (`"You are {bot_name}."`) is prepended to instructions.
@@ -35,10 +35,10 @@ widTts/
 │   │   │   └── voice/               # LiveKit session adapter, LLM bridge, speech plugin factory
 │   │   └── shared/
 │   │       ├── config/settings.py   # Centralized Pydantic Settings
-│   │       ├── database/            # asyncpg pool, migrations, init
+│   │       ├── database/            # SQLite adapter, migrations, init
 │   │       └── security/            # Envelope encryption, token service
-│   ├── tests/                       # pytest suite (114 tests)
-│   ├── app/shared/database/migrations_pg/  # SQL migration files (auto-applied at startup)
+│   ├── tests/                       # pytest suite (109 tests)
+│   ├── app/shared/database/migrations_sqlite/  # SQL migration files (auto-applied at startup)
 │   ├── Dockerfile                   # Multi-stage backend image (Python 3.11-slim)
 │   ├── .dockerignore
 │   ├── .env.example                 # Backend env template (local dev)
@@ -61,7 +61,7 @@ widTts/
 │   ├── .env.example                 # Frontend env template
 │   ├── package.json
 │   └── vite.config.js               # Vite dev server + proxy config
-├── docker-compose.yml               # 4-service stack (postgres, livekit, backend, frontend)
+├── docker-compose.yml               # 3-service stack (livekit, backend, frontend)
 ├── .env.example                     # Root env template (Docker deployment)
 ├── .gitignore
 ├── livekit.yaml                     # LiveKit OSS configuration
@@ -89,24 +89,22 @@ Pre-configured in `livekit.yaml`:
 
 ## ⚡ Local Development (Without Docker)
 
-Run backend and frontend directly on your machine. Only PostgreSQL and LiveKit run in Docker.
+Run backend and frontend directly on your machine. Only LiveKit runs in Docker. SQLite requires no external database server.
 
 ### Prerequisites
 
 * Python 3.11+
 * Node.js 18+
-* Docker & Docker Compose v2+
+* Docker & Docker Compose v2+ (for LiveKit only)
 
-### 1. Start Infrastructure (PostgreSQL + LiveKit)
+### 1. Start LiveKit
 
 ```bash
 cd widTts
-docker compose up -d postgres livekit
+docker compose up -d livekit
 ```
 
-This starts:
-- **PostgreSQL** on `localhost:5432` (db: `widtts`, user: `widtts`, pass: `widtts_dev_password`)
-- **LiveKit Server** on `localhost:7880`
+This starts **LiveKit Server** on `localhost:7880`.
 
 ### 2. Configure & Start Backend
 
@@ -132,7 +130,7 @@ uvicorn main:app --reload --port 8000
 ```
 
 The backend will:
-- Connect to PostgreSQL at `localhost:5432`
+- Create the SQLite database at `data/widtts.db`
 - Run all database migrations automatically
 - Seed a default realtime transport config pointing to `ws://localhost:7880`
 - Bootstrap the encryption key
@@ -165,7 +163,7 @@ Open http://localhost:3000 in your browser.
 
 ## 🐳 Docker Deployment (Full Containerized Stack)
 
-All four services (PostgreSQL, LiveKit, Backend, Frontend) run inside Docker containers.
+All three services (LiveKit, Backend, Frontend) run inside Docker containers. SQLite stores data in a Docker volume.
 
 ### Prerequisites
 
@@ -229,11 +227,6 @@ Start stack in foreground (view stdout in terminal):
 docker compose up
 ```
 
-Start specific services only (e.g. only infrastructure):
-```bash
-docker compose up -d postgres livekit
-```
-
 ### 4. Verify Health
 
 Check container status and health checks:
@@ -241,7 +234,7 @@ Check container status and health checks:
 docker compose ps
 ```
 
-All four containers should report `healthy` or `running`.
+All three containers should report `healthy` or `running`.
 
 Verify endpoints:
 ```bash
@@ -264,11 +257,7 @@ All runtime configuration is driven by environment variables. The backend uses a
 
 | Variable | Purpose | Default / Source |
 |---|---|---|
-| `POSTGRES_USER` | Database username | `widtts` *(built-in dev default)* |
-| `POSTGRES_PASSWORD` | Database password | `widtts_dev_password` *(built-in dev default)* |
-| `POSTGRES_HOST` | Database hostname | `postgres` (Docker) / `localhost` (local) |
-| `POSTGRES_PORT` | Database port | `5432` |
-| `POSTGRES_DB` | Database name | `widtts` |
+| `DB_PATH` | SQLite database file path | `/app/data/widtts.db` (Docker) / `data/widtts.db` (local) |
 | `MASTER_ENCRYPTION_KEY` | Base64 32-byte AES-256 master key | **Generated by user** via `python3 -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"` |
 | `APP_SECRET` | Application session secret | `dev-secret-change-in-production` |
 | `LIVEKIT_URL` | Browser/public-facing LiveKit URL | `ws://localhost:7880` *(local Docker)* or Cloud URL (`cloud.livekit.io`) |
@@ -283,7 +272,7 @@ All runtime configuration is driven by environment variables. The backend uses a
 ### Backend `backend/.env` (Local Development)
 
 Same variables, but:
-- `POSTGRES_HOST=localhost` (not `postgres`)
+- `DB_PATH=data/widtts.db` (relative to backend directory)
 - `LIVEKIT_INTERNAL_URL` is not needed (backend connects directly to `localhost:7880`)
 
 ### Frontend `frontend/.env`
@@ -292,7 +281,7 @@ Same variables, but:
 |---|---|
 | `VITE_WS_BASE_URL` | WebSocket base URL (dev proxy only) |
 
-> **Security**: No backend secrets (`MASTER_ENCRYPTION_KEY`, `APP_SECRET`, `LIVEKIT_API_SECRET`, `POSTGRES_PASSWORD`) are ever exposed to the frontend build or browser JavaScript.
+> **Security**: No backend secrets (`MASTER_ENCRYPTION_KEY`, `APP_SECRET`, `LIVEKIT_API_SECRET`) are ever exposed to the frontend build or browser JavaScript.
 
 ### Dual LiveKit URL Design
 
@@ -315,7 +304,7 @@ Locally: both use `ws://localhost:7880`.
 docker compose images
 
 # Alternative
-docker images | grep -E "widtts|postgres|livekit"
+docker images | grep -E "widtts|livekit"
 
 # Check container running status & health
 docker compose ps
@@ -340,7 +329,6 @@ docker compose logs -f
 # Stream logs from a specific service
 docker compose logs -f backend
 docker compose logs -f frontend
-docker compose logs -f postgres
 docker compose logs -f livekit
 
 # View last 50 lines of backend logs
@@ -369,15 +357,30 @@ curl -s -X POST http://localhost:8000/realtime/token \
 
 ```bash
 # Inspect applied database migrations
-docker compose exec postgres psql -U widtts -d widtts \
-  -c "SELECT filename, applied_at FROM schema_migrations ORDER BY filename;"
+docker compose exec backend python3 -c "
+import asyncio, aiosqlite
+async def check():
+    conn = await aiosqlite.connect('/app/data/widtts.db')
+    rows = await (await conn.execute('SELECT filename, applied_at FROM schema_migrations ORDER BY filename')).fetchall()
+    for r in rows: print(r)
+    await conn.close()
+asyncio.run(check())
+"
 
 # Inspect seeded transport config
-docker compose exec postgres psql -U widtts -d widtts \
-  -c "SELECT name, provider_type, server_url, is_active FROM realtime_runtime_config;"
+docker compose exec backend python3 -c "
+import asyncio, aiosqlite
+async def check():
+    conn = await aiosqlite.connect('/app/data/widtts.db')
+    conn.row_factory = aiosqlite.Row
+    rows = await (await conn.execute('SELECT name, provider_type, server_url, is_active FROM realtime_runtime_config')).fetchall()
+    for r in rows: print(dict(r))
+    await conn.close()
+asyncio.run(check())
+"
 
-# Enter interactive PostgreSQL CLI
-docker compose exec -it postgres psql -U widtts -d widtts
+# Open SQLite CLI inside container
+docker compose exec backend python3 -c "import sqlite3; conn = sqlite3.connect('/app/data/widtts.db'); print('SQLite version:', sqlite3.sqlite_version)"
 ```
 
 ### Executing Tests
@@ -406,7 +409,7 @@ docker compose exec -it frontend /bin/sh
 docker compose exec backend python3 -c "from app.shared.config.settings import settings; print(settings.livekit_url)"
 
 # Check backend environment variables
-docker compose exec backend env | grep -E "POSTGRES|LIVEKIT|MASTER"
+docker compose exec backend env | grep -E "DB_PATH|LIVEKIT|MASTER"
 ```
 
 ### Restarting & Cleanup
@@ -418,7 +421,7 @@ docker compose restart backend
 # Restart all services
 docker compose restart
 
-# Stop the entire stack (preserves database data)
+# Stop the entire stack (preserves database volume)
 docker compose down
 
 # Stop stack AND reset database (wipes database volume)
@@ -495,7 +498,7 @@ Backend returns `409 Conflict` with a descriptive message listing affected bots.
 
 ## 🗄️ Database Migrations
 
-Migrations are stored in `backend/app/shared/database/migrations_pg/` and run automatically at application startup. No manual migration step is needed.
+Migrations are stored in `backend/app/shared/database/migrations_sqlite/` and run automatically at application startup. No manual migration step is needed.
 
 The system uses a `schema_migrations` table to track which migrations have been applied. On each startup, only pending migrations are executed.
 
@@ -537,8 +540,8 @@ npm run build
 ```
 Host Browser ──HTTP :3000──▶ FRONTEND (Nginx) ──HTTP──▶ BACKEND (FastAPI)
                                │                            │
-                               │                            ├──▶ POSTGRES (postgres:5432)
                                │                            └──▶ LIVEKIT (ws://livekit:7880)
+                               │                            └──▶ SQLite (data/widtts.db)
 Host Browser ──WS :7880──────▶ LIVEKIT SERVER
 ```
 
@@ -546,8 +549,8 @@ Host Browser ──WS :7880──────▶ LIVEKIT SERVER
 |---|---|---|
 | Browser → Frontend | HTTP :3000 | Serves React SPA |
 | Frontend → Backend | HTTP | Nginx reverse proxy (`http://backend:8000`) |
-| Backend → PostgreSQL | TCP | Docker DNS (`postgres:5432`) |
 | Backend → LiveKit | WebSocket | Docker DNS (`ws://livekit:7880`) |
+| Backend → SQLite | File I/O | Local file (`/app/data/widtts.db`) |
 | Browser → LiveKit | WebSocket | Host-mapped port (`ws://localhost:7880`) |
 
 ---
@@ -557,7 +560,6 @@ Host Browser ──WS :7880──────▶ LIVEKIT SERVER
 | Symptom | Diagnostic Command | What to Look For |
 |---|---|---|
 | Container restarting | `docker compose logs backend` | Startup traceback or missing env var |
-| Database connection failed | `docker compose ps postgres` | Must be `healthy` |
 | LiveKit unreachable from backend | `docker compose exec backend python3 -c "import httpx; print(httpx.get('http://livekit:7880').status_code)"` | Should return `200` |
 | Browser can't connect to LiveKit | `docker compose ps livekit` | Verify port 7880 is mapped |
 | Token endpoint returns 503 | `curl -s http://localhost:8000/realtime/token -X POST -H "Content-Type: application/json" -d '{}'` | No active bot configured |
@@ -566,3 +568,4 @@ Host Browser ──WS :7880──────▶ LIVEKIT SERVER
 | Encryption key errors | `grep MASTER_ENCRYPTION_KEY .env` | Must be a valid Base64 string |
 | Build failure | `docker compose build --no-cache backend 2>&1` | Check pip/npm network or compilation errors |
 | Port conflict | `lsof -i :3000` / `lsof -i :8000` / `lsof -i :7880` | Kill conflicting process or change port mapping |
+| Database locked | `docker compose restart backend` | SQLite WAL mode handles concurrency; restart clears stale locks |

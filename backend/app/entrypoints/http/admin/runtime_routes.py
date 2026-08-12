@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 from app.shared.database.db import get_connection
+from app.shared.config.settings import settings
 
 router = APIRouter(prefix="/runtime", tags=["runtime"])
 
@@ -11,8 +12,8 @@ async def runtime_health():
     """Database and system health check."""
     try:
         async with get_connection() as conn:
-            version = await conn.fetchval("SELECT version()")
-        return {"status": "ok", "database": "connected", "pg_version": version}
+            version = await conn.fetchval("SELECT sqlite_version()")
+        return {"status": "ok", "database": "connected", "sqlite_version": version}
     except Exception as e:
         return {"status": "error", "database": "disconnected", "error": str(e)}
 
@@ -27,7 +28,7 @@ async def runtime_stats():
                 SELECT id, name, description, system_prompt, llm_provider_id, llm_model, 
                        stt_provider_id, tts_provider_id, is_active 
                 FROM bots 
-                WHERE is_active = TRUE 
+                WHERE is_active = 1 
                 ORDER BY created_at DESC 
                 LIMIT 1
             """)
@@ -38,14 +39,14 @@ async def runtime_stats():
                 if active_bot["stt_provider_id"]:
                     sp = await conn.fetchrow("""
                         SELECT id, name, provider_type, stt_model 
-                        FROM speech_providers WHERE id = $1
+                        FROM speech_providers WHERE id = ?
                     """, active_bot["stt_provider_id"])
                     if sp:
                         stt_info = dict(sp)
                 if active_bot["tts_provider_id"]:
                     sp = await conn.fetchrow("""
                         SELECT id, name, provider_type, tts_model, tts_voice_id 
-                        FROM speech_providers WHERE id = $1
+                        FROM speech_providers WHERE id = ?
                     """, active_bot["tts_provider_id"])
                     if sp:
                         tts_info = dict(sp)

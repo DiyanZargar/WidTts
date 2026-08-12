@@ -16,7 +16,7 @@ class PostgresBotRepository(BotRepositoryInterface):
                    stt_model, tts_model, stt_languages, stt_primary_language,
                    tts_languages, tts_primary_language, greeting,
                    tts_custom_model, tts_custom_voice_id, tts_custom_endpoint, is_active)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 bid, bot["name"], bot.get("description", ""),
                 bot.get("personality", ""), bot.get("system_prompt", ""),
                 bot.get("llm_provider_id"), bot.get("llm_model", ""),
@@ -36,7 +36,7 @@ class PostgresBotRepository(BotRepositoryInterface):
 
     async def get_by_id(self, bot_id: str) -> Optional[Dict[str, Any]]:
         async with get_connection() as conn:
-            row = await conn.fetchrow("SELECT * FROM bots WHERE id = $1", bot_id)
+            row = await conn.fetchrow("SELECT * FROM bots WHERE id = ?", bot_id)
             return _deserialize_row(row) if row else None
 
     async def list_all(self) -> List[Dict[str, Any]]:
@@ -47,7 +47,6 @@ class PostgresBotRepository(BotRepositoryInterface):
     async def update(self, bot_id: str, updates: Dict[str, Any]) -> None:
         sets = []
         vals = []
-        idx = 1
         scalar_keys = [
             "name", "description", "personality", "system_prompt",
             "llm_provider_id", "llm_model", "stt_provider_id", "tts_provider_id",
@@ -58,59 +57,57 @@ class PostgresBotRepository(BotRepositoryInterface):
 
         for key in scalar_keys:
             if key in updates:
-                sets.append(f"{key} = ${idx}")
+                sets.append(f"{key} = ?")
                 vals.append(updates[key])
-                idx += 1
         for key in json_keys:
             if key in updates:
                 val = updates[key]
-                sets.append(f"{key} = ${idx}")
+                sets.append(f"{key} = ?")
                 vals.append(json.dumps(val) if isinstance(val, list) else val)
-                idx += 1
 
         if not sets:
             return
-        sets.append("updated_at = NOW()")
+        sets.append("updated_at = datetime('now')")
         vals.append(bot_id)
-        sql = f"UPDATE bots SET {', '.join(sets)} WHERE id = ${idx}"
+        sql = f"UPDATE bots SET {', '.join(sets)} WHERE id = ?"
         async with get_connection() as conn:
             await conn.execute(sql, *vals)
 
     async def delete(self, bot_id: str) -> None:
         async with get_connection() as conn:
-            await conn.execute("DELETE FROM bots WHERE id = $1", bot_id)
+            await conn.execute("DELETE FROM bots WHERE id = ?", bot_id)
 
     async def get_active(self) -> Optional[Dict[str, Any]]:
         async with get_connection() as conn:
-            row = await conn.fetchrow("SELECT * FROM bots WHERE is_active = TRUE")
+            row = await conn.fetchrow("SELECT * FROM bots WHERE is_active = 1")
             return _deserialize_row(row) if row else None
 
     async def activate(self, bot_id: str) -> None:
         async with get_transaction() as conn:
-            await conn.execute("UPDATE bots SET is_active = FALSE WHERE is_active = TRUE")
+            await conn.execute("UPDATE bots SET is_active = 0 WHERE is_active = 1")
             await conn.execute(
-                "UPDATE bots SET is_active = TRUE, updated_at = NOW() WHERE id = $1",
+                "UPDATE bots SET is_active = 1, updated_at = datetime('now') WHERE id = ?",
                 bot_id,
             )
 
     async def deploy(self, bot_id: str, slug: str) -> None:
         async with get_connection() as conn:
             await conn.execute(
-                "UPDATE bots SET deploy_slug = $1, is_deployed = TRUE, updated_at = NOW() WHERE id = $2",
+                "UPDATE bots SET deploy_slug = ?, is_deployed = 1, updated_at = datetime('now') WHERE id = ?",
                 slug, bot_id,
             )
 
     async def undeploy(self, bot_id: str) -> None:
         async with get_connection() as conn:
             await conn.execute(
-                "UPDATE bots SET deploy_slug = NULL, is_deployed = FALSE, updated_at = NOW() WHERE id = $1",
+                "UPDATE bots SET deploy_slug = NULL, is_deployed = 0, updated_at = datetime('now') WHERE id = ?",
                 bot_id,
             )
 
     async def get_by_slug(self, slug: str) -> Optional[Dict[str, Any]]:
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT * FROM bots WHERE deploy_slug = $1 AND is_deployed = TRUE",
+                "SELECT * FROM bots WHERE deploy_slug = ? AND is_deployed = 1",
                 slug,
             )
             return _deserialize_row(row) if row else None

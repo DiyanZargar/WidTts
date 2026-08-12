@@ -8,9 +8,7 @@ from app.shared.config.settings import Settings
 def clean_env(monkeypatch):
     """Remove container/Docker environment variables so defaults are testable."""
     for var in [
-        "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST",
-        "POSTGRES_PORT", "POSTGRES_DB", "DATABASE_URL",
-        "LIVEKIT_URL", "LIVEKIT_INTERNAL_URL", "LIVEKIT_API_KEY",
+        "DB_PATH", "LIVEKIT_URL", "LIVEKIT_INTERNAL_URL", "LIVEKIT_API_KEY",
         "LIVEKIT_API_SECRET", "MASTER_ENCRYPTION_KEY", "APP_SECRET",
         "PORT", "ROOM_INACTIVITY_TIMEOUT_SECONDS", "AGENT_TOKEN_TTL_SECONDS",
     ]:
@@ -19,19 +17,9 @@ def clean_env(monkeypatch):
 
 class TestSettingsDefaults:
     @pytest.mark.usefixtures("clean_env")
-    def test_default_postgres_user(self):
+    def test_default_db_path(self):
         s = Settings()
-        assert s.postgres_user == "widtts"
-
-    @pytest.mark.usefixtures("clean_env")
-    def test_default_postgres_host(self):
-        s = Settings()
-        assert s.postgres_host == "localhost"
-
-    @pytest.mark.usefixtures("clean_env")
-    def test_default_postgres_port(self):
-        s = Settings()
-        assert s.postgres_port == 5432
+        assert s.db_path == "data/widtts.db"
 
     @pytest.mark.usefixtures("clean_env")
     def test_default_livekit_url(self):
@@ -62,28 +50,6 @@ class TestSettingsDefaults:
     def test_master_encryption_key_is_string(self):
         s = Settings()
         assert isinstance(s.master_encryption_key, str)
-
-    @pytest.mark.usefixtures("clean_env")
-    def test_database_url_from_components(self):
-        s = Settings()
-        url = s.database_url
-        assert "postgresql://" in url
-        assert "widtts" in url
-        assert "localhost" in url
-        assert "5432" in url
-
-    @pytest.mark.usefixtures("clean_env")
-    def test_database_url_template_expansion(self):
-        s = Settings(DATABASE_URL="postgresql://${POSTGRES_USER}:***@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}")
-        url = s.database_url
-        assert "widtts" in url
-        assert "localhost" in url
-        assert "5432" in url
-
-    def test_database_url_raw_override(self):
-        s = Settings(DATABASE_URL="postgresql://custom:***@dbhost:5433/mydb")
-        url = s.database_url
-        assert url == "postgresql://custom:***@dbhost:5433/mydb"
 
     @pytest.mark.usefixtures("clean_env")
     def test_livekit_internal_url_default_none(self):

@@ -12,7 +12,7 @@ class PostgresLLMProviderRepository(LLMProviderRepositoryInterface):
         async with get_connection() as conn:
             await conn.execute(
                 """INSERT INTO llm_providers (id, name, provider_type, base_url, credentials_enc, key_version, is_default)
-                   VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 pid, provider["name"], provider["provider_type"],
                 provider.get("base_url", ""),
                 json.dumps(provider.get("credentials_enc", {})),
@@ -23,7 +23,7 @@ class PostgresLLMProviderRepository(LLMProviderRepositoryInterface):
 
     async def get_by_id(self, provider_id: str) -> Optional[Dict[str, Any]]:
         async with get_connection() as conn:
-            row = await conn.fetchrow("SELECT * FROM llm_providers WHERE id = $1", provider_id)
+            row = await conn.fetchrow("SELECT * FROM llm_providers WHERE id = ?", provider_id)
             return self._row_to_dict(row) if row else None
 
     async def list_all(self) -> List[Dict[str, Any]]:
@@ -34,33 +34,29 @@ class PostgresLLMProviderRepository(LLMProviderRepositoryInterface):
     async def update(self, provider_id: str, updates: Dict[str, Any]) -> None:
         sets = []
         vals = []
-        idx = 1
         for key in ("name", "provider_type", "base_url", "credentials_enc", "key_version",
                      "available_models", "last_test_status", "last_test_at", "is_default"):
             if key in updates:
                 val = updates[key]
                 if key in ("credentials_enc", "available_models"):
                     val = json.dumps(val)
-                    sets.append(f"{key} = ${idx}::jsonb")
-                else:
-                    sets.append(f"{key} = ${idx}")
+                sets.append(f"{key} = ?")
                 vals.append(val)
-                idx += 1
         if not sets:
             return
-        sets.append(f"updated_at = NOW()")
+        sets.append("updated_at = datetime('now')")
         vals.append(provider_id)
-        sql = f"UPDATE llm_providers SET {', '.join(sets)} WHERE id = ${idx}"
+        sql = f"UPDATE llm_providers SET {', '.join(sets)} WHERE id = ?"
         async with get_connection() as conn:
             await conn.execute(sql, *vals)
 
     async def delete(self, provider_id: str) -> None:
         async with get_connection() as conn:
-            await conn.execute("DELETE FROM llm_providers WHERE id = $1", provider_id)
+            await conn.execute("DELETE FROM llm_providers WHERE id = ?", provider_id)
 
     async def get_default(self) -> Optional[Dict[str, Any]]:
         async with get_connection() as conn:
-            row = await conn.fetchrow("SELECT * FROM llm_providers WHERE is_default = TRUE")
+            row = await conn.fetchrow("SELECT * FROM llm_providers WHERE is_default = 1")
             return self._row_to_dict(row) if row else None
 
     @staticmethod

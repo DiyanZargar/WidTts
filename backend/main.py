@@ -49,12 +49,12 @@ async def on_startup():
     errors = []
 
     # 1. Database connectivity
-    logger.info("[STARTUP] Validating database connectivity...")
+    logger.info("[STARTUP] Initializing SQLite database...")
     try:
         await init_db()
         logger.info("[STARTUP] ✅ Database OK")
     except Exception as e:
-        msg = f"Database connectivity failed: {e}"
+        msg = f"Database initialization failed: {e}"
         logger.error(f"[STARTUP] ❌ {msg}")
         errors.append(msg)
 
@@ -118,7 +118,7 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    logger.info("[SHUTDOWN] Closing database pool...")
+    logger.info("[SHUTDOWN] Closing database...")
     await close_pool()
     app_shutdown(reason="normal")
     logger.info("[SHUTDOWN] Shutdown complete.")

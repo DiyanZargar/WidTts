@@ -1,12 +1,13 @@
 """
 Realtime Runtime Configuration Repository.
 
-Manages realtime_runtime_config records in PostgreSQL.
+Manages realtime_runtime_config records in SQLite.
 Supports multiple realtime configurations (Local Docker, Cloud, etc.)
 with active selection and envelope-encrypted credentials.
 """
 
 import logging
+import uuid
 import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -47,7 +48,7 @@ class RealtimeConfigRepository:
         try:
             async with get_connection() as conn:
                 row = await conn.fetchrow(
-                    "SELECT * FROM realtime_runtime_config WHERE is_active = TRUE ORDER BY updated_at DESC LIMIT 1"
+                    "SELECT * FROM realtime_runtime_config WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 1"
                 )
                 if not row:
                     row = await conn.fetchrow(
@@ -81,27 +82,28 @@ class RealtimeConfigRepository:
         """Return a single config by ID."""
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT * FROM realtime_runtime_config WHERE id = $1::uuid",
+                "SELECT * FROM realtime_runtime_config WHERE id = ?",
                 config_id,
             )
             return _format_row(row)
 
     async def create(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new realtime config record."""
+        config_id = str(uuid.uuid4())
         async with get_transaction() as conn:
             # If this is the first config or set as active, deactivate others
             is_active = config.get("is_active", True)
             if is_active:
-                await conn.execute("UPDATE realtime_runtime_config SET is_active = FALSE")
+                await conn.execute("UPDATE realtime_runtime_config SET is_active = 0")
 
-            row = await conn.fetchrow(
+            await conn.execute(
                 """
                 INSERT INTO realtime_runtime_config
-                    (name, provider_type, server_url, encrypted_api_key, encrypted_api_secret,
+                    (id, name, provider_type, server_url, encrypted_api_key, encrypted_api_secret,
                      room_token_ttl_seconds, audio_sample_rate, is_active)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                RETURNING *
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
+                config_id,
                 config.get("name", "Realtime Provider"),
                 config.get("provider_type", "livekit"),
                 config["server_url"],
@@ -111,95 +113,92 @@ class RealtimeConfigRepository:
                 config.get("audio_sample_rate", 16000),
                 is_active,
             )
+            # Fetch the created row
+            row = await conn.fetchrow("SELECT * FROM realtime_runtime_config WHERE id = ?", config_id)
             return _format_row(row)
 
     async def update(self, config_id: str, config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update an existing realtime config record."""
         async with get_transaction() as conn:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc).isoformat()
             fields = []
             values = []
-            idx = 1
 
             if "name" in config:
-                fields.append(f"name = ${idx}")
+                fields.append("name = ?")
                 values.append(config["name"])
-                idx += 1
             if "provider_type" in config:
-                fields.append(f"provider_type = ${idx}")
+                fields.append("provider_type = ?")
                 values.append(config["provider_type"])
-                idx += 1
             if "server_url" in config:
-                fields.append(f"server_url = ${idx}")
+                fields.append("server_url = ?")
                 values.append(config["server_url"])
-                idx += 1
             if "encrypted_api_key" in config:
-                fields.append(f"encrypted_api_key = ${idx}")
+                fields.append("encrypted_api_key = ?")
                 values.append(json.dumps(config["encrypted_api_key"]))
-                idx += 1
             if "encrypted_api_secret" in config:
-                fields.append(f"encrypted_api_secret = ${idx}")
+                fields.append("encrypted_api_secret = ?")
                 values.append(json.dumps(config["encrypted_api_secret"]))
-                idx += 1
             if "room_token_ttl_seconds" in config:
-                fields.append(f"room_token_ttl_seconds = ${idx}")
+                fields.append("room_token_ttl_seconds = ?")
                 values.append(config["room_token_ttl_seconds"])
-                idx += 1
             if "audio_sample_rate" in config:
-                fields.append(f"audio_sample_rate = ${idx}")
+                fields.append("audio_sample_rate = ?")
                 values.append(config["audio_sample_rate"])
-                idx += 1
 
-            fields.append(f"updated_at = ${idx}")
+            fields.append("updated_at = ?")
             values.append(now)
-            idx += 1
 
             values.append(config_id)
-            query = f"UPDATE realtime_runtime_config SET {', '.join(fields)} WHERE id = ${idx}::uuid RETURNING *"
-            row = await conn.fetchrow(query, *values)
+            query = f"UPDATE realtime_runtime_config SET {', '.join(fields)} WHERE id = ?"
+            await conn.execute(query, *values)
+            row = await conn.fetchrow("SELECT * FROM realtime_runtime_config WHERE id = ?", config_id)
             return _format_row(row)
 
     async def set_active(self, config_id: str) -> Optional[Dict[str, Any]]:
         """Mark the specified config as active and deactivate all others."""
         async with get_transaction() as conn:
-            await conn.execute("UPDATE realtime_runtime_config SET is_active = FALSE")
-            row = await conn.fetchrow(
-                "UPDATE realtime_runtime_config SET is_active = TRUE, updated_at = NOW() WHERE id = $1::uuid RETURNING *",
+            await conn.execute("UPDATE realtime_runtime_config SET is_active = 0")
+            await conn.execute(
+                "UPDATE realtime_runtime_config SET is_active = 1, updated_at = datetime('now') WHERE id = ?",
                 config_id,
             )
+            row = await conn.fetchrow("SELECT * FROM realtime_runtime_config WHERE id = ?", config_id)
             return _format_row(row)
 
     async def delete(self, config_id: str) -> bool:
         """Delete a realtime config record by ID."""
         async with get_transaction() as conn:
-            res = await conn.execute(
-                "DELETE FROM realtime_runtime_config WHERE id = $1::uuid",
+            await conn.execute(
+                "DELETE FROM realtime_runtime_config WHERE id = ?",
                 config_id,
             )
             # If deleted provider was active, make another active if available
-            row = await conn.fetchrow("SELECT id FROM realtime_runtime_config WHERE is_active = TRUE LIMIT 1")
+            row = await conn.fetchrow("SELECT id FROM realtime_runtime_config WHERE is_active = 1 LIMIT 1")
             if not row:
                 await conn.execute(
-                    "UPDATE realtime_runtime_config SET is_active = TRUE WHERE id = (SELECT id FROM realtime_runtime_config ORDER BY updated_at DESC LIMIT 1)"
+                    "UPDATE realtime_runtime_config SET is_active = 1 WHERE id = (SELECT id FROM realtime_runtime_config ORDER BY updated_at DESC LIMIT 1)"
                 )
-            return res != "DELETE 0"
+            return True
 
     async def update_test_status(
         self, config_id: str, status: str, error: Optional[str] = None
     ) -> None:
         """Update test status for a given config_id."""
         async with get_connection() as conn:
+            now = datetime.now(timezone.utc).isoformat()
             await conn.execute(
                 """
                 UPDATE realtime_runtime_config SET
-                    last_tested_at = $1,
-                    last_test_status = $2,
-                    last_test_error = $3,
-                    updated_at = $1
-                WHERE id = $4::uuid
+                    last_tested_at = ?,
+                    last_test_status = ?,
+                    last_test_error = ?,
+                    updated_at = ?
+                WHERE id = ?
                 """,
-                datetime.now(timezone.utc),
+                now,
                 status,
                 error,
+                now,
                 config_id,
             )

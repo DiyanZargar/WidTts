@@ -1,15 +1,15 @@
--- Responses table
+-- Responses table (SQLite)
 CREATE TABLE IF NOT EXISTS responses (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     turn_id TEXT,
     question_id TEXT,
     transcript TEXT NOT NULL DEFAULT '',
     classification TEXT NOT NULL DEFAULT '',
-    should_advance BOOLEAN NOT NULL DEFAULT FALSE,
+    should_advance INTEGER NOT NULL DEFAULT 0,
     reason TEXT NOT NULL DEFAULT '',
-    metadata JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id);

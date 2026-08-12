@@ -1,7 +1,7 @@
 """
-Async PostgreSQL migration runner.
+Async SQLite migration runner.
 
-Reads .sql files from the migrations_pg/ directory and applies them
+Reads .sql files from the migrations_sqlite/ directory and applies them
 in alphabetical order, tracking applied migrations in a schema_migrations table.
 """
 
@@ -12,8 +12,8 @@ from app.shared.database.db import get_connection
 logger = logging.getLogger("migrations")
 
 
-async def run_migrations_pg():
-    """Execute all pending SQL migrations against PostgreSQL."""
+async def run_migrations_sqlite():
+    """Execute all pending SQL migrations against SQLite."""
     migration_dir = os.path.dirname(__file__)
 
     async with get_connection() as conn:
@@ -21,7 +21,7 @@ async def run_migrations_pg():
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 filename TEXT PRIMARY KEY,
-                applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
 
@@ -43,11 +43,14 @@ async def run_migrations_pg():
             with open(filepath, "r", encoding="utf-8") as f:
                 sql = f.read()
 
-            # Execute migration in a transaction
+            # Execute migration
             async with conn.transaction():
-                await conn.execute(sql)
+                for statement in sql.split(";"):
+                    stmt = statement.strip()
+                    if stmt:
+                        await conn.execute(stmt)
                 await conn.execute(
-                    "INSERT INTO schema_migrations (filename) VALUES ($1)",
+                    "INSERT INTO schema_migrations (filename) VALUES (?)",
                     filename,
                 )
 

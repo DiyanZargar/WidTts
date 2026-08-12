@@ -23,74 +23,83 @@ FLUX_TO_AURA_MAP = {
 # ── Deepgram Fallback Models ────────────────────────────────────────
 
 DEEPGRAM_STT_MODELS = [
-    {"id": "flux", "name": "Flux (Ultra-Fast Conversational STT & Agent Loop)"},
-    {"id": "nova-3", "name": "Nova-3 / Flux (Latest Ultra-Fast & High Accuracy)"},
-    {"id": "nova-3-general", "name": "Nova-3 General"},
-    {"id": "nova-3-conversationalai", "name": "Nova-3 Conversational AI"},
-    {"id": "nova-3-medical", "name": "Nova-3 Medical"},
-    {"id": "nova-2", "name": "Nova-2 (Fast & Reliable)"},
+    {"id": "base", "name": "Base"},
+    {"id": "enhanced-general", "name": "Enhanced General"},
+    {"id": "flux-general-en", "name": "Flux (English)"},
+    {"id": "nova-2-atc", "name": "Nova-2 ATC"},
+    {"id": "nova-2-automotive", "name": "Nova-2 Automotive"},
+    {"id": "nova-2-conversationalai", "name": "Nova-2 Conversational AI"},
+    {"id": "nova-2-drivethru", "name": "Nova-2 Drive-Thru"},
+    {"id": "nova-2-finance", "name": "Nova-2 Finance"},
     {"id": "nova-2-general", "name": "Nova-2 General"},
     {"id": "nova-2-meeting", "name": "Nova-2 Meeting"},
-    {"id": "nova-2-phonecall", "name": "Nova-2 Phone Call"},
-    {"id": "nova-2-finance", "name": "Nova-2 Finance"},
-    {"id": "nova-2-conversationalai", "name": "Nova-2 Conversational AI"},
     {"id": "nova-2-medical", "name": "Nova-2 Medical"},
-    {"id": "nova", "name": "Nova v1"},
-    {"id": "enhanced", "name": "Enhanced"},
-    {"id": "base", "name": "Base"},
+    {"id": "nova-2-phonecall", "name": "Nova-2 Phone Call"},
+    {"id": "nova-2-video", "name": "Nova-2 Video"},
+    {"id": "nova-2-voicemail", "name": "Nova-2 Voicemail"},
+    {"id": "nova-3", "name": "Nova-3 (Latest)"},
+    {"id": "nova-3-general", "name": "Nova-3 General"},
+    {"id": "nova-3-medical", "name": "Nova-3 Medical"},
+    {"id": "nova-3-multilingual", "name": "Nova-3 Multilingual"},
+    {"id": "nova-general", "name": "Nova v1 General"},
+    {"id": "whisper-base", "name": "Whisper Base"},
+    {"id": "whisper-large", "name": "Whisper Large"},
+    {"id": "whisper-medium", "name": "Whisper Medium"},
+    {"id": "whisper-small", "name": "Whisper Small"},
+    {"id": "whisper-tiny", "name": "Whisper Tiny"},
 ]
 
 DEEPGRAM_TTS_MODELS = [
-    {"id": "flux-rufus-en", "name": "Flux Rufus (Conversational Male)"},
-    {"id": "flux-asteria-en", "name": "Flux Asteria (Conversational Female)"},
-    {"id": "flux-stella-en", "name": "Flux Stella (Conversational Female)"},
-    {"id": "flux-luna-en", "name": "Flux Luna (Conversational Female)"},
-    {"id": "flux-arcas-en", "name": "Flux Arcas (Conversational Male)"},
-    {"id": "flux-orion-en", "name": "Flux Orion (Conversational Male)"},
-    {"id": "flux-zeus-en", "name": "Flux Zeus (Conversational Male)"},
-    {"id": "aura-asteria-en", "name": "Aura Asteria (US Female)"},
-    {"id": "aura-luna-en", "name": "Aura Luna (US Female)"},
-    {"id": "aura-stella-en", "name": "Aura Stella (US Female)"},
-    {"id": "aura-athena-en", "name": "Aura Athena (UK Female)"},
-    {"id": "aura-hera-en", "name": "Aura Hera (US Female)"},
-    {"id": "aura-orion-en", "name": "Aura Orion (US Male)"},
-    {"id": "aura-arcas-en", "name": "Aura Arcas (US Male)"},
-    {"id": "aura-perseus-en", "name": "Aura Perseus (US Male)"},
     {"id": "aura-angus-en", "name": "Aura Angus (UK Male)"},
-    {"id": "aura-orpheus-en", "name": "Aura Orpheus (US Male)"},
+    {"id": "aura-arcas-en", "name": "Aura Arcas (US Male)"},
+    {"id": "aura-asteria-en", "name": "Aura Asteria (US Female)"},
+    {"id": "aura-athena-en", "name": "Aura Athena (UK Female)"},
     {"id": "aura-helios-en", "name": "Aura Helios (UK Male)"},
+    {"id": "aura-hera-en", "name": "Aura Hera (US Female)"},
+    {"id": "aura-luna-en", "name": "Aura Luna (US Female)"},
+    {"id": "aura-orion-en", "name": "Aura Orion (US Male)"},
+    {"id": "aura-orpheus-en", "name": "Aura Orpheus (US Male)"},
+    {"id": "aura-perseus-en", "name": "Aura Perseus (US Male)"},
+    {"id": "aura-stella-en", "name": "Aura Stella (US Female)"},
     {"id": "aura-zeus-en", "name": "Aura Zeus (US Male)"},
+    {"id": "flux-arcas-en", "name": "Flux Arcas (Conversational Male)"},
+    {"id": "flux-asteria-en", "name": "Flux Asteria (Conversational Female)"},
+    {"id": "flux-luna-en", "name": "Flux Luna (Conversational Female)"},
+    {"id": "flux-orion-en", "name": "Flux Orion (Conversational Male)"},
+    {"id": "flux-rufus-en", "name": "Flux Rufus (Conversational Male)"},
+    {"id": "flux-stella-en", "name": "Flux Stella (Conversational Female)"},
+    {"id": "flux-zeus-en", "name": "Flux Zeus (Conversational Male)"},
 ]
 
 # ── ElevenLabs Fallback Models ──────────────────────────────────────
 
 ELEVENLABS_FALLBACK_MODELS = [
     {"id": "eleven_flash_v2_5", "name": "Eleven Flash v2.5 (75ms Ultra-Low Latency Streaming)"},
-    {"id": "eleven_turbo_v2_5", "name": "Eleven Turbo v2.5 (Low Latency Real-time TTS)"},
-    {"id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2 (High Quality Conversational)"},
-    {"id": "eleven_multilingual_v1", "name": "Eleven Multilingual v1"},
     {"id": "eleven_monolingual_v1", "name": "Eleven Monolingual v1"},
+    {"id": "eleven_multilingual_v1", "name": "Eleven Multilingual v1"},
+    {"id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2 (High Quality Conversational)"},
+    {"id": "eleven_turbo_v2_5", "name": "Eleven Turbo v2.5 (Low Latency Real-time TTS)"},
 ]
 
 ELEVENLABS_FALLBACK_VOICES = [
-    {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (Expressive Female)"},
-    {"id": "AZnzlk1XvdvUeBnXmlld", "name": "Domi (Confident Female)"},
-    {"id": "EXAVITQu4vr4xnSDxMaL", "name": "Bella (Warm Female)"},
+    {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (Clear Male)"},
     {"id": "ErXwobaYiN019PkySvjV", "name": "Antoni (Friendly Male)"},
+    {"id": "VR6AewLTigWG4xSOukaG", "name": "Arnold (Deep Male)"},
+    {"id": "EXAVITQu4vr4xnSDxMaL", "name": "Bella (Warm Female)"},
+    {"id": "AZnzlk1XvdvUeBnXmlld", "name": "Domi (Confident Female)"},
     {"id": "MF3mGyEYCl7XYWbV9V6O", "name": "Elli (Soft Female)"},
     {"id": "TxGEqnHWrfWFTfGW9XjX", "name": "Josh (Conversational Male)"},
-    {"id": "VR6AewLTigWG4xSOukaG", "name": "Arnold (Deep Male)"},
-    {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (Clear Male)"},
+    {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (Expressive Female)"},
     {"id": "yoZ06aMxZJJ28mfd3POQ", "name": "Sam (Dynamic Male)"},
 ]
 
 # ── Fish Audio TTS Models ───────────────────────────────────────────
 
 FISH_AUDIO_TTS_MODELS = [
+    {"id": "s1", "name": "S1 (13 Languages)"},
+    {"id": "s2-pro", "name": "S2 Pro (80+ Languages)"},
     {"id": "s2.1-pro", "name": "S2.1 Pro (83 Languages, Recommended)"},
     {"id": "s2.1-pro-free", "name": "S2.1 Pro Free (83 Languages)"},
-    {"id": "s2-pro", "name": "S2 Pro (80+ Languages)"},
-    {"id": "s1", "name": "S1 (13 Languages)"},
 ]
 
 
@@ -110,13 +119,13 @@ def get_speech_models(provider_type: str) -> dict:
             {"id": "flux-aura-en", "name": "Flux Aura"},
             {"id": "flux-rufus-en", "name": "Flux Rufus"},
             # Aura-1 voices
-            {"id": "aura-asteria-en", "name": "Aura Asteria"},
-            {"id": "aura-orion-en", "name": "Aura Orion"},
-            {"id": "aura-luna-en", "name": "Aura Luna"},
             {"id": "aura-arcas-en", "name": "Aura Arcas"},
-            {"id": "aura-stella-en", "name": "Aura Stella"},
+            {"id": "aura-asteria-en", "name": "Aura Asteria"},
             {"id": "aura-athena-en", "name": "Aura Athena"},
             {"id": "aura-helios-en", "name": "Aura Helios"},
+            {"id": "aura-luna-en", "name": "Aura Luna"},
+            {"id": "aura-orion-en", "name": "Aura Orion"},
+            {"id": "aura-stella-en", "name": "Aura Stella"},
             {"id": "aura-zeus-en", "name": "Aura Zeus"},
             # Aura-2 English
             {"id": "aura-2-amalthea-en", "name": "Aura 2 Amalthea"},
@@ -263,26 +272,30 @@ def get_speech_models(provider_type: str) -> dict:
         # STT models with language support metadata (from Deepgram docs)
         # Nova-3: all languages. Nova-2: many. Nova-1: en, es, hi. Enhanced: subset. English-only models listed separately.
         stt_all = [
-            {"id": "nova-3", "name": "Nova 3 (Latest)"},
-            {"id": "flux-general-en", "name": "Flux (English)"},
-            {"id": "flux-general-multi", "name": "Flux (Multilingual)"},
-            {"id": "nova-2", "name": "Nova 2"},
-            {"id": "nova", "name": "Nova"},
-            {"id": "nova-2-meeting", "name": "Nova 2 Meeting"},
-            {"id": "nova-2-phonecall", "name": "Nova 2 Phonecall"},
-            {"id": "nova-2-video", "name": "Nova 2 Video"},
-            {"id": "nova-2-medical", "name": "Nova 2 Medical"},
-            {"id": "nova-2-finance", "name": "Nova 2 Finance"},
             {"id": "base", "name": "Base"},
-            {"id": "enhanced", "name": "Enhanced"},
+            {"id": "enhanced-general", "name": "Enhanced General"},
+            {"id": "flux-general-en", "name": "Flux (English)"},
+            {"id": "nova-2-conversationalai", "name": "Nova-2 Conversational AI"},
+            {"id": "nova-2-finance", "name": "Nova-2 Finance"},
+            {"id": "nova-2-general", "name": "Nova-2 General"},
+            {"id": "nova-2-meeting", "name": "Nova-2 Meeting"},
+            {"id": "nova-2-medical", "name": "Nova-2 Medical"},
+            {"id": "nova-2-phonecall", "name": "Nova-2 Phone Call"},
+            {"id": "nova-2-video", "name": "Nova-2 Video"},
+            {"id": "nova-2-voicemail", "name": "Nova-2 Voicemail"},
+            {"id": "nova-3", "name": "Nova-3 (Latest)"},
+            {"id": "nova-3-general", "name": "Nova-3 General"},
+            {"id": "nova-3-medical", "name": "Nova-3 Medical"},
+            {"id": "nova-3-multilingual", "name": "Nova-3 Multilingual"},
+            {"id": "nova-general", "name": "Nova v1 General"},
         ]
         # Models that support all languages
-        stt_nova3_models = {"nova-3", "flux-general-multi"}
+        stt_nova3_models = {"nova-3", "nova-3-general", "nova-3-multilingual"}
         # Models that support many (but not all) languages
         stt_nova2_langs = {"bg","ca","zh","cs","da","nl","en","et","fi","fr","de","el","hi","hu","id","it","ja","ko","lv","lt","ms","no","pl","pt","ro","ru","sk","es","sv","th","tr","uk","vi"}
         stt_nova1_langs = {"en", "es", "hi"}
         stt_enhanced_langs = {"da","nl","en","fr","de","hi","it","ja","ko","no","pl","pt","es","sv","ta"}
-        stt_english_only = {"nova-2-meeting", "nova-2-phonecall", "nova-2-video", "nova-2-medical", "nova-2-finance", "flux-general-en"}
+        stt_english_only = {"flux-general-en", "nova-2-meeting", "nova-2-phonecall", "nova-2-video", "nova-2-medical", "nova-2-finance", "nova-2-voicemail", "nova-2-conversationalai", "nova-3-medical"}
 
         stt_by_lang = {}
         for lang in available_langs:
@@ -292,13 +305,13 @@ def get_speech_models(provider_type: str) -> dict:
                 mid = m["id"]
                 if mid in stt_nova3_models:
                     models_for_lang.append(m)
-                elif mid == "nova-2" and code in stt_nova2_langs:
+                elif mid == "nova-2-general" and code in stt_nova2_langs:
                     models_for_lang.append(m)
-                elif mid == "nova" and code in stt_nova1_langs:
+                elif mid == "nova-general" and code in stt_nova1_langs:
                     models_for_lang.append(m)
                 elif mid == "base" and code in stt_nova2_langs:
                     models_for_lang.append(m)
-                elif mid == "enhanced" and code in stt_enhanced_langs:
+                elif mid == "enhanced-general" and code in stt_enhanced_langs:
                     models_for_lang.append(m)
                 elif mid in stt_english_only and code == "en":
                     models_for_lang.append(m)
@@ -313,36 +326,33 @@ def get_speech_models(provider_type: str) -> dict:
         }
     elif provider_type == "elevenlabs":
         tts_voices = [
-            {"id": "eleven_v3", "name": "Eleven v3 (Latest)"},
-            {"id": "eleven_multilingual_v2", "name": "Multilingual v2"},
             {"id": "eleven_flash_v2_5", "name": "Flash v2.5 (Low Latency)"},
-            {"id": "eleven_turbo_v2_5", "name": "Turbo v2.5"},
-            {"id": "eleven_turbo_v2", "name": "Turbo v2"},
             {"id": "eleven_monolingual_v1", "name": "Monolingual v1 (English)"},
+            {"id": "eleven_multilingual_v2", "name": "Multilingual v2"},
+            {"id": "eleven_turbo_v2", "name": "Turbo v2"},
+            {"id": "eleven_turbo_v2_5", "name": "Turbo v2.5"},
+            {"id": "eleven_v3", "name": "Eleven v3 (Latest)"},
         ]
         # ElevenLabs models are language-agnostic; language is set via API param
         # ElevenLabs: 32 languages verified from official docs (Flash v2.5)
         # Multilingual v2: 29 languages. Flash v2.5: +hu, +no, +vi = 32
         eleven_langs = [
-            {"code": "en", "name": "English"}, {"code": "ja", "name": "Japanese"},
-            {"code": "zh", "name": "Chinese"}, {"code": "de", "name": "German"},
-            {"code": "hi", "name": "Hindi"}, {"code": "fr", "name": "French"},
-            {"code": "ko", "name": "Korean"}, {"code": "pt", "name": "Portuguese"},
-            {"code": "it", "name": "Italian"}, {"code": "es", "name": "Spanish"},
-            {"code": "id", "name": "Indonesian"}, {"code": "nl", "name": "Dutch"},
-            {"code": "tr", "name": "Turkish"}, {"code": "tl", "name": "Filipino"},
-            {"code": "pl", "name": "Polish"}, {"code": "sv", "name": "Swedish"},
-            {"code": "bg", "name": "Bulgarian"}, {"code": "ro", "name": "Romanian"},
-            {"code": "ar", "name": "Arabic"}, {"code": "cs", "name": "Czech"},
-            {"code": "el", "name": "Greek"}, {"code": "fi", "name": "Finnish"},
-            {"code": "hr", "name": "Croatian"}, {"code": "ms", "name": "Malay"},
-            {"code": "sk", "name": "Slovak"}, {"code": "da", "name": "Danish"},
-            {"code": "ta", "name": "Tamil"}, {"code": "uk", "name": "Ukrainian"},
-            {"code": "ru", "name": "Russian"},
-            # Flash v2.5 adds these 3:
-            {"code": "hu", "name": "Hungarian"},
-            {"code": "no", "name": "Norwegian"},
-            {"code": "vi", "name": "Vietnamese"},
+            {"code": "ar", "name": "Arabic"}, {"code": "bg", "name": "Bulgarian"},
+            {"code": "cs", "name": "Czech"}, {"code": "da", "name": "Danish"},
+            {"code": "de", "name": "German"}, {"code": "el", "name": "Greek"},
+            {"code": "en", "name": "English"}, {"code": "es", "name": "Spanish"},
+            {"code": "fi", "name": "Finnish"}, {"code": "fr", "name": "French"},
+            {"code": "hi", "name": "Hindi"}, {"code": "hr", "name": "Croatian"},
+            {"code": "hu", "name": "Hungarian"}, {"code": "id", "name": "Indonesian"},
+            {"code": "it", "name": "Italian"}, {"code": "ja", "name": "Japanese"},
+            {"code": "ko", "name": "Korean"}, {"code": "ms", "name": "Malay"},
+            {"code": "nl", "name": "Dutch"}, {"code": "no", "name": "Norwegian"},
+            {"code": "pl", "name": "Polish"}, {"code": "pt", "name": "Portuguese"},
+            {"code": "ro", "name": "Romanian"}, {"code": "ru", "name": "Russian"},
+            {"code": "sk", "name": "Slovak"}, {"code": "sv", "name": "Swedish"},
+            {"code": "ta", "name": "Tamil"}, {"code": "tl", "name": "Filipino"},
+            {"code": "tr", "name": "Turkish"}, {"code": "uk", "name": "Ukrainian"},
+            {"code": "vi", "name": "Vietnamese"}, {"code": "zh", "name": "Chinese"},
         ]
         # All ElevenLabs models are available for all languages
         tts_by_lang = {}
@@ -361,47 +371,47 @@ def get_speech_models(provider_type: str) -> dict:
     elif provider_type == "fishaudio":
         # TTS engine models (shown in the Model dropdown)
         tts_models = [
+            {"id": "s1", "name": "S1 (13 Languages)"},
+            {"id": "s2-pro", "name": "S2 Pro (80+ Languages)"},
             {"id": "s2.1-pro", "name": "S2.1 Pro (83 Languages, Recommended)"},
             {"id": "s2.1-pro-free", "name": "S2.1 Pro Free (83 Languages)"},
-            {"id": "s2-pro", "name": "S2 Pro (80+ Languages)"},
-            {"id": "s1", "name": "S1 (13 Languages)"},
         ]
         # Languages supported by Fish Audio
         fish_langs = [
-            {"code": "en", "name": "English"}, {"code": "es", "name": "Spanish"},
-            {"code": "fr", "name": "French"}, {"code": "de", "name": "German"},
-            {"code": "hi", "name": "Hindi"}, {"code": "ja", "name": "Japanese"},
-            {"code": "zh", "name": "Chinese"}, {"code": "ko", "name": "Korean"},
-            {"code": "pt", "name": "Portuguese"}, {"code": "it", "name": "Italian"},
-            {"code": "id", "name": "Indonesian"}, {"code": "nl", "name": "Dutch"},
-            {"code": "tr", "name": "Turkish"}, {"code": "tl", "name": "Filipino"},
-            {"code": "pl", "name": "Polish"}, {"code": "sv", "name": "Swedish"},
-            {"code": "bg", "name": "Bulgarian"}, {"code": "ro", "name": "Romanian"},
-            {"code": "ar", "name": "Arabic"}, {"code": "cs", "name": "Czech"},
-            {"code": "el", "name": "Greek"}, {"code": "fi", "name": "Finnish"},
-            {"code": "hr", "name": "Croatian"}, {"code": "ms", "name": "Malay"},
-            {"code": "sk", "name": "Slovak"}, {"code": "da", "name": "Danish"},
-            {"code": "ta", "name": "Tamil"}, {"code": "uk", "name": "Ukrainian"},
-            {"code": "ru", "name": "Russian"}, {"code": "hu", "name": "Hungarian"},
-            {"code": "no", "name": "Norwegian"}, {"code": "vi", "name": "Vietnamese"},
-            {"code": "be", "name": "Belarusian"}, {"code": "bn", "name": "Bengali"},
-            {"code": "bs", "name": "Bosnian"}, {"code": "ca", "name": "Catalan"},
-            {"code": "et", "name": "Estonian"}, {"code": "gu", "name": "Gujarati"},
-            {"code": "he", "name": "Hebrew"}, {"code": "kn", "name": "Kannada"},
-            {"code": "lt", "name": "Lithuanian"}, {"code": "lv", "name": "Latvian"},
-            {"code": "mk", "name": "Macedonian"}, {"code": "mr", "name": "Marathi"},
-            {"code": "ne", "name": "Nepali"}, {"code": "fa", "name": "Persian"},
-            {"code": "pa", "name": "Punjabi"}, {"code": "sl", "name": "Slovenian"},
-            {"code": "sr", "name": "Serbian"}, {"code": "te", "name": "Telugu"},
-            {"code": "th", "name": "Thai"}, {"code": "ur", "name": "Urdu"},
             {"code": "af", "name": "Afrikaans"}, {"code": "am", "name": "Amharic"},
-            {"code": "as", "name": "Assamese"}, {"code": "az", "name": "Azerbaijani"},
-            {"code": "cy", "name": "Welsh"}, {"code": "eu", "name": "Basque"},
-            {"code": "gl", "name": "Galician"}, {"code": "ka", "name": "Georgian"},
-            {"code": "km", "name": "Khmer"}, {"code": "lo", "name": "Lao"},
-            {"code": "ml", "name": "Malayalam"}, {"code": "mn", "name": "Mongolian"},
-            {"code": "my", "name": "Burmese"}, {"code": "si", "name": "Sinhala"},
-            {"code": "sw", "name": "Swahili"}, {"code": "uz", "name": "Uzbek"},
+            {"code": "ar", "name": "Arabic"}, {"code": "as", "name": "Assamese"},
+            {"code": "az", "name": "Azerbaijani"}, {"code": "be", "name": "Belarusian"},
+            {"code": "bg", "name": "Bulgarian"}, {"code": "bn", "name": "Bengali"},
+            {"code": "bs", "name": "Bosnian"}, {"code": "ca", "name": "Catalan"},
+            {"code": "cs", "name": "Czech"}, {"code": "cy", "name": "Welsh"},
+            {"code": "da", "name": "Danish"}, {"code": "de", "name": "German"},
+            {"code": "el", "name": "Greek"}, {"code": "en", "name": "English"},
+            {"code": "es", "name": "Spanish"}, {"code": "et", "name": "Estonian"},
+            {"code": "eu", "name": "Basque"}, {"code": "fa", "name": "Persian"},
+            {"code": "fi", "name": "Finnish"}, {"code": "fr", "name": "French"},
+            {"code": "gl", "name": "Galician"}, {"code": "gu", "name": "Gujarati"},
+            {"code": "he", "name": "Hebrew"}, {"code": "hi", "name": "Hindi"},
+            {"code": "hr", "name": "Croatian"}, {"code": "hu", "name": "Hungarian"},
+            {"code": "id", "name": "Indonesian"}, {"code": "it", "name": "Italian"},
+            {"code": "ja", "name": "Japanese"}, {"code": "ka", "name": "Georgian"},
+            {"code": "km", "name": "Khmer"}, {"code": "kn", "name": "Kannada"},
+            {"code": "ko", "name": "Korean"}, {"code": "lo", "name": "Lao"},
+            {"code": "lt", "name": "Lithuanian"}, {"code": "lv", "name": "Latvian"},
+            {"code": "mk", "name": "Macedonian"}, {"code": "ml", "name": "Malayalam"},
+            {"code": "mn", "name": "Mongolian"}, {"code": "mr", "name": "Marathi"},
+            {"code": "ms", "name": "Malay"}, {"code": "my", "name": "Burmese"},
+            {"code": "ne", "name": "Nepali"}, {"code": "nl", "name": "Dutch"},
+            {"code": "no", "name": "Norwegian"}, {"code": "pa", "name": "Punjabi"},
+            {"code": "pl", "name": "Polish"}, {"code": "pt", "name": "Portuguese"},
+            {"code": "ro", "name": "Romanian"}, {"code": "ru", "name": "Russian"},
+            {"code": "si", "name": "Sinhala"}, {"code": "sk", "name": "Slovak"},
+            {"code": "sl", "name": "Slovenian"}, {"code": "sr", "name": "Serbian"},
+            {"code": "sv", "name": "Swedish"}, {"code": "sw", "name": "Swahili"},
+            {"code": "ta", "name": "Tamil"}, {"code": "te", "name": "Telugu"},
+            {"code": "th", "name": "Thai"}, {"code": "tl", "name": "Filipino"},
+            {"code": "tr", "name": "Turkish"}, {"code": "uk", "name": "Ukrainian"},
+            {"code": "ur", "name": "Urdu"}, {"code": "uz", "name": "Uzbek"},
+            {"code": "vi", "name": "Vietnamese"}, {"code": "zh", "name": "Chinese"},
             {"code": "zu", "name": "Zulu"},
         ]
         # tts_by_language is empty — real voices are fetched dynamically from

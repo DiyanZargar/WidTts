@@ -37,7 +37,6 @@ def _get_master_key() -> bytes:
         raise ValueError(f"MASTER_ENCRYPTION_KEY must be 32 bytes (got {len(key)})")
     return key
 
-
 # ── DEK Management ──
 
 def generate_dek() -> bytes:
@@ -70,7 +69,7 @@ def encrypt_credential(plaintext: Dict[str, Any], dek: bytes) -> Dict[str, str]:
     """
     Encrypt a credential dict with a DEK using AES-256-GCM.
 
-    Returns a dict suitable for JSONB storage:
+    Returns a dict suitable for JSON storage:
     { "nonce": base64, "ciphertext": base64 }
     """
     nonce = os.urandom(12)
@@ -87,7 +86,6 @@ def encrypt_credential(plaintext: Dict[str, Any], dek: bytes) -> Dict[str, str]:
 def decrypt_credential(blob: Dict[str, str], dek: bytes) -> Dict[str, Any]:
     """
     Decrypt a credential blob using the DEK.
-
     The blob must contain 'nonce' and 'ciphertext' as base64 strings.
     """
     nonce = base64.b64decode(blob["nonce"])
@@ -108,7 +106,7 @@ async def bootstrap_encryption_key():
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT key_version FROM encryption_keys WHERE is_active = TRUE"
+            "SELECT key_version FROM encryption_keys WHERE is_active = 1"
         )
         if row:
             logger.info(f"[ENCRYPTION] Active key_version={row['key_version']}")
@@ -118,12 +116,16 @@ async def bootstrap_encryption_key():
         dek = generate_dek()
         wrapped, nonce = wrap_dek(dek)
 
-        key_version = await conn.fetchval(
+        await conn.execute(
             """INSERT INTO encryption_keys (wrapped_dek, nonce, is_active)
-               VALUES ($1, $2, TRUE)
-               RETURNING key_version""",
+               VALUES (?, ?, 1)""",
             wrapped, nonce,
         )
+        # Get the auto-incremented key_version
+        row = await conn.fetchrow(
+            "SELECT key_version FROM encryption_keys WHERE is_active = 1"
+        )
+        key_version = row["key_version"]
         logger.info(f"[ENCRYPTION] Bootstrapped key_version={key_version}")
         return key_version
 
@@ -137,7 +139,7 @@ async def get_active_dek() -> Tuple[bytes, int]:
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT key_version, wrapped_dek, nonce FROM encryption_keys WHERE is_active = TRUE"
+            "SELECT key_version, wrapped_dek, nonce FROM encryption_keys WHERE is_active = 1"
         )
         if not row:
             raise RuntimeError("No active encryption key found. Run bootstrap_encryption_key() first.")
@@ -164,7 +166,7 @@ async def load_and_decrypt(credentials_enc: Dict[str, str], key_version: int) ->
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT wrapped_dek, nonce FROM encryption_keys WHERE key_version = $1",
+            "SELECT wrapped_dek, nonce FROM encryption_keys WHERE key_version = ?",
             key_version,
         )
         if not row:

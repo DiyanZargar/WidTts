@@ -1,22 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: widtts-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-widtts}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-widtts_dev_password}
-      POSTGRES_DB: ${POSTGRES_DB:-widtts}
-    volumes:
-      - widtts_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-widtts} -d ${POSTGRES_DB:-widtts}"]
-      interval: 3s
-      timeout: 5s
-      retries: 5
-    networks:
-      - widtts-network
-
   livekit:
     image: livekit/livekit-server:v1.9.12
     container_name: widtts-livekit
@@ -38,11 +20,7 @@ services:
     container_name: widtts-backend
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_DB: ${POSTGRES_DB:-widtts}
+      DB_PATH: ${DB_PATH:-/app/data/widtts.db}
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY}
       APP_SECRET: ${APP_SECRET}
       PORT: ${PORT:-8000}
@@ -56,9 +34,9 @@ services:
       ROOM_INACTIVITY_TIMEOUT_SECONDS: ${ROOM_INACTIVITY_TIMEOUT_SECONDS}
     ports:
       - "8000:8000"
+    volumes:
+      - widtts_data:/app/data
     depends_on:
-      postgres:
-        condition: service_healthy
       livekit:
         condition: service_started
     healthcheck:
@@ -90,7 +68,7 @@ services:
       - widtts-network
 
 volumes:
-  widtts_pgdata:
+  widtts_data:
 
 networks:
   widtts-network:

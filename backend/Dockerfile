@@ -3,10 +3,9 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install build tools required for C-extensions (asyncpg, etc.)
+# Install build tools required for C-extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -19,12 +18,14 @@ WORKDIR /app
 
 # Install runtime system libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy pre-compiled Python packages from builder stage
 COPY --from=builder /install /usr/local
+
+# Create data directory for SQLite database
+RUN mkdir -p /app/data
 
 # Copy full application code (including tests/ for in-container test execution)
 COPY . .

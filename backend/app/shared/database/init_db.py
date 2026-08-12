@@ -1,13 +1,12 @@
 """
 Database initialization hook.
 
-Called at application startup to ensure PostgreSQL schema is up to date
+Called at application startup to ensure SQLite schema is up to date
 and default seed configurations (e.g. Local Docker realtime transport) are present.
 """
 
 import logging
-from app.shared.database.migrations_pg import run_migrations_pg
-from app.shared.database.db import get_pool
+from app.shared.database.migrations_sqlite import run_migrations_sqlite
 
 logger = logging.getLogger("init_db")
 
@@ -42,16 +41,15 @@ async def seed_default_realtime_config():
 
 
 async def init_db():
-    """Initialize database: create pool and run migrations.
+    """Initialize database: run migrations.
 
     Note: seed_default_realtime_config() is NOT called here because it
     requires the encryption key to be bootstrapped first. Call
     seed_default_realtime_config() separately after bootstrap_encryption_key().
     """
-    logger.info("Initializing PostgreSQL connection pool...")
-    await get_pool()
+    logger.info("Initializing SQLite database...")
 
     logger.info("Running pending migrations...")
-    await run_migrations_pg()
+    await run_migrations_sqlite()
 
     logger.info("Database initialization complete")

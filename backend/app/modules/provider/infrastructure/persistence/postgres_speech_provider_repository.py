@@ -14,7 +14,7 @@ class PostgresSpeechProviderRepository(SpeechProviderRepositoryInterface):
                 """INSERT INTO speech_providers
                    (id, name, provider_type, credentials_enc, key_version,
                     stt_model, stt_language, stt_extra, tts_model, tts_voice_id, tts_extra)
-                   VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 pid, provider["name"], provider["provider_type"],
                 json.dumps(provider.get("credentials_enc", {})),
                 provider.get("key_version", 1),
@@ -29,7 +29,7 @@ class PostgresSpeechProviderRepository(SpeechProviderRepositoryInterface):
 
     async def get_by_id(self, provider_id: str) -> Optional[Dict[str, Any]]:
         async with get_connection() as conn:
-            row = await conn.fetchrow("SELECT * FROM speech_providers WHERE id = $1", provider_id)
+            row = await conn.fetchrow("SELECT * FROM speech_providers WHERE id = ?", provider_id)
             return self._row_to_dict(row) if row else None
 
     async def list_all(self) -> List[Dict[str, Any]]:
@@ -40,7 +40,6 @@ class PostgresSpeechProviderRepository(SpeechProviderRepositoryInterface):
     async def update(self, provider_id: str, updates: Dict[str, Any]) -> None:
         sets = []
         vals = []
-        idx = 1
         for key in ("name", "provider_type", "credentials_enc", "key_version",
                      "stt_model", "stt_language", "stt_extra",
                      "tts_model", "tts_voice_id", "tts_extra",
@@ -49,22 +48,19 @@ class PostgresSpeechProviderRepository(SpeechProviderRepositoryInterface):
                 val = updates[key]
                 if key in ("credentials_enc", "stt_extra", "tts_extra"):
                     val = json.dumps(val)
-                    sets.append(f"{key} = ${idx}::jsonb")
-                else:
-                    sets.append(f"{key} = ${idx}")
+                sets.append(f"{key} = ?")
                 vals.append(val)
-                idx += 1
         if not sets:
             return
-        sets.append(f"updated_at = NOW()")
+        sets.append("updated_at = datetime('now')")
         vals.append(provider_id)
-        sql = f"UPDATE speech_providers SET {', '.join(sets)} WHERE id = ${idx}"
+        sql = f"UPDATE speech_providers SET {', '.join(sets)} WHERE id = ?"
         async with get_connection() as conn:
             await conn.execute(sql, *vals)
 
     async def delete(self, provider_id: str) -> None:
         async with get_connection() as conn:
-            await conn.execute("DELETE FROM speech_providers WHERE id = $1", provider_id)
+            await conn.execute("DELETE FROM speech_providers WHERE id = ?", provider_id)
 
     @staticmethod
     def _row_to_dict(row) -> Dict[str, Any]:
