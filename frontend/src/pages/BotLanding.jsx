@@ -30,6 +30,16 @@ export default function BotLanding() {
       });
   }, [slug]);
 
+  // Set browser tab title to bot name
+  useEffect(() => {
+    if (bot?.name) {
+      document.title = `${bot.name} — widTTS`;
+    }
+    return () => {
+      document.title = 'widTTS — Voice Platform';
+    };
+  }, [bot?.name]);
+
   const handleEnter = useCallback(() => {
     // Store the bot slug so the voice session knows which bot to connect to
     sessionStorage.setItem('widtts_bot_slug', slug);
