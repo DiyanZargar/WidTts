@@ -265,6 +265,7 @@ class FishAudioTTS(_LiveKitTTS):
         self._language = language
         self._custom_endpoint = custom_endpoint
         self._session = None  # lazily created aiohttp session
+        self._handlers: dict = {}  # per-instance event handler registry (NOT class-level)
 
     # -- LiveKit TTS interface compatibility --
 
@@ -311,7 +312,6 @@ class FishAudioTTS(_LiveKitTTS):
             self._session = None
 
     # EventEmitter compatibility (AgentSession may call emit/on)
-    _handlers: dict = {}
 
     def on(self, event: str, handler=None):
         if handler is None:

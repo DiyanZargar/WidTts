@@ -648,13 +648,38 @@ curl -s -i -H "ngrok-skip-browser-warning: 1" "https://<your-ngrok-domain>/rtc/v
 # → HTTP/2 200 OK  success
 ```
 
-### WebRTC Media & Networking Limitations
+### WebRTC Media & Networking Guide
 
-* **Signaling & APIs**: Fully functional over ngrok HTTPS/WSS via the Nginx `/rtc` proxy.
-* **WebRTC Media (RTP/RTCP)**:
-  * **Same-Host Testing**: **PASS**. WebRTC ICE resolves over localhost UDP/TCP.
-  * **Same-LAN Wi-Fi Devices**: **PASS** when `node_ip` in `livekit.yaml` is set to the host's LAN IP.
-  * **Remote Internet Devices (4G/5G/External Network)**: **PARTIAL**. Standard ngrok HTTP tunnels do not forward Layer 4 UDP media packets (`50000-50100`). For remote Internet voice streaming, LiveKit requires either router UDP port forwarding, an external TURN relay server in `livekit.yaml`, or using LiveKit Cloud for media routing.
+| Client Location | Signaling Path | Media Path (RTP/RTCP) | Result | Setup Required |
+|---|---|---|---|---|
+| **Host Machine (Browser)** | ngrok HTTPS/WSS (`/rtc`) | `127.0.0.1:500xx` | ✅ **PASS** | Out of the box |
+| **Phone on Same Local Wi-Fi** | ngrok HTTPS/WSS (`/rtc`) | `192.168.x.x:500xx` (LAN UDP) | ✅ **PASS** | Phone & Mac on same Wi-Fi SSID |
+| **Phone on Cellular (4G/5G) / Remote** | ngrok HTTPS/WSS (`/rtc`) | Router Public IP / Cloud SFU | ⚠️ **CONDITIONAL** | Needs LiveKit Cloud or Router Port Forwarding |
+
+#### Understanding the WebRTC Layer 7 vs. Layer 4 Separation
+
+* **Signaling (`/rtc` & `/twirp/`)**:
+  LiveKit room negotiation happens over WebSocket (TCP port 443). This is fully proxied and encrypted by ngrok and Nginx.
+* **Media Streams (Audio RTP / RTCP)**:
+  Once signaling completes, browsers send raw microphone audio packets over **UDP ports 50000–50100**.
+  Standard ngrok HTTP tunnels do **not** relay UDP media packets.
+
+#### Troubleshooting Mobile Device Voice Sessions
+
+1. **"No STT / TTS Audio on Mobile Phone"**:
+   * **Root Cause 1 — Different Subnets / Cellular Data**: If the phone is on mobile data (4G/5G) or a guest Wi-Fi network, the phone cannot send UDP packets to the private LAN IP (`192.168.1.x`), and home router firewalls block unsolicited inbound UDP.
+     * **Fix**: Turn off Mobile Data on your phone and connect to the **exact same Wi-Fi network as your host computer**.
+   * **Root Cause 2 — Autoplay Restrictions**: Mobile Safari and Chrome require explicit user interaction to start audio. The frontend automatically invokes `room.startAudio()` when tapping "Enter" / "Initialize Core".
+2. **For Universal Remote Access (Cellular / Outside Networks)**:
+   * **Option A (Recommended for Public Deployment — LiveKit Cloud)**:
+     ```env
+     LIVEKIT_URL=wss://<your-project>.livekit.cloud
+     LIVEKIT_API_KEY=<cloud-api-key>
+     LIVEKIT_API_SECRET=<cloud-api-secret>
+     ```
+     LiveKit Cloud's worldwide media edge network handles WebRTC UDP relay globally with zero router configuration.
+   * **Option B (Router Port Forwarding)**:
+     Forward UDP ports `50000-50100` on your router to your host machine's local IP (`192.168.1.5`).
 
 ### Stopping & Logs
 

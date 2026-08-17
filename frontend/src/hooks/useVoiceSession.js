@@ -1,4 +1,5 @@
 import { useContext, useCallback, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import { ConversationContext } from '../context/ConversationContext';
 import { useLiveKitRoom } from './useLiveKitRoom';
 
@@ -10,6 +11,14 @@ import { useLiveKitRoom } from './useLiveKitRoom';
 export function useVoiceSession() {
   const { state, dispatch } = useContext(ConversationContext);
   const { connect, disconnect, toggleMute, sendData, muted, setMuted, audioLevel, listenLevel } = useLiveKitRoom();
+
+  // Resolve bot slug from URL params first (works after reload / direct nav),
+  // then fall back to sessionStorage (set by BotLanding on normal entry).
+  const { slug: urlSlug } = useParams();
+  const _resolveBotSlug = useCallback(
+    () => urlSlug || sessionStorage.getItem('widtts_bot_slug') || null,
+    [urlSlug],
+  );
 
   // Event handler: map LiveKit data channel events to ConversationContext actions
   const onEvent = useCallback((evt) => {
@@ -91,9 +100,9 @@ export function useVoiceSession() {
 
   const begin = useCallback(() => {
     dispatch({ type: 'OPEN_WIDGET' });
-    const botSlug = sessionStorage.getItem('widtts_bot_slug') || null;
+    const botSlug = _resolveBotSlug();
     connect(onEvent, onStatusChange, botSlug);
-  }, [dispatch, connect, onEvent, onStatusChange]);
+  }, [dispatch, connect, onEvent, onStatusChange, _resolveBotSlug]);
 
   const end = useCallback(() => {
     disconnect();
@@ -104,10 +113,10 @@ export function useVoiceSession() {
     disconnect();
     dispatch({ type: 'RESET_FOR_NEW_SESSION' });
     setTimeout(() => {
-      const botSlug = sessionStorage.getItem('widtts_bot_slug') || null;
+      const botSlug = _resolveBotSlug();
       connect(onEvent, onStatusChange, botSlug);
     }, 100);
-  }, [disconnect, dispatch, connect, onEvent, onStatusChange]);
+  }, [disconnect, dispatch, connect, onEvent, onStatusChange, _resolveBotSlug]);
 
   return {
     status,

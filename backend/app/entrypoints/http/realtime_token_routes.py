@@ -148,7 +148,12 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
             audio_sample_rate=config.get("audio_sample_rate", 16000),
         )
     )
-    task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
+    def _on_session_task_done(t, sid=session_id):
+        if not t.cancelled():
+            exc = t.exception()
+            if exc:
+                logger.error("[TOKEN] Background session task failed for session=%s: %s", sid, exc)
+    task.add_done_callback(_on_session_task_done)
 
     logger.info("[TOKEN] Minted token for session=%s room=%s", session_id, room_name)
 
