@@ -549,9 +549,122 @@ Host Browser ──WS :7880──────▶ LIVEKIT SERVER
 |---|---|---|
 | Browser → Frontend | HTTP :3000 | Serves React SPA |
 | Frontend → Backend | HTTP | Nginx reverse proxy (`http://backend:8000`) |
-| Backend → LiveKit | WebSocket | Docker DNS (`ws://livekit:7880`) |
+| Backend → LiveKit | WebSocket | Direct Docker DNS (`ws://livekit:7880`) |
 | Backend → SQLite | File I/O | Local file (`/app/data/widtts.db`) |
-| Browser → LiveKit | WebSocket | Host-mapped port (`ws://localhost:7880`) |
+| Browser → LiveKit Signaling | WebSocket | Nginx reverse proxy (`/rtc` → `http://livekit:7880/rtc`) |
+
+---
+
+## 🌐 Remote Development / ngrok
+
+You can expose the complete Dockerized widTTS application over the public internet using the integrated **ngrok** container service.
+
+### Architecture & Routing
+
+```
+Remote Web Browser
+      │
+      ▼ (HTTPS / WSS on Port 443)
+ngrok Public Tunnel
+      │
+      ▼ (HTTP Port 3000)
+widTTS Frontend (Nginx Reverse Proxy)
+      ├───────────► / (React SPA)
+      ├───────────► /health, /admin/api/, /realtime/, /api/bot/  ──► Backend (:8000)
+      └───────────► /rtc (WebSocket Signaling), /twirp/           ──► LiveKit (:7880)
+
+widTTS Backend (:8000)
+      └───────────► ws://livekit:7880 (Direct container-to-container internal voice agent)
+```
+
+### Prerequisites
+
+1. An [ngrok](https://ngrok.com/) account.
+2. Your ngrok authtoken from [ngrok Dashboard](https://dashboard.ngrok.com/get-started/your-authtoken).
+
+### Configuration (`.env`)
+
+Configure the following variables in your `.env` file:
+
+```env
+# ngrok credentials
+NGROK_AUTHTOKEN=your_actual_ngrok_authtoken
+
+# Optional static/custom domain (if you have a reserved ngrok domain)
+# Leave blank for an automatically assigned URL
+NGROK_DOMAIN=
+
+# Browser-facing LiveKit URL: set to your public ngrok domain
+# (e.g. https://your-subdomain.ngrok-free.app or https://your-subdomain.ngrok.app)
+LIVEKIT_URL=https://your-subdomain.ngrok-free.app
+
+# Backend internal LiveKit URL: connects directly container-to-container
+LIVEKIT_INTERNAL_URL=ws://livekit:7880
+```
+
+### Starting the Stack
+
+```bash
+# Start all 4 services (LiveKit, Backend, Frontend, ngrok)
+docker compose up -d
+
+# Check running status
+docker compose ps
+```
+
+### Discovering the Public URL
+
+View the assigned public URL from the ngrok container logs:
+```bash
+docker compose logs ngrok
+```
+Or query the local ngrok inspection API:
+```bash
+curl -s http://localhost:4040/api/tunnels | grep -o '"public_url":"[^"]*'
+```
+
+### Verifying Endpoints
+
+```bash
+# 1. Frontend Health
+curl -s -H "ngrok-skip-browser-warning: 1" https://<your-ngrok-domain>/health
+
+# 2. Deployed Bot API
+curl -s -H "ngrok-skip-browser-warning: 1" https://<your-ngrok-domain>/api/bot/health-assistant
+
+# 3. Mint Token (returns public LiveKit URL)
+curl -s -X POST https://<your-ngrok-domain>/api/bot/health-assistant/token \
+  -H "Content-Type: application/json" \
+  -H "ngrok-skip-browser-warning: 1" \
+  -d '{"conversation_type":"bot_session"}'
+
+# 4. LiveKit Token Validation through Nginx Proxy
+TOKEN=$(curl -s -X POST https://<your-ngrok-domain>/api/bot/health-assistant/token \
+  -H "Content-Type: application/json" \
+  -H "ngrok-skip-browser-warning: 1" \
+  -d '{"conversation_type":"bot_session"}' | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+
+curl -s -i -H "ngrok-skip-browser-warning: 1" "https://<your-ngrok-domain>/rtc/validate?access_token=$TOKEN"
+# → HTTP/2 200 OK  success
+```
+
+### WebRTC Media & Networking Limitations
+
+* **Signaling & APIs**: Fully functional over ngrok HTTPS/WSS via the Nginx `/rtc` proxy.
+* **WebRTC Media (RTP/RTCP)**:
+  * **Same-Host Testing**: **PASS**. WebRTC ICE resolves over localhost UDP/TCP.
+  * **Same-LAN Wi-Fi Devices**: **PASS** when `node_ip` in `livekit.yaml` is set to the host's LAN IP.
+  * **Remote Internet Devices (4G/5G/External Network)**: **PARTIAL**. Standard ngrok HTTP tunnels do not forward Layer 4 UDP media packets (`50000-50100`). For remote Internet voice streaming, LiveKit requires either router UDP port forwarding, an external TURN relay server in `livekit.yaml`, or using LiveKit Cloud for media routing.
+
+### Stopping & Logs
+
+```bash
+# Stop all services
+docker compose down
+
+# Stream logs from ngrok and backend
+docker compose logs -f ngrok backend
+```
 
 ---
 

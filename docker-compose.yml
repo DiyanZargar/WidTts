@@ -67,6 +67,30 @@ services:
     networks:
       - widtts-network
 
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: widtts-ngrok
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -n "$$NGROK_DOMAIN" ]; then
+          exec ngrok http --log=stdout --url="$$NGROK_DOMAIN" frontend:3000
+        else
+          exec ngrok http --log=stdout frontend:3000
+        fi
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+      NGROK_DOMAIN: ${NGROK_DOMAIN:-}
+    ports:
+      - "4040:4040"
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks:
+      - widtts-network
+
 volumes:
   widtts_data:
 

@@ -36,6 +36,11 @@ async def seed_default_realtime_config():
                 "is_active": True,
             })
             logger.info("[INIT_DB] Seeded default realtime transport configuration from .env settings")
+        else:
+            env_config = next((c for c in all_configs if c.get("name") == "Environment Transport"), None)
+            if env_config and settings.livekit_url and env_config.get("server_url") != settings.livekit_url:
+                await repo.update(env_config["id"], {"server_url": settings.livekit_url})
+                logger.info("[INIT_DB] Synced Environment Transport server_url=%s from .env settings", settings.livekit_url)
     except Exception as e:
         logger.warning(f"[INIT_DB] Realtime config seed warning: {e}")
 

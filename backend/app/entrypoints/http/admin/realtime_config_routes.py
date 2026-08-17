@@ -85,11 +85,23 @@ def _format_config_response(cfg: dict) -> dict:
         "room_token_ttl_seconds": cfg["room_token_ttl_seconds"],
         "audio_sample_rate": cfg["audio_sample_rate"],
         "is_active": cfg.get("is_active", False),
-        "last_tested_at": cfg["last_tested_at"].isoformat() if cfg.get("last_tested_at") else None,
+        "last_tested_at": (
+            cfg["last_tested_at"].isoformat()
+            if hasattr(cfg.get("last_tested_at"), "isoformat")
+            else cfg.get("last_tested_at")
+        ),
         "last_test_status": cfg.get("last_test_status"),
         "last_test_error": cfg.get("last_test_error"),
-        "created_at": cfg["created_at"].isoformat() if cfg.get("created_at") else None,
-        "updated_at": cfg["updated_at"].isoformat() if cfg.get("updated_at") else None,
+        "created_at": (
+            cfg["created_at"].isoformat()
+            if hasattr(cfg.get("created_at"), "isoformat")
+            else cfg.get("created_at")
+        ),
+        "updated_at": (
+            cfg["updated_at"].isoformat()
+            if hasattr(cfg.get("updated_at"), "isoformat")
+            else cfg.get("updated_at")
+        ),
     }
 
 

@@ -12,6 +12,8 @@ export default defineConfig({
       "/admin/api": { target: "http://localhost:8000", changeOrigin: true },
       "/realtime": { target: "http://localhost:8000", changeOrigin: true },
       "/api/bot": { target: "http://localhost:8000", changeOrigin: true },
+      "/rtc": { target: "http://localhost:7880", changeOrigin: true, ws: true },
+      "/twirp": { target: "http://localhost:7880", changeOrigin: true },
     },
   },
   worker: {

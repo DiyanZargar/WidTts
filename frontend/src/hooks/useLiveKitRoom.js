@@ -318,6 +318,7 @@ export function useLiveKitRoom() {
 
       // Connect to room
       await room.connect(server_url, token);
+      await room.startAudio().catch(() => {});
 
       // Publish mic
       await room.localParticipant.setMicrophoneEnabled(true);
