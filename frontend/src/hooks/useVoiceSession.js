@@ -1,4 +1,4 @@
-import { useContext, useCallback, useMemo } from 'react';
+import { useContext, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { ConversationContext } from '../context/ConversationContext';
 import { useLiveKitRoom } from './useLiveKitRoom';
@@ -21,7 +21,8 @@ export function useVoiceSession() {
   );
 
   // Event handler: map LiveKit data channel events to ConversationContext actions
-  const onEvent = useCallback((evt) => {
+  const onEventRef = useRef();
+  onEventRef.current = (evt) => {
     if (!evt || !evt.event) return;
 
     switch (evt.event) {
@@ -69,15 +70,19 @@ export function useVoiceSession() {
         console.warn('[Session] Error:', evt.payload.message);
         break;
     }
-  }, [dispatch]);
+  };
 
-  const onStatusChange = useCallback((status) => {
+  const onStatusChangeRef = useRef();
+  onStatusChangeRef.current = (status) => {
     if (status === 'connected') {
       dispatch({ type: 'SET_LISTENING', value: true });
     } else if (status === 'disconnected') {
       dispatch({ type: 'SET_LISTENING', value: false });
     }
-  }, [dispatch]);
+  };
+
+  const stableOnEvent = useCallback((evt) => onEventRef.current?.(evt), []);
+  const stableOnStatusChange = useCallback((s) => onStatusChangeRef.current?.(s), []);
 
   // Map conversation state to simplified BotStatus
   const status = useMemo(() => {
@@ -101,8 +106,8 @@ export function useVoiceSession() {
   const begin = useCallback(() => {
     dispatch({ type: 'OPEN_WIDGET' });
     const botSlug = _resolveBotSlug();
-    connect(onEvent, onStatusChange, botSlug);
-  }, [dispatch, connect, onEvent, onStatusChange, _resolveBotSlug]);
+    connect(stableOnEvent, stableOnStatusChange, botSlug);
+  }, [dispatch, connect, stableOnEvent, stableOnStatusChange, _resolveBotSlug]);
 
   const end = useCallback(() => {
     disconnect();
@@ -114,9 +119,9 @@ export function useVoiceSession() {
     dispatch({ type: 'RESET_FOR_NEW_SESSION' });
     setTimeout(() => {
       const botSlug = _resolveBotSlug();
-      connect(onEvent, onStatusChange, botSlug);
+      connect(stableOnEvent, stableOnStatusChange, botSlug);
     }, 100);
-  }, [disconnect, dispatch, connect, onEvent, onStatusChange, _resolveBotSlug]);
+  }, [disconnect, dispatch, connect, stableOnEvent, stableOnStatusChange, _resolveBotSlug]);
 
   return {
     status,

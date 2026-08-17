@@ -104,6 +104,20 @@ class PostgresBotRepository(BotRepositoryInterface):
                 bot_id,
             )
 
+    async def slug_exists(self, slug: str, exclude_bot_id: Optional[str] = None) -> bool:
+        async with get_connection() as conn:
+            if exclude_bot_id:
+                row = await conn.fetchrow(
+                    "SELECT 1 FROM bots WHERE deploy_slug = ? AND is_deployed = 1 AND id != ?",
+                    slug, exclude_bot_id,
+                )
+            else:
+                row = await conn.fetchrow(
+                    "SELECT 1 FROM bots WHERE deploy_slug = ? AND is_deployed = 1",
+                    slug,
+                )
+            return row is not None
+
     async def get_by_slug(self, slug: str) -> Optional[Dict[str, Any]]:
         async with get_connection() as conn:
             row = await conn.fetchrow(

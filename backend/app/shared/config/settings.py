@@ -27,9 +27,11 @@ class Settings(BaseSettings):
     livekit_audio_sample_rate: int = Field(default=16000, alias="LIVEKIT_AUDIO_SAMPLE_RATE")
 
     # ── Application ──
-    app_secret: str = "dev-secret-change-in-production"
+    app_secret: str = Field(default="dev-secret-change-in-production", alias="APP_SECRET")
+    admin_api_key: str = Field(default="widtts-admin-dev-key", alias="ADMIN_API_KEY")
+    environment: str = Field(default="development", alias="ENVIRONMENT")
     port: int = 8000
-    room_inactivity_timeout_seconds: float = Field(default=30, alias="ROOM_INACTIVITY_TIMEOUT_SECONDS")
+    room_inactivity_timeout_seconds: float = Field(default=60, alias="ROOM_INACTIVITY_TIMEOUT_SECONDS")
     agent_token_ttl_seconds: int = Field(default=7200, alias="AGENT_TOKEN_TTL_SECONDS")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

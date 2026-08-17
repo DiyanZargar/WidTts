@@ -254,12 +254,17 @@ class WidTTSLLMStream(LLMStream):
             logger.warning("[BRIDGE] Empty user text in chat context — skipping")
             return
 
+        turn_id = f"turn-{uuid.uuid4().hex[:8]}"
+        session_id = self._bridge._session_id
+
         logger.info(
-            "[BRIDGE] Processing user text: %s (len=%d)",
+            "[BRIDGE] Processing user text [session=%s turn=%s]: %s (len=%d)",
+            session_id,
+            turn_id,
             user_text[:120],
             len(user_text),
         )
-        pl.llm_started(session_id="", turn_id="")
+        pl.llm_started(session_id=session_id, turn_id=turn_id)
 
         # 2. Route through conversation policy for intent classification
         classification = "ANSWER"  # Default: treat as normal answer
@@ -319,6 +324,7 @@ class WidTTSLLMStream(LLMStream):
             token_count = 0
             first_token_time: Optional[float] = None
             full_response = ""
+            stream_buffer = ""
 
             async for token in self._bridge._adapter.stream_chat(
                 user_text=user_text,
@@ -334,13 +340,46 @@ class WidTTSLLMStream(LLMStream):
                     ttft_ms = int((first_token_time - t0) * 1000)
                     logger.info("[BRIDGE] First token in %dms", ttft_ms)
 
-                token_count += 1
                 full_response += token
-                chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
-                await self._event_ch.send(ChatChunk(
-                    id=chunk_id,
-                    delta=ChoiceDelta(role="assistant", content=token),
-                ))
+                stream_buffer += token
+
+                # Strip complete farewell marker if present
+                if _FAREWELL_MARKER in stream_buffer:
+                    stream_buffer = stream_buffer.replace(_FAREWELL_MARKER, "")
+
+                # Hold back any trailing prefix that could be part of [END_SESSION]
+                hold_back_len = 0
+                for i in range(1, len(_FAREWELL_MARKER)):
+                    prefix = _FAREWELL_MARKER[:i]
+                    if stream_buffer.endswith(prefix):
+                        hold_back_len = len(prefix)
+                        break
+
+                if hold_back_len > 0:
+                    emit_text = stream_buffer[:-hold_back_len]
+                    stream_buffer = stream_buffer[-hold_back_len:]
+                else:
+                    emit_text = stream_buffer
+                    stream_buffer = ""
+
+                if emit_text:
+                    token_count += 1
+                    chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
+                    await self._event_ch.send(ChatChunk(
+                        id=chunk_id,
+                        delta=ChoiceDelta(role="assistant", content=emit_text),
+                    ))
+
+            # Flush remaining buffer after stream finishes (stripping marker)
+            if stream_buffer:
+                clean_tail = stream_buffer.replace(_FAREWELL_MARKER, "")
+                if clean_tail:
+                    token_count += 1
+                    chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
+                    await self._event_ch.send(ChatChunk(
+                        id=chunk_id,
+                        delta=ChoiceDelta(role="assistant", content=clean_tail),
+                    ))
 
             duration_ms = int((time.monotonic() - t0) * 1000)
             ttft_ms = int((first_token_time - t0) * 1000) if first_token_time else -1
@@ -352,7 +391,7 @@ class WidTTSLLMStream(LLMStream):
                 action.value,
             )
             pl.llm_completed(
-                session_id="", turn_id="",
+                session_id=session_id, turn_id=turn_id,
                 duration_ms=duration_ms, token_count=token_count,
                 classification=action.value,
             )
@@ -364,7 +403,7 @@ class WidTTSLLMStream(LLMStream):
 
         except asyncio.CancelledError:
             logger.info("[BRIDGE] Stream cancelled")
-            pl.llm_cancelled(session_id="", turn_id="", reason="stream_cancelled")
+            pl.llm_cancelled(session_id=session_id, turn_id=turn_id, reason="stream_cancelled")
             raise
 
         except Exception as e:
@@ -375,7 +414,7 @@ class WidTTSLLMStream(LLMStream):
                 e,
                 exc_info=True,
             )
-            pl.llm_error(session_id="", turn_id="", error=str(e)[:200])
+            pl.llm_error(session_id=session_id, turn_id=turn_id, error=str(e)[:200])
             # Emit error acknowledgement so the user isn't left hanging
             chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
             await self._event_ch.send(ChatChunk(
@@ -424,12 +463,14 @@ class WidTTSLLMBridge(LLM):
         bot: Dict[str, Any],
         conversation_adapter: ConversationAdapterProtocol,
         policy: ConversationPolicy,
+        session_id: str = "",
         on_session_end: Optional[Any] = None,
     ) -> None:
         super().__init__()
         self._bot = bot
         self._adapter = conversation_adapter
         self._policy = policy
+        self._session_id = session_id
         self._on_session_end = on_session_end
 
         self._system_prompt: str = bot.get("system_prompt", "")

@@ -19,4 +19,16 @@ export default defineConfig({
   worker: {
     format: "es",
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor_react: ["react", "react-dom", "react-router-dom"],
+          vendor_livekit: ["livekit-client"],
+          vendor_icons: ["lucide-react"],
+        },
+      },
+    },
+  },
 });

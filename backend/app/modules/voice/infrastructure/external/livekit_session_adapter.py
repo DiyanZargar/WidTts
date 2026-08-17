@@ -261,6 +261,7 @@ class LiveKitSession:
             bot=bot_config,
             policy=policy,
             conversation_adapter=conversation_adapter,
+            session_id=self.snapshot.session_id,
             on_session_end=_schedule_session_end,
         )
 
@@ -273,6 +274,16 @@ class LiveKitSession:
             return
         self._is_destroyed = True
         logger.info("[SESSION] Destroying session=%s", self.snapshot.session_id)
+
+        # Mark session as completed in database
+        try:
+            from app.modules.session.infrastructure.persistence.postgres_session_repository import (
+                PostgresSessionRepository,
+            )
+            await PostgresSessionRepository().close(self.snapshot.session_id, status="completed")
+            logger.info("[SESSION] Marked session %s as completed in database", self.snapshot.session_id)
+        except Exception as e:
+            logger.warning("[SESSION] Failed to mark session %s as completed in DB: %s", self.snapshot.session_id, e)
 
         if self._agent_session:
             try:

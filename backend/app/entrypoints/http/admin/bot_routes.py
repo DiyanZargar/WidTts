@@ -167,7 +167,7 @@ async def deploy_bot(bot_id: str):
     slug = base_slug
     suffix = 1
     while True:
-        if not await _repo.get_by_slug(slug):
+        if not await _repo.slug_exists(slug, exclude_bot_id=bot_id):
             break
         suffix += 1
         slug = f"{base_slug}-{suffix}"

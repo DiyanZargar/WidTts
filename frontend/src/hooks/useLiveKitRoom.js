@@ -129,6 +129,19 @@ export function useLiveKitRoom() {
   const connect = useCallback(async (onEvent, onStatusChange, botSlug) => {
     callbacksRef.current = { onEvent, onStatusChange };
 
+    // Guard: cleanly disconnect any prior active room/audio before connecting
+    if (roomRef.current) {
+      try {
+        roomRef.current.disconnect();
+      } catch (_) {}
+      roomRef.current = null;
+    }
+    if (audioElementRef.current) {
+      audioElementRef.current.remove();
+      audioElementRef.current = null;
+    }
+    cleanupAudio();
+
     try {
       // Fetch token from backend — bot-specific or active bot
       const tokenUrl = botSlug
@@ -172,14 +185,15 @@ export function useLiveKitRoom() {
         onStatusChange?.('connected');
       });
 
-      room.on(RoomEvent.Disconnected, () => {
-        onStatusChange?.('disconnected');
-        onEvent?.({ event: 'session_completed', payload: {} });
-      });
-
       // Track subscription (remote audio from TTS)
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === Track.Kind.Audio) {
+          // Remove any pre-existing audio element before attaching a new one
+          if (audioElementRef.current) {
+            audioElementRef.current.remove();
+            audioElementRef.current = null;
+          }
+
           // Attach using LiveKit's managed element generator for zero-latency WebRTC audio
           const audioEl = track.attach();
           audioEl.id = `livekit-audio-${participant.identity || 'agent'}`;
@@ -305,6 +319,7 @@ export function useLiveKitRoom() {
       room.on(RoomEvent.Disconnected, (reason) => {
         console.log('[LiveKit] Room disconnected:', reason);
         stopLevelLoop();
+        onStatusChange?.('disconnected');
         onEvent?.({ event: 'session_end', payload: { reason: reason || 'disconnected' } });
       });
 
@@ -312,6 +327,7 @@ export function useLiveKitRoom() {
         console.log('[LiveKit] Participant disconnected:', participant?.identity);
         if (participant?.identity?.startsWith('agent-')) {
           stopLevelLoop();
+          onStatusChange?.('disconnected');
           onEvent?.({ event: 'session_end', payload: { reason: 'agent_disconnected' } });
         }
       });
@@ -338,9 +354,13 @@ export function useLiveKitRoom() {
 
     } catch (err) {
       console.error('[LiveKit] Connection error:', err);
-      onEvent?.({ event: 'error', payload: { message: err.message } });
+      const friendlyMsg = (err.name === 'TypeError' && err.message?.includes('fetch'))
+        ? 'Unable to reach the voice server. Please check your network connection.'
+        : (err.message || 'Voice session connection failed.');
+      onEvent?.({ event: 'error', payload: { message: friendlyMsg } });
+      onStatusChange?.('error');
     }
-  }, [createAnalyser, startLevelLoop]);
+  }, [createAnalyser, startLevelLoop, cleanupAudio]);
 
   const disconnect = useCallback(() => {
     cleanupAudio();
