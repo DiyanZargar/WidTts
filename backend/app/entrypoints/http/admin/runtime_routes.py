@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter
 from app.shared.database.db import get_connection
-from app.shared.config.settings import settings
 
 router = APIRouter(prefix="/runtime", tags=["runtime"])
 

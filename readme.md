@@ -11,7 +11,7 @@ Each bot is independently configurable with its own LLM, TTS voice, STT model, s
 * **Multi-Bot, Multi-Tenant**: Create multiple bots, each with independent LLM/TTS/STT config. Deploy each bot to a unique public URL. No shared state between bots.
 * **Zero Hardcoding Policy**: All provider settings are managed dynamically via SQLite with Envelope Encryption (AES-256-GCM). No secrets in application code.
 * **LiveKit Infrastructure**: Realtime WebRTC audio runs server-side via official LiveKit plugins (Silero VAD, Deepgram, ElevenLabs). LiveKit is transport only — the app owns its architecture.
-* **Single Seam LLM Bridge**: `WidTTSLLMBridge` implements `livekit.agents.llm.LLM`. It enforces conversation policies (STOP/REPEAT/CORRECTION/END) before delegating to the bot's configured LLM via LiteLLM.
+* **Single Seam LLM Bridge**: `CustomLLMBridge` implements `livekit.agents.llm.LLM`. It enforces conversation policies (STOP/REPEAT/CORRECTION/END) before delegating to the bot's configured LLM via LiteLLM.
 * **LLM-Driven Personality**: Each bot generates its own greeting and goodbye based on its system prompt — no hardcoded text. The bot's identity (`"You are {bot_name}."`) is prepended to instructions.
 * **3D Admin Journey**: Admin portal features a 7-stage interactive 3D scroll experience with glassmorphism UI, real-time connection verification, and per-bot configuration.
 

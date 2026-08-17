@@ -17,7 +17,7 @@ import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
 export default function HomePage() {
   const navigate = useNavigate();
   const params = useParams();
-  const botSlug = params.slug || sessionStorage.getItem('widtts_bot_slug') || null;
+  const botSlug = params.slug || sessionStorage.getItem('active_bot_slug') || sessionStorage.getItem('widtts_bot_slug') || null;
   const {
     status,
     audioLevel,
@@ -119,6 +119,7 @@ export default function HomePage() {
   const handleExit = useCallback(() => {
     if (isActive) end();
     // Clear bot slug from session when exiting
+    sessionStorage.removeItem('active_bot_slug');
     sessionStorage.removeItem('widtts_bot_slug');
     if (botSlug) {
       navigate(`/bot/${botSlug}`);

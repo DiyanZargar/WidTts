@@ -7,7 +7,7 @@ No LiveKit terminology appears in any response or error message.
 """
 
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 

@@ -1,18 +1,16 @@
 """
-WidTTS LLM Bridge — the single seam between LiveKit Agents and widTTS
+Custom LLM Bridge — the single seam between LiveKit Agents and the platform
 business logic.
 
-This is the **only** custom LiveKit plugin widTTS authors.  It implements
-``livekit.agents.llm.LLM`` so it can be passed directly to
-``AgentSession(llm=...)``.  All LLM calls flow through the existing
-widTTS conversation infrastructure — no livekit-plugins-* LLM backends
-are ever imported.
+This implements ``livekit.agents.llm.LLM`` so it can be passed directly to
+``AgentSession(llm=...)``. All LLM calls flow through the platform conversation
+infrastructure — no livekit-plugins-* LLM backends are ever imported.
 
 Architecture
 ------------
 LiveKit VoicePipelineAgent
-    └─ AgentSession(llm=WidTTSLLMBridge)
-        └─ WidTTSLLMBridge.chat(chat_ctx=...)
+    └─ AgentSession(llm=CustomLLMBridge)
+        └─ CustomLLMBridge.chat(chat_ctx=...)
             ├─ ConversationPolicy.resolve_action()   ← intent classification
             ├─ pre-formed responses for STOP/REPEAT/CORRECTION/END
             └─ ConversationAdapter.stream_chat()      ← streaming LLM for normal answers
@@ -38,8 +36,6 @@ Design constraints
 - Structured logging throughout for observability.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import time
@@ -54,10 +50,9 @@ from app.modules.conversation.domain.policy.conversation_policy import (
     ConversationPolicy,
     PolicyAction,
 )
-
-logger = logging.getLogger("widtts_llm_bridge")
-
 from app.shared.logging import pipeline_logger as pl
+
+logger = logging.getLogger("llm_bridge")
 
 
 # ── Conversation Adapter Protocol ────────────────────────────────────
@@ -83,41 +78,8 @@ class ConversationAdapterProtocol(Protocol):
         context: List[Dict[str, str]],
         llm_config: Dict[str, Any],
     ) -> AsyncIterator[str]:
-        """Stream LLM response tokens for the given user message.
-
-        Parameters
-        ----------
-        user_text:
-            The committed user transcript.
-        system_prompt:
-            The bot's system prompt that drives the conversation.
-        context:
-            Recent conversation history as ``[{"role": ..., "content": ...}]``.
-        llm_config:
-            LLM provider config with ``api_key``, ``base_url``, ``model``.
-
-        Yields
-        ------
-        str
-            Incremental text tokens from the LLM.
-
-        Implementations should be ``async def`` generators that ``yield``
-        individual tokens.  Example::
-
-            async def stream_chat(self, *, user_text, system_prompt,
-                                  context, llm_config):
-                response = await client.chat.completions.create(
-                    model=llm_config["model"],
-                    messages=_build_messages(system_prompt, context, user_text),
-                    stream=True,
-                )
-                async for chunk in response:
-                    token = chunk.choices[0].delta.content
-                    if token:
-                        yield token
-        """
+        """Stream LLM response tokens for the given user message."""
         ...  # pragma: no cover
-        # Make this an async generator for type-checking purposes
         yield ""  # noqa: unreachable
 
 
@@ -214,27 +176,23 @@ _END_ACK = "Thanks for chatting! Goodbye."
 _REPEAT_FALLBACK = "I don't have a previous response to repeat."
 _ERROR_ACK = "I'm sorry, something went wrong. Could you try again?"
 
-# The system prompt instructs the LLM to append this marker when it's
-# ending the conversation. This is language-agnostic — the LLM says
-# goodbye in whatever language it's configured for, then appends the marker.
 _FAREWELL_MARKER = "[END_SESSION]"
 
 
 # ── LLMStream subclass ──────────────────────────────────────────────
 
-class WidTTSLLMStream(LLMStream):
+class CustomLLMStream(LLMStream):
     """
-    Concrete ``LLMStream`` that routes through widTTS business logic.
+    Concrete ``LLMStream`` that routes through platform business logic.
 
-    Created by ``WidTTSLLMBridge.chat()``.  The ``_run()`` method is the
-    heart of the bridge — it extracts the transcript, runs policy
-    classification, and either yields a pre-formed response or streams
-    from the conversation adapter.
+    Created by ``CustomLLMBridge.chat()``. The ``_run()`` method extracts
+    the transcript, runs policy classification, and either yields a
+    pre-formed response or streams from the conversation adapter.
     """
 
     def __init__(
         self,
-        bridge: WidTTSLLMBridge,
+        bridge: "CustomLLMBridge",
         *,
         chat_ctx: ChatContext,
         tools: list,
@@ -300,7 +258,7 @@ class WidTTSLLMStream(LLMStream):
 
         # 4. Emit pre-formed response if we have one (policy shortcut)
         if response_text is not None:
-            chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
+            chunk_id = f"stream-{uuid.uuid4().hex[:12]}"
             await self._event_ch.send(ChatChunk(
                 id=chunk_id,
                 delta=ChoiceDelta(role="assistant", content=response_text),
@@ -364,7 +322,7 @@ class WidTTSLLMStream(LLMStream):
 
                 if emit_text:
                     token_count += 1
-                    chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
+                    chunk_id = f"stream-{uuid.uuid4().hex[:12]}"
                     await self._event_ch.send(ChatChunk(
                         id=chunk_id,
                         delta=ChoiceDelta(role="assistant", content=emit_text),
@@ -375,7 +333,7 @@ class WidTTSLLMStream(LLMStream):
                 clean_tail = stream_buffer.replace(_FAREWELL_MARKER, "")
                 if clean_tail:
                     token_count += 1
-                    chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
+                    chunk_id = f"stream-{uuid.uuid4().hex[:12]}"
                     await self._event_ch.send(ChatChunk(
                         id=chunk_id,
                         delta=ChoiceDelta(role="assistant", content=clean_tail),
@@ -415,8 +373,7 @@ class WidTTSLLMStream(LLMStream):
                 exc_info=True,
             )
             pl.llm_error(session_id=session_id, turn_id=turn_id, error=str(e)[:200])
-            # Emit error acknowledgement so the user isn't left hanging
-            chunk_id = f"wttp-{uuid.uuid4().hex[:12]}"
+            chunk_id = f"stream-{uuid.uuid4().hex[:12]}"
             await self._event_ch.send(ChatChunk(
                 id=chunk_id,
                 delta=ChoiceDelta(role="assistant", content=_ERROR_ACK),
@@ -425,13 +382,12 @@ class WidTTSLLMStream(LLMStream):
 
 # ── Main bridge class ───────────────────────────────────────────────
 
-class WidTTSLLMBridge(LLM):
+class CustomLLMBridge(LLM):
     """
-    Custom LiveKit ``LLM`` implementation for widTTS.
+    Custom LiveKit ``LLM`` implementation.
 
-    This is the **only** LiveKit plugin interface widTTS authors.  It
-    bridges the LiveKit voice agent pipeline with widTTS's conversation
-    policy and LLM infrastructure.
+    Bridges the LiveKit voice agent pipeline with the conversation policy
+    and LiteLLM infrastructure.
 
     Parameters
     ----------
@@ -449,8 +405,7 @@ class WidTTSLLMBridge(LLM):
 
     conversation_adapter:
         An object satisfying :class:`ConversationAdapterProtocol`.
-        Responsible for streaming LLM responses.  Typically wraps
-        ``AsyncOpenAI``.
+        Responsible for streaming LLM responses.
 
     policy:
         The conversation policy that maps interruption classifications
@@ -494,7 +449,7 @@ class WidTTSLLMBridge(LLM):
 
     @property
     def provider(self) -> str:
-        return "widtts"
+        return "custom"
 
     def chat(
         self,
@@ -505,13 +460,13 @@ class WidTTSLLMBridge(LLM):
         parallel_tool_calls: NotGivenOr[bool] = NOT_GIVEN,
         tool_choice: NotGivenOr[Any] = NOT_GIVEN,
         extra_kwargs: NotGivenOr[Dict[str, Any]] = NOT_GIVEN,
-    ) -> WidTTSLLMStream:
+    ) -> CustomLLMStream:
         """
         Create a streaming response for the given chat context.
 
         Called by LiveKit's ``VoicePipelineAgent`` when a committed user
-        transcript is available.  Returns an ``LLMStream`` that yields
-        ``ChatChunk`` objects compatible with livekit-agents.
+        transcript is available. Returns an ``LLMStream`` yielding ``ChatChunk``
+        objects compatible with livekit-agents.
         """
         logger.info(
             "[BRIDGE] chat() called — ctx_items=%d tools=%d",
@@ -519,7 +474,7 @@ class WidTTSLLMBridge(LLM):
             len(tools) if tools else 0,
         )
 
-        return WidTTSLLMStream(
+        return CustomLLMStream(
             self,
             chat_ctx=chat_ctx,
             tools=tools or [],
@@ -530,23 +485,15 @@ class WidTTSLLMBridge(LLM):
 # ── Module-level helpers ────────────────────────────────────────────
 
 def _extract_user_text(chat_ctx: ChatContext) -> str:
-    """
-    Extract the most recent committed user transcript from the chat context.
-
-    LiveKit's ``ChatContext`` carries a list of messages.  We walk in
-    reverse to find the last ``user`` role message — this is the
-    committed transcript from the STT pipeline.
-    """
+    """Extract the most recent committed user transcript from the chat context."""
     items = getattr(chat_ctx, "items", None) or []
     for item in reversed(items):
         role = getattr(item, "role", None)
         if role == "user" or str(role) == "user":
-            # Content can be a string or a list of content parts
             content = getattr(item, "content", None)
             if isinstance(content, str):
                 return content.strip()
             if isinstance(content, list):
-                # Join text content parts
                 parts = []
                 for part in content:
                     if isinstance(part, str):
@@ -580,13 +527,7 @@ def _find_last_assistant_message(chat_ctx: ChatContext) -> Optional[str]:
 
 
 def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
-    """
-    Convert ``ChatContext`` items into a plain message list for the
-    conversation adapter.
-
-    Returns ``[{"role": "user"|"assistant"|"system", "content": "..."}]``
-    suitable for the OpenAI chat completions format.
-    """
+    """Convert ``ChatContext`` items into a plain message list for the conversation adapter."""
     messages: List[Dict[str, str]] = []
     items = getattr(chat_ctx, "items", None) or []
 
@@ -594,7 +535,6 @@ def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
         role = getattr(item, "role", None)
         content = getattr(item, "content", None)
 
-        # Map ChatRole enum to string
         if role == "user" or str(role) == "user":
             role_str = "user"
         elif role == "assistant" or str(role) == "assistant":
@@ -602,9 +542,8 @@ def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
         elif role == "system" or str(role) == "system":
             role_str = "system"
         else:
-            continue  # Skip tool messages and other roles
+            continue
 
-        # Extract text content
         if isinstance(content, str):
             text = content.strip()
         elif isinstance(content, list):
@@ -622,6 +561,3 @@ def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
             messages.append({"role": role_str, "content": text})
 
     return messages
-
-
-

@@ -153,7 +153,7 @@ export function LiveSection() {
         <div className="section-hint">
           <div className="section-hint__title">Health Check</div>
           <div className="section-hint__body">
-            The database indicator shows PostgreSQL connectivity.
+            The database indicator shows database connectivity.
             If it goes red, check your database connection and restart
             the backend server.
           </div>

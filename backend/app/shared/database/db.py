@@ -10,7 +10,7 @@ import os
 import logging
 import aiosqlite
 from contextlib import asynccontextmanager
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List
 
 from app.shared.config.settings import settings
 

@@ -5,7 +5,8 @@ from app.shared.database.db import get_connection, get_transaction
 from app.modules.bot.domain.interfaces.bot_repository_interface import BotRepositoryInterface
 
 
-class PostgresBotRepository(BotRepositoryInterface):
+class BotRepository(BotRepositoryInterface):
+    """Generic repository for managing bots in the database."""
 
     async def create(self, bot: Dict[str, Any]) -> str:
         bid = bot.get("id", str(uuid.uuid4()))
@@ -125,6 +126,10 @@ class PostgresBotRepository(BotRepositoryInterface):
                 slug,
             )
             return _deserialize_row(row) if row else None
+
+
+# Backward-compatible alias
+PostgresBotRepository = BotRepository
 
 
 def _deserialize_row(row) -> Dict[str, Any]:

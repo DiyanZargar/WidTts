@@ -305,7 +305,7 @@ export function useLiveKitRoom() {
         }
       });
 
-      // Data channel — widTTS business events
+      // Data channel — platform business events
       room.on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
         try {
           const msg = JSON.parse(new TextDecoder().decode(payload));

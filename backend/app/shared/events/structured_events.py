@@ -1,7 +1,7 @@
 """
-Structured Event Emitter for widTTS LiveKit sessions.
+Structured Event Emitter for LiveKit voice sessions.
 
-Covers SDD Extension observability requirements:
+Covers observability requirements:
 - Application Startup/Shutdown
 - Room Created/Joined/Closed
 - Session Started/Completed/Failed
@@ -14,7 +14,7 @@ Never logs secrets.
 
 import logging
 import time
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 logger = logging.getLogger("structured_events")
 

@@ -16,7 +16,7 @@ export function useVoiceSession() {
   // then fall back to sessionStorage (set by BotLanding on normal entry).
   const { slug: urlSlug } = useParams();
   const _resolveBotSlug = useCallback(
-    () => urlSlug || sessionStorage.getItem('widtts_bot_slug') || null,
+    () => urlSlug || sessionStorage.getItem('active_bot_slug') || sessionStorage.getItem('widtts_bot_slug') || null,
     [urlSlug],
   );
 

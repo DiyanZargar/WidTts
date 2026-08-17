@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -28,7 +27,7 @@ class Settings(BaseSettings):
 
     # ── Application ──
     app_secret: str = Field(default="dev-secret-change-in-production", alias="APP_SECRET")
-    admin_api_key: str = Field(default="widtts-admin-dev-key", alias="ADMIN_API_KEY")
+    admin_api_key: str = Field(default="admin-dev-key", alias="ADMIN_API_KEY")
     environment: str = Field(default="development", alias="ENVIRONMENT")
     port: int = 8000
     room_inactivity_timeout_seconds: float = Field(default=60, alias="ROOM_INACTIVITY_TIMEOUT_SECONDS")

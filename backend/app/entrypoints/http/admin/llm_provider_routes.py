@@ -8,7 +8,7 @@ import asyncio
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.modules.provider.infrastructure.persistence.postgres_llm_provider_repository import PostgresLLMProviderRepository
+from app.modules.provider.infrastructure.persistence.llm_provider_repository import LLMProviderRepository
 from app.shared.security.envelope_encryption import encrypt_and_store, load_and_decrypt
 from app.shared.constants.provider_urls import (
     OPENAI_API_URL, ANTHROPIC_API_URL, MISTRAL_API_URL, MOONSHOT_API_URL,
@@ -16,7 +16,7 @@ from app.shared.constants.provider_urls import (
 )
 
 router = APIRouter(prefix="/llm-providers", tags=["llm-providers"])
-_repo = PostgresLLMProviderRepository()
+_repo = LLMProviderRepository()
 logger = logging.getLogger("llm_provider_routes")
 
 
@@ -241,8 +241,8 @@ async def delete_llm_provider(provider_id: str):
     if not existing:
         raise HTTPException(status_code=404, detail="LLM provider not found")
     # Check if any deployed bot references this provider
-    from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
-    bot_repo = PostgresBotRepository()
+    from app.modules.bot.infrastructure.persistence.bot_repository import BotRepository
+    bot_repo = BotRepository()
     bots = await bot_repo.list_all()
     using_bots = [b["name"] for b in bots if b.get("is_deployed") and b.get("llm_provider_id") == provider_id]
     if using_bots:

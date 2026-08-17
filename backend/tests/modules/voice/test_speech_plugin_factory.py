@@ -1,6 +1,6 @@
 """Tests for SpeechPluginFactory module-level functions."""
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 
 from app.modules.voice.infrastructure.external.speech_plugin_factory import (
     build_stt_plugin,

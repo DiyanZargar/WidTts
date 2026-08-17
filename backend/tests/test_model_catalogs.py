@@ -1,5 +1,4 @@
 """Tests for centralized model catalogs."""
-import pytest
 from app.shared.constants.model_catalogs import (
     get_speech_models,
     DEEPGRAM_STT_MODELS,

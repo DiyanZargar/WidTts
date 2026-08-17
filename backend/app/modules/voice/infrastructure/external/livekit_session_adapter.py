@@ -218,8 +218,8 @@ class LiveKitSession:
 
     def _build_llm_bridge(self):
         """Build the LLM bridge with a conversation adapter and full credentials."""
-        from app.modules.voice.infrastructure.external.widtts_llm_bridge import (
-            WidTTSLLMBridge,
+        from app.modules.voice.infrastructure.external.llm_bridge import (
+            CustomLLMBridge,
             DefaultConversationAdapter,
         )
         from app.modules.conversation.domain.policy.conversation_policy import (
@@ -257,7 +257,7 @@ class LiveKitSession:
                     await self._room.disconnect()
             asyncio.create_task(_delayed_disconnect())
 
-        return WidTTSLLMBridge(
+        return CustomLLMBridge(
             bot=bot_config,
             policy=policy,
             conversation_adapter=conversation_adapter,
@@ -277,10 +277,10 @@ class LiveKitSession:
 
         # Mark session as completed in database
         try:
-            from app.modules.session.infrastructure.persistence.postgres_session_repository import (
-                PostgresSessionRepository,
+            from app.modules.session.infrastructure.persistence.session_repository import (
+                SessionRepository,
             )
-            await PostgresSessionRepository().close(self.snapshot.session_id, status="completed")
+            await SessionRepository().close(self.snapshot.session_id, status="completed")
             logger.info("[SESSION] Marked session %s as completed in database", self.snapshot.session_id)
         except Exception as e:
             logger.warning("[SESSION] Failed to mark session %s as completed in DB: %s", self.snapshot.session_id, e)

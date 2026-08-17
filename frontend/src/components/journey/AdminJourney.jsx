@@ -12,7 +12,6 @@ import { OverviewSection } from './sections/OverviewSection';
 import { LLMSection } from './sections/LLMSection';
 import { SpeechSection } from './sections/SpeechSection';
 import { BotIdentitySection } from './sections/BotIdentitySection';
-import { ReviewSection } from './sections/ReviewSection';
 import { DeploySection } from './sections/DeploySection';
 import { LiveSection } from './sections/LiveSection';
 
@@ -190,7 +189,7 @@ export function AdminJourney() {
 
   // Check if already authed
   useEffect(() => {
-    const role = sessionStorage.getItem('widtts_role');
+    const role = sessionStorage.getItem('user_role') || sessionStorage.getItem('widtts_role');
     if (role === 'admin') setGateOpen(false);
   }, []);
 

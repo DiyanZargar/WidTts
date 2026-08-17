@@ -5,7 +5,8 @@ from app.shared.database.db import get_connection
 from app.modules.provider.domain.interfaces.llm_provider_repository_interface import LLMProviderRepositoryInterface
 
 
-class PostgresLLMProviderRepository(LLMProviderRepositoryInterface):
+class LLMProviderRepository(LLMProviderRepositoryInterface):
+    """Generic repository for managing LLM providers in the database."""
 
     async def create(self, provider: Dict[str, Any]) -> str:
         pid = provider.get("id", str(uuid.uuid4()))
@@ -62,8 +63,11 @@ class PostgresLLMProviderRepository(LLMProviderRepositoryInterface):
     @staticmethod
     def _row_to_dict(row) -> Dict[str, Any]:
         d = dict(row)
-        # Parse JSONB fields
         for key in ("credentials_enc", "available_models"):
             if key in d and isinstance(d[key], str):
                 d[key] = json.loads(d[key])
         return d
+
+
+# Backward-compatible alias
+PostgresLLMProviderRepository = LLMProviderRepository

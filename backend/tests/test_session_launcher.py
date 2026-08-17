@@ -3,7 +3,6 @@
 Fish Audio voice profiles are 24-char hex (MongoDB ObjectIds).
 ElevenLabs voice profiles are 20-char alphanumeric (not starting with eleven_/scribe_).
 """
-import pytest
 from app.modules.voice.application.session_launcher import detect_voice_profile
 
 

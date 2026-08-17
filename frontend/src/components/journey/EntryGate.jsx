@@ -9,6 +9,7 @@ export function EntryGate({ open, onEnterAdmin, onAuthenticated }) {
   const [fading, setFading] = useState(false);
 
   const handleAdmin = () => {
+    sessionStorage.setItem('user_role', 'admin');
     sessionStorage.setItem('widtts_role', 'admin');
     setFading(true);
     const callback = onEnterAdmin || onAuthenticated;

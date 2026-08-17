@@ -14,7 +14,7 @@ import base64
 import json
 import os
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Tuple
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 

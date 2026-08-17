@@ -68,8 +68,8 @@ async def lifespan(app: FastAPI):
     # 5. Active bot check
     logger.info("[STARTUP] Checking for active bot...")
     try:
-        from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
-        bot = await PostgresBotRepository().get_active()
+        from app.modules.bot.infrastructure.persistence.bot_repository import BotRepository
+        bot = await BotRepository().get_active()
         if bot:
             logger.info("[STARTUP] ✅ Active bot: %s (id=%s)", bot["name"], bot["id"])
         else:

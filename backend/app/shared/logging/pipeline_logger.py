@@ -1,4 +1,4 @@
-"""Structured pipeline event logger for widTTS voice sessions.
+"""Structured pipeline event logger for voice sessions.
 
 Logs business-level events for session lifecycle and LLM pipeline.
 LiveKit infrastructure events are not logged here.
@@ -7,7 +7,7 @@ LiveKit infrastructure events are not logged here.
 import time
 import logging
 
-logger = logging.getLogger("widtts")
+logger = logging.getLogger("voice_platform")
 
 
 def _ts() -> str:

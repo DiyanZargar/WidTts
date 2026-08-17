@@ -2,16 +2,12 @@ import base64
 import hmac
 import hashlib
 import time
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from app.shared.config.settings import settings
 
 
 class AuthenticationError(Exception):
-    pass
-
-
-class AuthorizationError(Exception):
     pass
 
 

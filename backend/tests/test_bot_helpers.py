@@ -1,5 +1,4 @@
 """Tests for bot route helper functions."""
-import pytest
 from app.entrypoints.http.admin.bot_routes import _generate_slug
 
 

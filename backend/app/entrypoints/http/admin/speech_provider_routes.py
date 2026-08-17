@@ -8,17 +8,16 @@ from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
-from app.modules.provider.infrastructure.persistence.postgres_speech_provider_repository import PostgresSpeechProviderRepository
+from app.modules.provider.infrastructure.persistence.speech_provider_repository import SpeechProviderRepository
 from app.shared.security.envelope_encryption import encrypt_and_store, load_and_decrypt
 from app.shared.constants.provider_urls import ELEVENLABS_API_URL, DEEPGRAM_API_URL, FISH_AUDIO_API_URL
 from app.shared.constants.model_catalogs import (
     DEEPGRAM_STT_MODELS, DEEPGRAM_TTS_MODELS,
     ELEVENLABS_FALLBACK_MODELS, ELEVENLABS_FALLBACK_VOICES,
-    FISH_AUDIO_TTS_MODELS,
 )
 
 router = APIRouter(prefix="/speech-providers", tags=["speech-providers"])
-_repo = PostgresSpeechProviderRepository()
+_repo = SpeechProviderRepository()
 
 
 class SpeechProviderCreateRequest(BaseModel):
@@ -209,13 +208,13 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
         voice_id = voice_id or "EXAVITQu4vr4xnSDxMaL"
         model_id = model if (model and model.startswith("eleven_")) else "eleven_turbo_v2_5"
         url = f"{ELEVENLABS_API_URL}/text-to-speech/{voice_id}?output_format=mp3_44100_128"
-        payload = json.dumps({"text": text, "model_id": model_id}).encode("utf-8")
+        el_payload = json.dumps({"text": text, "model_id": model_id}).encode("utf-8")
         headers = {
             "xi-api-key": api_key,
             "Content-Type": "application/json",
             "Accept": "audio/mpeg",
         }
-        request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        request = urllib.request.Request(url, data=el_payload, headers=headers, method="POST")
         with urllib.request.urlopen(request, timeout=5) as response:
             audio_bytes = response.read()
             res = (audio_bytes, "audio/mpeg")
@@ -227,15 +226,15 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             voice_id = model
             model = ""
         target_model = model if (model and not len(model) == 24) else "s2.1-pro"
-        payload: dict = {"text": text}
+        fa_payload: Dict[str, Any] = {"text": text}
         if voice_id:
-            payload["reference_id"] = voice_id
+            fa_payload["reference_id"] = voice_id
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "model": target_model,
         }
-        data_bytes = json.dumps(payload).encode("utf-8")
+        data_bytes = json.dumps(fa_payload).encode("utf-8")
         request = urllib.request.Request(
             f"{FISH_AUDIO_API_URL}/v1/tts",
             data=data_bytes,
@@ -291,7 +290,7 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             ("v1", "aura-orion-en"),
         ])
 
-        payload = json.dumps({"text": text}).encode("utf-8")
+        dg_payload = json.dumps({"text": text}).encode("utf-8")
         headers = {
             "Authorization": f"Token {api_key}",
             "Content-Type": "application/json",
@@ -304,7 +303,7 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
                 continue
             try:
                 url = f"{DEEPGRAM_API_URL}/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
-                request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                request = urllib.request.Request(url, data=dg_payload, headers=headers, method="POST")
                 with urllib.request.urlopen(request, timeout=10) as response:
                     audio_bytes = response.read()
                     res = (audio_bytes, "audio/wav")
@@ -316,6 +315,7 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
 
         if last_err:
             raise last_err
+        raise ValueError(f"Failed to generate sample audio for provider {provider_type}")
 
 
 def _prewarm_models_background(api_key: str, provider_type: str, models: List[str]):
@@ -521,8 +521,8 @@ async def delete_speech_provider(provider_id: str):
     if not existing:
         raise HTTPException(status_code=404, detail="Speech provider not found")
     # Check if any deployed bot references this provider
-    from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
-    bot_repo = PostgresBotRepository()
+    from app.modules.bot.infrastructure.persistence.bot_repository import BotRepository
+    bot_repo = BotRepository()
     bots = await bot_repo.list_all()
     using_bots = [b["name"] for b in bots if b.get("is_deployed") and (b.get("stt_provider_id") == provider_id or b.get("tts_provider_id") == provider_id)]
     if using_bots:

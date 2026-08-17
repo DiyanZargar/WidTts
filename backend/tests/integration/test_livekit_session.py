@@ -1,6 +1,5 @@
 """Integration tests for LiveKitSession lifecycle."""
 import pytest
-from dataclasses import FrozenInstanceError
 from unittest.mock import MagicMock
 
 from app.modules.voice.infrastructure.external.livekit_session_adapter import (

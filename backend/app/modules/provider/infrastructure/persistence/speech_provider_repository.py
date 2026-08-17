@@ -5,7 +5,8 @@ from app.shared.database.db import get_connection
 from app.modules.provider.domain.interfaces.speech_provider_repository_interface import SpeechProviderRepositoryInterface
 
 
-class PostgresSpeechProviderRepository(SpeechProviderRepositoryInterface):
+class SpeechProviderRepository(SpeechProviderRepositoryInterface):
+    """Generic repository for managing speech providers in the database."""
 
     async def create(self, provider: Dict[str, Any]) -> str:
         pid = provider.get("id", str(uuid.uuid4()))
@@ -69,3 +70,7 @@ class PostgresSpeechProviderRepository(SpeechProviderRepositoryInterface):
             if key in d and isinstance(d[key], str):
                 d[key] = json.loads(d[key])
         return d
+
+
+# Backward-compatible alias
+PostgresSpeechProviderRepository = SpeechProviderRepository

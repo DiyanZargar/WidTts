@@ -42,6 +42,7 @@ export default function BotLanding() {
 
   const handleEnter = useCallback(() => {
     // Store the bot slug so the voice session knows which bot to connect to
+    sessionStorage.setItem('active_bot_slug', slug);
     sessionStorage.setItem('widtts_bot_slug', slug);
     setEntering(true);
     setTimeout(() => {

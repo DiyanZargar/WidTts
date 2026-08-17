@@ -1,7 +1,7 @@
 services:
   livekit:
     image: livekit/livekit-server:v1.9.12
-    container_name: widtts-livekit
+    container_name: voice-livekit
     restart: unless-stopped
     command: --config /etc/livekit.yaml --dev
     ports:
@@ -11,13 +11,13 @@ services:
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml
     networks:
-      - widtts-network
+      - voice-network
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: widtts-backend
+    container_name: voice-backend
     restart: unless-stopped
     environment:
       DB_PATH: ${DB_PATH:-/app/data/widtts.db}
@@ -35,7 +35,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - widtts_data:/app/data
+      - voice_data:/app/data
     depends_on:
       livekit:
         condition: service_started
@@ -46,13 +46,13 @@ services:
       retries: 10
       start_period: 30s
     networks:
-      - widtts-network
+      - voice-network
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: widtts-frontend
+    container_name: voice-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -65,11 +65,11 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - widtts-network
+      - voice-network
 
   ngrok:
     image: ngrok/ngrok:latest
-    container_name: widtts-ngrok
+    container_name: voice-ngrok
     restart: unless-stopped
     entrypoint:
       - /bin/sh
@@ -89,11 +89,11 @@ services:
       frontend:
         condition: service_healthy
     networks:
-      - widtts-network
+      - voice-network
 
 volumes:
-  widtts_data:
+  voice_data:
 
 networks:
-  widtts-network:
+  voice-network:
     driver: bridge

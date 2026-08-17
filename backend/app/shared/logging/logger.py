@@ -1,4 +1,4 @@
 import logging
 
-logger = logging.getLogger("widtts")
+logger = logging.getLogger("voice_platform")
 logging.basicConfig(level=logging.INFO)

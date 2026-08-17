@@ -1,16 +1,15 @@
 """Bot management endpoints."""
 
 import re
-import json
 import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from app.modules.bot.infrastructure.persistence.postgres_bot_repository import PostgresBotRepository
-from app.shared.schemas import BotResponse, BotActiveResponse, StatusResponse, BotDeployResponse
+from app.modules.bot.infrastructure.persistence.bot_repository import BotRepository
+from app.shared.schemas import BotResponse, StatusResponse
 
 router = APIRouter(prefix="/bots", tags=["bots"])
-_repo = PostgresBotRepository()
+_repo = BotRepository()
 
 
 def _generate_slug(name: str) -> str:
@@ -82,11 +81,11 @@ async def list_speech_models(provider_type: str):
 @router.get("/speech-voices/{provider_id}")
 async def list_speech_voices(provider_id: str):
     """Fetch actual voice names from a speech provider's API (e.g. Fish Audio voice library, ElevenLabs voices)."""
-    from app.modules.provider.infrastructure.persistence.postgres_speech_provider_repository import PostgresSpeechProviderRepository
+    from app.modules.provider.infrastructure.persistence.speech_provider_repository import SpeechProviderRepository
     from app.shared.security.envelope_encryption import load_and_decrypt
     from app.entrypoints.http.admin.speech_provider_routes import _fetch_fish_models_sync, _fetch_elevenlabs_data_sync
 
-    speech_repo = PostgresSpeechProviderRepository()
+    speech_repo = SpeechProviderRepository()
     provider = await speech_repo.get_by_id(provider_id)
     if not provider:
         return {"voices": []}
