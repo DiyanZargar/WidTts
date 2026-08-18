@@ -168,6 +168,9 @@ async def update_realtime_config(config_id: str, payload: RealtimeConfigUpdateRe
     if payload.is_active:
         updated = await _repo.set_active(config_id)
 
+    if not updated:
+        raise HTTPException(404, "Realtime config not found")
+
     logger.info(f"[ADMIN] Updated realtime provider config: {config_id}")
     return await _format_config_response(updated)
 
