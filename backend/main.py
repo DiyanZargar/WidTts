@@ -77,7 +77,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("[STARTUP] ⚠️ Active bot check failed: %s (non-fatal)", e)
 
-    # 6. Fail if critical validations failed
+    # 6. Pre-warm Silero VAD model (avoids cold load latency on first user connect)
+    logger.info("[STARTUP] Pre-warming Silero VAD model...")
+    try:
+        from app.modules.voice.infrastructure.external.livekit_session_adapter import _get_vad_plugin
+        _get_vad_plugin()
+        logger.info("[STARTUP] ✅ Silero VAD pre-warmed")
+    except Exception as e:
+        logger.warning("[STARTUP] ⚠️ Silero VAD pre-warm skipped: %s", e)
+
+    # 7. Fail if critical validations failed
     if errors:
         for err in errors:
             logger.error("[STARTUP] FATAL: %s", err)

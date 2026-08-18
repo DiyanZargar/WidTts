@@ -29,6 +29,11 @@ class SessionRepository(SessionRepositoryInterface):
                 status, session_id,
             )
 
-
-# Backward-compatible alias
-PostgresSessionRepository = SessionRepository
+    async def close_active_for_user_bot(self, user_id: str, bot_id: str) -> None:
+        """Close any lingering active sessions for this user+bot pair."""
+        async with get_connection() as conn:
+            await conn.execute(
+                """UPDATE sessions SET status='completed', closed_at=datetime('now'),
+                   updated_at=datetime('now') WHERE user_id=? AND bot_id=? AND status='active'""",
+                user_id, bot_id,
+            )

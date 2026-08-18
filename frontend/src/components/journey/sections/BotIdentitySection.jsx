@@ -358,23 +358,6 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     setForm((prev) => ({ ...prev, tts_provider_id: pid, tts_model: '' }));
   };
 
-  const handleLanguageToggle = (code) => {
-    setForm(prev => {
-      const langs = prev.languages.includes(code)
-        ? prev.languages.filter(l => l !== code)
-        : [...prev.languages, code];
-      // Ensure at least one language
-      if (langs.length === 0) return prev;
-      // If primary was removed, set first remaining as primary
-      const primary = langs.includes(prev.primary_language) ? prev.primary_language : langs[0];
-      return { ...prev, languages: langs, primary_language: primary };
-    });
-  };
-
-  const handleSetPrimaryLanguage = (code) => {
-    setForm(prev => ({ ...prev, primary_language: code }));
-  };
-
   const handleSave = async () => {
     if (!isFormValid) return;
     // On new bot creation, show slug confirmation first

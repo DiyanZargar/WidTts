@@ -47,6 +47,22 @@ class SessionSnapshot:
     tts_key_version: int = 0
 
 
+# Global cached VAD instance to eliminate 300-500ms model loading latency on every session start
+_CACHED_VAD = None
+
+
+def _get_vad_plugin():
+    global _CACHED_VAD
+    if _CACHED_VAD is None:
+        from livekit.plugins import silero
+        _CACHED_VAD = silero.VAD.load(
+            min_silence_duration=0.4,
+            activation_threshold=0.45,
+            min_speech_duration=0.05,
+        )
+    return _CACHED_VAD
+
+
 @dataclass
 class LiveKitSession:
     snapshot: SessionSnapshot
@@ -69,16 +85,12 @@ class LiveKitSession:
         try:
             from livekit.agents import AgentSession, Agent
             from livekit.agents.voice.room_io import RoomOptions, TextOutputOptions
-            from livekit.plugins import silero
 
             self._stt_plugin = await self._build_stt()
             self._tts_plugin = await self._build_tts()
             self._llm_bridge = self._build_llm_bridge()
-            self._vad_plugin = silero.VAD.load(
-                min_silence_duration=0.4,
-                activation_threshold=0.45,
-                min_speech_duration=0.05,
-            )
+            self._vad_plugin = _get_vad_plugin()
+
             from app.shared.config.settings import settings
             timeout_sec = settings.room_inactivity_timeout_seconds
 
@@ -122,29 +134,19 @@ class LiveKitSession:
                 )
             else:
                 identity += " When you need to end the conversation or say goodbye, append the marker [END_SESSION] at the very end of your response."
+            
             instructions = f"{identity}\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else identity
 
-            # Default behavioral guidelines — these complement the user's system prompt.
-            # They only apply when the user's prompt does not specify otherwise.
-            _default_guidelines = (
-                "\n\n## RESPONSE STYLE\n"
-                "Unless the system prompt above says otherwise: "
-                "keep spoken responses short, direct, and meaningful — one or two sentences. "
-                "No filler, no repetition, no over-explanation.\n\n"
-                "## ANSWER HANDLING\n"
-                "Unless the system prompt above specifies different behavior:\n"
-                "- Clear, relevant answer: acknowledge briefly, then continue to the next topic or question in the same turn.\n"
-                "- Off-topic or unclear answer: acknowledge what was said, then redirect back.\n"
-                "- Self-correction: accept it naturally and move on.\n"
-                "- Wrapping up: brief personal summary, warm sign-off."
+            # Voice conversational guidelines
+            _voice_guidelines = (
+                "\n\n## SPOKEN VOICE RULES\n"
+                "- This is a real-time spoken audio conversation. Speak naturally, clearly, and concisely.\n"
+                "- Keep each spoken turn to 1-2 sentences unless specifically asked for more.\n"
+                "- Never use markdown formatting (no asterisks, no bullets, no headers, no emojis).\n"
+                "- Directly answer or follow the active conversational step without filler."
             )
-            instructions += _default_guidelines
+            instructions += _voice_guidelines
 
-            # Store the FULL instructions (with language directive) so the
-            # LLM bridge uses the same prompt for every conversation turn.
-            # Previously only the Agent got the enhanced instructions while
-            # the bridge received the raw system_prompt — causing the LLM
-            # to revert to English after the first greeting.
             self._enhanced_instructions = instructions
 
             agent = Agent(instructions=instructions)
@@ -156,12 +158,16 @@ class LiveKitSession:
                 ),
             )
 
-            # Let the LLM generate its own greeting based on the system prompt.
-            # The system prompt already enforces language — the LLM will greet
-            # in the configured language naturally.
-            self._agent_session.generate_reply(
-                user_input=f'A new user has just joined. Your name is "{bot_name}". Introduce yourself using that exact name and greet them warmly in character.',
-            )
+            # Instant Greeting Optimization:
+            # If a custom greeting is configured, say it directly to TTS (instant start without LLM delay)
+            custom_greeting = (self.snapshot.greeting or "").strip()
+            if custom_greeting:
+                logger.info("[SESSION] Playing instant direct greeting: %s", custom_greeting[:60])
+                self._agent_session.say(custom_greeting)
+            else:
+                self._agent_session.generate_reply(
+                    user_input=f'A new user has just joined. Your name is "{bot_name}". Introduce yourself using that exact name and greet them warmly in character.',
+                )
 
             duration_ms = int((time.monotonic() - self._started_at) * 1000)
             logger.info(

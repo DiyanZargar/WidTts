@@ -57,8 +57,6 @@ class SampleAudioRequest(BaseModel):
     tts_model: Optional[str] = ""
     tts_voice_id: Optional[str] = ""
     text: Optional[str] = "Hey, how's it going!"
-    {"id": "nova-3", "name": "Nova-3 / Flux (Latest Ultra-Fast & High Accuracy)"},
-    {"id": "nova-3-general", "name": "Nova-3 General"},
 
 def _fetch_elevenlabs_data_sync(api_key: str):
     models = ELEVENLABS_FALLBACK_MODELS
@@ -304,11 +302,17 @@ def _generate_sample_audio_sync(req: SampleAudioRequest) -> tuple[bytes, str]:
             try:
                 url = f"{DEEPGRAM_API_URL}/{version}/speak?model={m_name}&encoding=linear16&sample_rate=24000"
                 request = urllib.request.Request(url, data=dg_payload, headers=headers, method="POST")
-                with urllib.request.urlopen(request, timeout=10) as response:
+                with urllib.request.urlopen(request, timeout=3) as response:
                     audio_bytes = response.read()
                     res = (audio_bytes, "audio/wav")
                     _cache_set(cache_key, res)
                     return res
+            except urllib.error.HTTPError as e:
+                last_err = e
+                # Fast fail immediately if unauthorized, forbidden, or payment required
+                if e.code in (401, 402, 403):
+                    break
+                continue
             except Exception as e:
                 last_err = e
                 continue

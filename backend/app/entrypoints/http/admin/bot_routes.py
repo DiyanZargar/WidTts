@@ -33,6 +33,10 @@ class BotCreateRequest(BaseModel):
     stt_primary_language: str = "en"
     tts_languages: List[str] = ["en"]
     tts_primary_language: str = "en"
+    greeting: str = ""
+    tts_custom_model: str = ""
+    tts_custom_voice_id: str = ""
+    tts_custom_endpoint: str = ""
 
 
 class BotUpdateRequest(BaseModel):
@@ -50,6 +54,10 @@ class BotUpdateRequest(BaseModel):
     stt_primary_language: Optional[str] = None
     tts_languages: Optional[List[str]] = None
     tts_primary_language: Optional[str] = None
+    greeting: Optional[str] = None
+    tts_custom_model: Optional[str] = None
+    tts_custom_voice_id: Optional[str] = None
+    tts_custom_endpoint: Optional[str] = None
 
 
 @router.get("", response_model=List[BotResponse])

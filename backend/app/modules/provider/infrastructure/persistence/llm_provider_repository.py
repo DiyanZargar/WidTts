@@ -67,7 +67,3 @@ class LLMProviderRepository(LLMProviderRepositoryInterface):
             if key in d and isinstance(d[key], str):
                 d[key] = json.loads(d[key])
         return d
-
-
-# Backward-compatible alias
-PostgresLLMProviderRepository = LLMProviderRepository

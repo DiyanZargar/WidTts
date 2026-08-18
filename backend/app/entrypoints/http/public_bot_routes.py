@@ -72,7 +72,7 @@ async def mint_token_for_bot(slug: str, req: BotSlugTokenRequest):
         )
     except ValueError as e:
         logger.error("[TOKEN] Session creation failed: %s", e)
-        raise HTTPException(500, str(e))
+        raise HTTPException(400, str(e))
 
     logger.info(
         "[TOKEN] Minted bot-slug token for session=%s bot=%s", result["session_id"], bot["name"]

@@ -66,14 +66,14 @@ class TestConnectionRequest(BaseModel):
     api_secret: Optional[str] = None
 
 
-def _format_config_response(cfg: dict) -> dict:
+async def _format_config_response(cfg: dict) -> dict:
     masked_key = "***"
     if cfg.get("encrypted_api_key"):
         try:
-            key_plain = load_and_decrypt  # placeholder check
-            masked_key = "Key configured"
+            plain_key = await _decrypt_value(cfg["encrypted_api_key"])
+            masked_key = mask_credential(plain_key)
         except Exception:
-            pass
+            masked_key = "***"
 
     return {
         "id": str(cfg["id"]),
@@ -109,17 +109,7 @@ def _format_config_response(cfg: dict) -> dict:
 async def list_realtime_configs():
     """Return all configured realtime runtime providers."""
     configs = await _repo.get_all()
-    formatted = []
-    for cfg in configs:
-        item = _format_config_response(cfg)
-        if cfg.get("encrypted_api_key"):
-            try:
-                plain_key = await _decrypt_value(cfg["encrypted_api_key"])
-                item["api_key_masked"] = mask_credential(plain_key)
-            except Exception:
-                item["api_key_masked"] = "***"
-        formatted.append(item)
-    return formatted
+    return [await _format_config_response(cfg) for cfg in configs]
 
 
 @router.post("")
@@ -148,7 +138,7 @@ async def create_realtime_config(payload: RealtimeConfigCreateRequest):
 
     created = await _repo.create(config_data)
     logger.info(f"[ADMIN] Created realtime provider config: {created['id']}")
-    return _format_config_response(created)
+    return await _format_config_response(created)
 
 
 @router.put("/{config_id}")
@@ -179,7 +169,7 @@ async def update_realtime_config(config_id: str, payload: RealtimeConfigUpdateRe
         updated = await _repo.set_active(config_id)
 
     logger.info(f"[ADMIN] Updated realtime provider config: {config_id}")
-    return _format_config_response(updated)
+    return await _format_config_response(updated)
 
 
 @router.post("/{config_id}/activate")
@@ -189,7 +179,7 @@ async def activate_realtime_config(config_id: str):
     if not updated:
         raise HTTPException(404, "Realtime config not found")
     logger.info(f"[ADMIN] Activated realtime provider config: {config_id}")
-    return _format_config_response(updated)
+    return await _format_config_response(updated)
 
 
 @router.delete("/{config_id}")

@@ -42,3 +42,36 @@ class TestGenerateSlug:
     def test_consecutive_dashes_stripped(self):
         result = _generate_slug("bot---name")
         assert "--" not in result
+
+
+class TestBotRequestSchemas:
+    def test_bot_create_request_preserves_custom_tts_and_greeting(self):
+        from app.entrypoints.http.admin.bot_routes import BotCreateRequest
+        data = {
+            "name": "Custom Assistant",
+            "greeting": "Hello, I am your assistant!",
+            "tts_custom_model": "s2.1-pro",
+            "tts_custom_voice_id": "78326a284931481283726154",
+            "tts_custom_endpoint": "https://api.fish.audio",
+        }
+        req = BotCreateRequest(**data)
+        dump = req.model_dump()
+        assert dump["greeting"] == "Hello, I am your assistant!"
+        assert dump["tts_custom_model"] == "s2.1-pro"
+        assert dump["tts_custom_voice_id"] == "78326a284931481283726154"
+        assert dump["tts_custom_endpoint"] == "https://api.fish.audio"
+
+    def test_bot_update_request_preserves_custom_tts_and_greeting(self):
+        from app.entrypoints.http.admin.bot_routes import BotUpdateRequest
+        data = {
+            "greeting": "Updated greeting!",
+            "tts_custom_model": "s2-pro",
+            "tts_custom_voice_id": "custom_voice_123",
+            "tts_custom_endpoint": "https://custom.endpoint",
+        }
+        req = BotUpdateRequest(**data)
+        dump = req.model_dump()
+        assert dump["greeting"] == "Updated greeting!"
+        assert dump["tts_custom_model"] == "s2-pro"
+        assert dump["tts_custom_voice_id"] == "custom_voice_123"
+        assert dump["tts_custom_endpoint"] == "https://custom.endpoint"

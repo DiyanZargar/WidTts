@@ -79,18 +79,25 @@ async def create_voice_session(
         raise ValueError("Configuration error: failed to decrypt transport credentials") from e
 
     # Load speech providers (STT and TTS can be different)
-    stt_provider = None
-    if bot.get("stt_provider_id"):
-        stt_provider = await _speech_repo.get_by_id(bot["stt_provider_id"])
+    if not bot.get("stt_provider_id") or not bot.get("tts_provider_id") or not bot.get("llm_provider_id"):
+        raise ValueError("Bot configuration is incomplete: STT, TTS, and LLM providers are all required.")
 
-    tts_provider = None
-    if bot.get("tts_provider_id"):
-        tts_provider = await _speech_repo.get_by_id(bot["tts_provider_id"])
+    stt_provider = await _speech_repo.get_by_id(bot["stt_provider_id"])
+    tts_provider = await _speech_repo.get_by_id(bot["tts_provider_id"])
+    llm_provider = await _llm_repo.get_by_id(bot["llm_provider_id"])
 
-    # Load LLM provider
-    llm_provider = None
-    if bot.get("llm_provider_id"):
-        llm_provider = await _llm_repo.get_by_id(bot["llm_provider_id"])
+    if not stt_provider:
+        raise ValueError(f"Configured STT provider '{bot['stt_provider_id']}' not found.")
+    if not tts_provider:
+        raise ValueError(f"Configured TTS provider '{bot['tts_provider_id']}' not found.")
+    if not llm_provider:
+        raise ValueError(f"Configured LLM provider '{bot['llm_provider_id']}' not found.")
+
+    # Clean up any lingering active sessions for this user/bot (e.g. on page reload)
+    try:
+        await _session_repo.close_active_for_user_bot(user_id=user_id, bot_id=bot["id"])
+    except Exception as e:
+        logger.warning("[SESSION_SERVICE] Failed to clean up prior active sessions: %s", e)
 
     # Create session
     session_id = str(uuid.uuid4())

@@ -48,7 +48,7 @@ class DeepgramProvider(BaseSpeechProvider):
             smart_format=True,
             punctuate=True,
             interim_results=True,
-            endpointing_ms=100,
+            endpointing_ms=400,
         )
 
     def build_tts(self, config: Dict[str, Any], creds: Dict[str, Any]) -> Any:

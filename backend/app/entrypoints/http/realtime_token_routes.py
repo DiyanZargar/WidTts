@@ -7,7 +7,8 @@ No LiveKit terminology appears in any response field name.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from app.shared.security.token_service import verify_token, AuthenticationError
@@ -31,7 +32,10 @@ class TokenRequest(BaseModel):
 
 
 @router.post("/token", response_model=TokenResponse)
-async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
+async def mint_realtime_token(
+    req: TokenRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """
     Mint a realtime access token for the current user.
     Creates a new session and starts the LiveKit session adapter.
@@ -39,7 +43,7 @@ async def mint_realtime_token(req: TokenRequest, authorization: str = ""):
     from app.modules.voice.application.session_service import create_voice_session
 
     # Authenticate user
-    token_str = authorization.replace("Bearer ", "") if authorization else None
+    token_str = authorization.replace("Bearer ", "").strip() if authorization else None
     try:
         user_id = verify_token(token_str)
     except AuthenticationError as e:

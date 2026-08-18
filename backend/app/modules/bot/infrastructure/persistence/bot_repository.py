@@ -16,8 +16,8 @@ class BotRepository(BotRepositoryInterface):
                    llm_provider_id, llm_model, stt_provider_id, tts_provider_id,
                    stt_model, tts_model, stt_languages, stt_primary_language,
                    tts_languages, tts_primary_language, greeting,
-                   tts_custom_model, tts_custom_voice_id, tts_custom_endpoint, is_active)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   tts_custom_model, tts_custom_voice_id, tts_custom_endpoint, is_active, name_locked)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 bid, bot["name"], bot.get("description", ""),
                 bot.get("personality", ""), bot.get("system_prompt", ""),
                 bot.get("llm_provider_id"), bot.get("llm_model", ""),
@@ -32,6 +32,7 @@ class BotRepository(BotRepositoryInterface):
                 bot.get("tts_custom_voice_id", ""),
                 bot.get("tts_custom_endpoint", ""),
                 bot.get("is_active", False),
+                bot.get("name_locked", False),
             )
         return bid
 
@@ -53,6 +54,7 @@ class BotRepository(BotRepositoryInterface):
             "llm_provider_id", "llm_model", "stt_provider_id", "tts_provider_id",
             "stt_model", "tts_model", "stt_primary_language", "tts_primary_language",
             "greeting", "tts_custom_model", "tts_custom_voice_id", "tts_custom_endpoint", "is_active",
+            "name_locked",
         ]
         json_keys = ["stt_languages", "tts_languages"]
 
@@ -126,10 +128,6 @@ class BotRepository(BotRepositoryInterface):
                 slug,
             )
             return _deserialize_row(row) if row else None
-
-
-# Backward-compatible alias
-PostgresBotRepository = BotRepository
 
 
 def _deserialize_row(row) -> Dict[str, Any]:
