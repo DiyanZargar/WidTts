@@ -1,0 +1,99 @@
+services:
+  livekit:
+    image: livekit/livekit-server:v1.9.12
+    container_name: voice-livekit
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml --dev
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    networks:
+      - voice-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voice-backend
+    restart: unless-stopped
+    environment:
+      DB_PATH: ${DB_PATH:-/app/data/widtts.db}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY}
+      APP_SECRET: ${APP_SECRET}
+      PORT: ${PORT:-8000}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_INTERNAL_URL: ${LIVEKIT_INTERNAL_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_TOKEN_TTL_SECONDS: ${LIVEKIT_TOKEN_TTL_SECONDS}
+      LIVEKIT_AUDIO_SAMPLE_RATE: ${LIVEKIT_AUDIO_SAMPLE_RATE}
+      AGENT_TOKEN_TTL_SECONDS: ${AGENT_TOKEN_TTL_SECONDS}
+      ROOM_INACTIVITY_TIMEOUT_SECONDS: ${ROOM_INACTIVITY_TIMEOUT_SECONDS}
+    ports:
+      - "8000:8000"
+    volumes:
+      - voice_data:/app/data
+    depends_on:
+      livekit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - voice-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voice-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - voice-network
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: voice-ngrok
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -n "$$NGROK_DOMAIN" ]; then
+          exec ngrok http --log=stdout --url="$$NGROK_DOMAIN" frontend:3000
+        else
+          exec ngrok http --log=stdout frontend:3000
+        fi
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+      NGROK_DOMAIN: ${NGROK_DOMAIN:-}
+    ports:
+      - "4040:4040"
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks:
+      - voice-network
+
+volumes:
+  voice_data:
+
+networks:
+  voice-network:
+    driver: bridge

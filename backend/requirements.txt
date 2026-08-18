@@ -3,8 +3,15 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 python-dotenv
-websockets
 httpx
 litellm
+aiosqlite
+cryptography
 pytest
 pytest-asyncio
+livekit-api
+livekit-agents
+livekit-plugins-deepgram
+livekit-plugins-elevenlabs
+livekit-plugins-silero
+PyJWT

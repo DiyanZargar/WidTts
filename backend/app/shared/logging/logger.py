@@ -1,4 +1,4 @@
 import logging
 
-logger = logging.getLogger("conversation_widget")
+logger = logging.getLogger("voice_platform")
 logging.basicConfig(level=logging.INFO)
