@@ -1,0 +1,758 @@
+/* ==========================================================
+   HALO — reflective sphere voice assistant UI
+   Pure presentation layer. No app name is hardcoded anywhere;
+   the label element is populated at runtime from config.
+   States are driven entirely by a single [data-state] attribute
+   on .halo, set by your existing UI state machine. No other
+   logic lives here.
+
+   State vocabulary uses the app's existing status names:
+     idle, listening, speaking, thinking, connecting
+   Plus new visual-only additions:
+     error, disconnected
+   ========================================================== */
+
+.halo {
+  --bg: #08080a;
+  --text-primary: #ececee;
+  --text-secondary: #83838a;
+  --text-muted: #63636a;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --card-fill: rgba(255, 255, 255, 0.04);
+
+  /* inactive / idle tone — desaturated, quiet */
+  --state-idle-a: #d8d8dc;
+  --state-idle-b: #b7b7bd;
+  --state-idle-c: #7a7a80;
+  --state-idle-glow: rgba(180, 180, 190, 0.18);
+
+  /* active tone — used for listening / user speaking */
+  --state-listen-a: #fdf3dc;
+  --state-listen-b: #f0d190;
+  --state-listen-c: #dcaa5c;
+  --state-listen-glow: rgba(232, 199, 122, 0.4);
+
+  /* thinking tone — cool, transitional */
+  --state-think-a: #e7e6f5;
+  --state-think-b: #b9b6dd;
+  --state-think-c: #726dab;
+  --state-think-glow: rgba(140, 132, 214, 0.32);
+
+  /* assistant speaking tone — warmest, most saturated */
+  --state-speak-a: #fff3d6;
+  --state-speak-b: #f3c96e;
+  --state-speak-c: #b9822f;
+  --state-speak-glow: rgba(243, 201, 110, 0.5);
+
+  /* error / disconnected tone */
+  --state-error-a: #f5d8d4;
+  --state-error-b: #d99a8f;
+  --state-error-c: #8f4a3d;
+  --state-error-glow: rgba(217, 154, 143, 0.3);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+  padding: 40px 36px 36px;
+  overflow: hidden;
+}
+
+/* -------------------- top bar -------------------- */
+
+.halo__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.halo__label {
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  /* populate textContent from config at runtime — never hardcode */
+}
+
+.halo__status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.halo__status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--state-idle-c);
+  transition: background 240ms ease;
+}
+
+.halo__status-text {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+/* -------------------- orb + reflection stage -------------------- */
+
+.halo__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  padding: 8px 0;
+  z-index: 1;
+}
+
+.halo__orb {
+  width: 224px;
+  height: 224px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%,
+      var(--state-idle-a) 0%,
+      var(--state-idle-b) 22%,
+      var(--state-idle-c) 55%,
+      color-mix(in srgb, var(--state-idle-c) 60%, black) 100%);
+  box-shadow: 0 34px 68px -14px var(--state-idle-glow);
+  transition: background 380ms ease, box-shadow 380ms ease, filter 380ms ease, transform 180ms ease-out;
+  transform: scale(1);
+  will-change: transform;
+  position: relative;
+  z-index: 2;
+}
+
+.halo__contact-shadow {
+  width: 140px;
+  height: 26px;
+  margin-top: 18px;
+  border-radius: 50%;
+  background: #000;
+  filter: blur(16px);
+  opacity: 0.55;
+  transition: opacity 320ms ease, width 320ms ease;
+  position: relative;
+  z-index: 1;
+  animation: halo-shadow-breathe 4s ease-in-out infinite;
+}
+
+.halo__reflection {
+  width: 224px;
+  height: 106px;
+  margin-top: -14px;
+  border-radius: 0 0 112px 112px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), transparent);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), transparent);
+  position: relative;
+  z-index: 1;
+}
+
+.halo__reflection-inner {
+  width: 224px;
+  height: 224px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 70%,
+      var(--state-idle-a) 0%,
+      var(--state-idle-b) 22%,
+      var(--state-idle-c) 55%,
+      color-mix(in srgb, var(--state-idle-c) 60%, black) 100%);
+  transform: scaleY(-1);
+  margin-top: -118px;
+  transition: background 380ms ease;
+}
+
+/* ---- listening ring (hidden unless user is speaking) ---- */
+
+.halo__listen-ring {
+  position: absolute;
+  width: 224px;
+  height: 224px;
+  border-radius: 50%;
+  border: 1.5px solid var(--state-listen-c);
+  opacity: 0;
+  pointer-events: none;
+  /* Center on the orb — stage is the positioning parent */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin-top: -66px;
+  /* offset to orb visual center */
+  z-index: 3;
+}
+
+/* -------------------- transcript -------------------- */
+
+.halo__transcript-area {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  min-height: 0;
+}
+
+.halo__transcript-scroll {
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 4px 12px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.3) 12%, black 30%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.3) 12%, black 30%, black 100%);
+  scroll-behavior: smooth;
+}
+
+.halo__transcript-scroll::-webkit-scrollbar {
+  width: 3px;
+}
+
+.halo__transcript-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+.halo__card {
+  max-width: 400px;
+  border-radius: 10px;
+  background: var(--card-fill);
+  border: 1px solid var(--border);
+  padding: 16px 20px;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.halo__card-label {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.halo__card-text {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  min-height: 1.55em;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.halo__user-line {
+  max-width: 400px;
+  padding: 4px 20px;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.halo__user-line .halo__card-label {
+  color: var(--text-muted);
+}
+
+/* ---- entrance animation ---- */
+/* Applied only at turn boundaries (new turn's first content),
+   never on per-token updates. Toggle this class on/off via JS
+   when replacing a card's content wholesale. */
+
+.halo__card,
+.halo__user-line {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 220ms ease-out, transform 220ms ease-out;
+}
+
+.halo__card.halo--turn-enter,
+.halo__user-line.halo--turn-enter {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* ---- user turn: partial vs final ---- */
+
+.halo__user-line .halo__card-text {
+  font-size: 14.5px;
+  color: var(--text-secondary);
+  font-style: normal;
+  transition: color 160ms ease;
+}
+
+.halo__user-line.halo--partial .halo__card-text {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ---- assistant turn: streaming caret ---- */
+/* Static 2px-wide bar via ::after, no blink animation.
+   Appears only when halo--streaming class is present.
+   Removed the moment streaming ends. */
+
+.halo__card.halo--streaming .halo__card-text::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: text-bottom;
+  background: var(--text-muted);
+}
+
+/* ---- empty / reset state ---- */
+
+.halo__user-line:empty,
+.halo__user-line[hidden] {
+  display: none;
+}
+
+/* -------------------- controls -------------------- */
+
+.halo__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  flex-shrink: 0;
+  padding-bottom: 8px;
+}
+
+.halo__btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+
+.halo__btn:hover {
+  background: var(--card-fill);
+  border-color: var(--state-listen-c);
+}
+
+.halo__btn--muted {
+  border-color: var(--state-error-c);
+  background: rgba(143, 74, 61, 0.15);
+}
+
+.halo__end-session {
+  color: var(--text-muted);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 8px 4px;
+  transition: color 200ms ease;
+}
+
+.halo__end-session:hover {
+  color: var(--state-error-c);
+}
+
+/* ---- pre-session connect button ---- */
+
+.halo__connect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 240ms ease;
+}
+
+.halo__connect-btn:hover {
+  border-color: var(--state-listen-c);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 24px -4px var(--state-listen-glow);
+}
+
+/* -------------------- Settings / Bot Info Modal -------------------- */
+
+.halo__modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(4, 4, 6, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: halo-fade-in 200ms ease-out forwards;
+}
+
+.halo__modal {
+  width: 100%;
+  max-width: 440px;
+  background: #0f0f13;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 28px 28px 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(240, 209, 144, 0.08);
+  animation: halo-modal-pop 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.halo__modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.halo__modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.halo__modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.halo__modal-close:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.halo__modal-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.halo__modal-body::-webkit-scrollbar {
+  width: 3px;
+}
+
+.halo__modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+.halo__modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 16px;
+}
+
+.halo__modal-btn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.halo__modal-btn--secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
+}
+
+.halo__modal-btn--secondary:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text-primary);
+}
+
+@keyframes halo-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes halo-modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ==========================================================
+   STATE MAPPING — uses the app's existing status vocabulary.
+   Apply one of these as data-state on the .halo root element.
+   Every color/effect change lives here — nothing else in the
+   codebase should branch on state to change appearance.
+   ========================================================== */
+
+/* ---- idle (before connecting) — silver-gray, slow breathing ---- */
+.halo[data-state="idle"] .halo__orb {
+  animation: halo-breathe 4.5s ease-in-out infinite;
+}
+
+/* ---- connecting / listening (connected, ready) — warm amber tone + breathing ---- */
+.halo[data-state="connecting"] .halo__orb,
+.halo[data-state="listening"] .halo__orb {
+  background: radial-gradient(circle at 34% 30%,
+      var(--state-listen-a) 0%,
+      var(--state-listen-b) 22%,
+      var(--state-listen-c) 55%,
+      color-mix(in srgb, var(--state-listen-c) 60%, black) 100%);
+  box-shadow: 0 24px 50px -10px var(--state-listen-glow);
+  animation: halo-breathe 4.5s ease-in-out infinite;
+}
+
+.halo[data-state="connecting"] .halo__reflection-inner,
+.halo[data-state="listening"] .halo__reflection-inner {
+  background: radial-gradient(circle at 34% 70%,
+      var(--state-listen-a) 0%,
+      var(--state-listen-b) 22%,
+      var(--state-listen-c) 55%,
+      color-mix(in srgb, var(--state-listen-c) 60%, black) 100%);
+}
+
+.halo[data-state="connecting"] .halo__status-dot,
+.halo[data-state="listening"] .halo__status-dot {
+  background: var(--state-listen-c);
+}
+
+/* ---- user_speaking — warm amber, amplitude-reactive scale + pulsing listen ring ---- */
+.halo[data-state="user_speaking"] {
+  --orb-a: var(--state-listen-a);
+  --orb-b: var(--state-listen-b);
+  --orb-c: var(--state-listen-c);
+  --orb-glow: var(--state-listen-glow);
+}
+
+.halo[data-state="user_speaking"] .halo__orb {
+  background: radial-gradient(circle at 34% 30%,
+      var(--orb-a) 0%,
+      var(--orb-b) 22%,
+      var(--orb-c) 55%,
+      color-mix(in srgb, var(--orb-c) 60%, black) 100%);
+  box-shadow: 0 26px 52px -10px var(--orb-glow);
+  transform: scale(calc(1 + (var(--amp, 0) * 0.08)));
+  animation: none;
+}
+
+.halo[data-state="user_speaking"] .halo__reflection-inner {
+  background: radial-gradient(circle at 34% 70%,
+      var(--state-listen-a) 0%,
+      var(--state-listen-b) 22%,
+      var(--state-listen-c) 55%,
+      color-mix(in srgb, var(--state-listen-c) 60%, black) 100%);
+}
+
+.halo[data-state="user_speaking"] .halo__status-dot {
+  background: var(--state-listen-c);
+}
+
+.halo[data-state="user_speaking"] .halo__listen-ring {
+  border-color: var(--state-listen-c);
+  animation: halo-listen-pulse 1.6s ease-out infinite;
+}
+
+/* ---- thinking — cool violet, steady pulse ---- */
+.halo[data-state="thinking"] .halo__orb {
+  background: radial-gradient(circle at 34% 30%,
+      var(--state-think-a) 0%,
+      var(--state-think-b) 22%,
+      var(--state-think-c) 55%,
+      color-mix(in srgb, var(--state-think-c) 60%, black) 100%);
+  box-shadow: 0 26px 52px -10px var(--state-think-glow);
+  animation: halo-think-pulse 1.8s ease-in-out infinite;
+}
+
+.halo[data-state="thinking"] .halo__reflection-inner {
+  background: radial-gradient(circle at 34% 70%,
+      var(--state-think-a) 0%,
+      var(--state-think-b) 22%,
+      var(--state-think-c) 55%,
+      color-mix(in srgb, var(--state-think-c) 60%, black) 100%);
+}
+
+.halo[data-state="thinking"] .halo__status-dot {
+  background: var(--state-think-c);
+}
+
+/* ---- speaking (assistant TTS) — warmest amber, amplitude-reactive ---- */
+.halo[data-state="speaking"] .halo__orb {
+  background: radial-gradient(circle at 34% 30%,
+      var(--state-speak-a) 0%,
+      var(--state-speak-b) 22%,
+      var(--state-speak-c) 55%,
+      color-mix(in srgb, var(--state-speak-c) 60%, black) 100%);
+  box-shadow: 0 26px calc(52px + (var(--amp, 0) * 30px)) -10px var(--state-speak-glow);
+  transform: scale(calc(1 + (var(--amp, 0) * 0.06)));
+  animation: none;
+}
+
+.halo[data-state="speaking"] .halo__reflection-inner {
+  background: radial-gradient(circle at 34% 70%,
+      var(--state-speak-a) 0%,
+      var(--state-speak-b) 22%,
+      var(--state-speak-c) 55%,
+      color-mix(in srgb, var(--state-speak-c) 60%, black) 100%);
+}
+
+.halo[data-state="speaking"] .halo__status-dot {
+  background: var(--state-speak-c);
+}
+
+/* ---- disconnected / error — desaturated red, all animation stops ---- */
+.halo[data-state="disconnected"] .halo__orb,
+.halo[data-state="error"] .halo__orb {
+  background: radial-gradient(circle at 34% 30%,
+      var(--state-error-a) 0%,
+      var(--state-error-b) 22%,
+      var(--state-error-c) 55%,
+      color-mix(in srgb, var(--state-error-c) 60%, black) 100%);
+  box-shadow: 0 22px 44px -10px var(--state-error-glow);
+  animation: none;
+  filter: saturate(0.7);
+}
+
+.halo[data-state="disconnected"] .halo__reflection-inner,
+.halo[data-state="error"] .halo__reflection-inner {
+  background: radial-gradient(circle at 34% 70%,
+      var(--state-error-a) 0%,
+      var(--state-error-b) 22%,
+      var(--state-error-c) 55%,
+      color-mix(in srgb, var(--state-error-c) 60%, black) 100%);
+}
+
+.halo[data-state="disconnected"] .halo__status-dot,
+.halo[data-state="error"] .halo__status-dot {
+  background: var(--state-error-c);
+}
+
+.halo[data-state="disconnected"] .halo__listen-ring,
+.halo[data-state="error"] .halo__listen-ring {
+  animation: none;
+  opacity: 0;
+}
+
+/* ==========================================================
+   KEYFRAMES
+   ========================================================== */
+
+@keyframes halo-breathe {
+
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+
+  50% {
+    transform: scale(1.065);
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes halo-shadow-breathe {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.52;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 0.72;
+  }
+}
+
+@keyframes halo-think-pulse {
+
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+
+  50% {
+    filter: brightness(1.14);
+  }
+}
+
+@keyframes halo-listen-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.55;
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(1.36);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================
+   REDUCED MOTION
+   ========================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .halo__orb,
+  .halo__listen-ring {
+    animation: none !important;
+    transition: background 200ms ease, box-shadow 200ms ease !important;
+  }
+
+  .halo__card,
+  .halo__user-line {
+    transition: none !important;
+  }
+
+  .halo__card.halo--turn-enter,
+  .halo__user-line.halo--turn-enter {
+    opacity: 1;
+    transform: none;
+  }
+}

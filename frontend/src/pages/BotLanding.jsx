@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { HaloParticleVoid } from '../components/common/HaloParticleVoid';
+import '../design/halo.css';
 
 /**
- * BotLanding — User-facing page at /bot/:slug.
- * Shows the bot name + a single "Enter" button.
- * After clicking Enter, loads the full voice experience (HomePage).
+ * BotLanding — User-facing landing page at /bot/:slug.
+ * Features the Silver Halo in its inactive living breathing state with cosmic particles.
  */
 export default function BotLanding() {
   const { slug } = useParams();
@@ -33,15 +34,14 @@ export default function BotLanding() {
   // Set browser tab title to bot name
   useEffect(() => {
     if (bot?.name) {
-      document.title = `${bot.name} — widTTS`;
+      document.title = `${bot.name}`;
     }
     return () => {
-      document.title = 'widTTS — Voice Platform';
+      document.title = 'Voice Platform';
     };
   }, [bot?.name]);
 
   const handleEnter = useCallback(() => {
-    // Store the bot slug and metadata so the voice session knows which bot to connect to
     sessionStorage.setItem('active_bot_slug', slug);
     sessionStorage.setItem('widtts_bot_slug', slug);
     if (bot?.name) {
@@ -51,35 +51,27 @@ export default function BotLanding() {
     setEntering(true);
     setTimeout(() => {
       navigate(`/bot/${slug}/session`, { state: { bot } });
-    }, 600);
+    }, 500);
   }, [slug, navigate, bot]);
 
   if (loading) {
     return (
-      <div style={{
-        position: 'fixed', inset: 0, background: '#050507',
-        display: 'grid', placeItems: 'center',
-      }}>
-        <p style={{ color: 'var(--ink-35)', fontSize: '13px' }}>Loading...</p>
+      <div className="halo" data-state="idle" style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <HaloParticleVoid />
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', zIndex: 1 }}>Loading...</p>
       </div>
     );
   }
 
   if (error || !bot) {
     return (
-      <div style={{
-        position: 'fixed', inset: 0, background: '#050507',
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', gap: '1.5rem',
-      }}>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: '2rem',
-          fontWeight: 300, color: 'var(--ink-100)',
-        }}>
-          widTTS
+      <div className="halo" data-state="error" style={{ justifyContent: 'center', alignItems: 'center', gap: '1.5rem' }}>
+        <HaloParticleVoid />
+        <h1 className="halo__label" style={{ fontSize: '1.5rem' }}>
+          Assistant Not Found
         </h1>
-        <p style={{ color: 'var(--ink-35)', fontSize: '14px' }}>
-          {error || 'Bot not found'}
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px', zIndex: 1 }}>
+          {error || 'Unable to load assistant.'}
         </p>
       </div>
     );
@@ -87,68 +79,45 @@ export default function BotLanding() {
 
   return (
     <div
+      className="halo"
+      data-state="idle"
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 100,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '2.5rem',
-        background: '#050507',
-        transition: 'opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: 'opacity 500ms cubic-bezier(0.16, 1, 0.3, 1)',
         opacity: entering ? 0 : 1,
         pointerEvents: entering ? 'none' : 'auto',
       }}
     >
-      {/* Bot identity */}
-      <div style={{ textAlign: 'center' }}>
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(2.5rem, 6vw, 4.5rem)',
-            fontWeight: 300,
-            letterSpacing: '-0.03em',
-            color: 'var(--ink-100)',
-            marginBottom: '0.5rem',
-          }}
-        >
-          {bot.name}
-        </h1>
+      {/* Ambient Cosmic Particles */}
+      <HaloParticleVoid />
+
+      {/* Topbar */}
+      <div className="halo__topbar" style={{ zIndex: 2 }}>
+        <span className="halo__label">{bot.name}</span>
+        <div className="halo__status">
+          <span className="halo__status-dot" />
+          <span className="halo__status-text">Standby</span>
+        </div>
       </div>
 
-      {/* Enter button */}
-      <button
-        onClick={handleEnter}
-        style={{
-          background: 'transparent',
-          border: '1px solid var(--accent-mid)',
-          borderRadius: '8px',
-          padding: '14px 48px',
-          color: 'var(--accent-bright)',
-          fontFamily: 'var(--font-body)',
-          fontSize: '14px',
-          fontWeight: 500,
-          cursor: 'pointer',
-          transition: 'all 200ms cubic-bezier(0.16, 1, 0.3, 1)',
-          letterSpacing: '0.05em',
-          boxShadow: '0 0 25px 2px hsla(155, 95%, 58%, 0.2)',
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.borderColor = 'var(--accent-bright)';
-          e.target.style.boxShadow = '0 0 35px 6px hsla(155, 95%, 58%, 0.4)';
-          e.target.style.transform = 'scale(1.04)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.borderColor = 'var(--accent-mid)';
-          e.target.style.boxShadow = '0 0 25px 2px hsla(155, 95%, 58%, 0.2)';
-          e.target.style.transform = 'scale(1)';
-        }}
-        aria-label="Enter voice session"
-      >
-        Enter
-      </button>
+      {/* Orb Stage (Silver Halo breathing) */}
+      <div className="halo__stage" style={{ zIndex: 2 }}>
+        <div className="halo__orb" />
+        <div className="halo__contact-shadow" />
+        <div className="halo__reflection">
+          <div className="halo__reflection-inner" />
+        </div>
+      </div>
+
+      {/* Action / Enter Area */}
+      <div className="halo__controls" style={{ zIndex: 2, paddingBottom: '16px' }}>
+        <button
+          className="halo__connect-btn"
+          onClick={handleEnter}
+          aria-label={`Enter ${bot.name} voice session`}
+        >
+          Enter Session
+        </button>
+      </div>
     </div>
   );
 }

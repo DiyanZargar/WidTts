@@ -66,57 +66,6 @@ function ParticleLayer({ count, sizeRange, spreadRadius, spreadY, speed, opacity
   );
 }
 
-export function UserParticleVoid() {
-  const palette = useMemo(() => ({
-    dust: [
-      new THREE.Color('hsl(165, 60%, 25%)'),
-      new THREE.Color('hsl(160, 65%, 32%)'),
-      new THREE.Color('hsl(170, 55%, 20%)'),
-    ],
-    stars: [
-      new THREE.Color('hsl(160, 85%, 48%)'),
-      new THREE.Color('hsl(155, 95%, 58%)'),
-      new THREE.Color('hsl(165, 80%, 42%)'),
-    ],
-    orbs: [
-      new THREE.Color('hsl(155, 95%, 68%)'),
-      new THREE.Color('hsl(150, 100%, 78%)'),
-    ],
-  }), []);
-
-  return (
-    <group>
-      <ParticleLayer
-        count={450}
-        sizeRange={[0.01, 0.035]}
-        spreadRadius={28}
-        spreadY={90}
-        speed={0.002}
-        opacity={0.45}
-        palette={palette.dust}
-      />
-      <ParticleLayer
-        count={150}
-        sizeRange={[0.04, 0.08]}
-        spreadRadius={24}
-        spreadY={90}
-        speed={0.004}
-        opacity={0.65}
-        palette={palette.stars}
-      />
-      <ParticleLayer
-        count={35}
-        sizeRange={[0.10, 0.20]}
-        spreadRadius={20}
-        spreadY={90}
-        speed={0.007}
-        opacity={0.55}
-        palette={palette.orbs}
-      />
-    </group>
-  );
-}
-
 export function ParticleVoid() {
   const palette = useMemo(() => ({
     dust: [

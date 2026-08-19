@@ -1,18 +1,17 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Canvas } from '@react-three/fiber';
-import { CoreSphere } from '../components/journey/CoreSphere';
-import { UserParticleVoid } from '../components/journey/ParticleVoid';
 import { useVoiceSession } from '../hooks/useVoiceSession';
-import { useReducedMotion } from '../hooks/useReducedMotion';
-import { tokens, userPalette } from '../design/tokens';
 import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
+import { SettingsIcon } from '../components/icons/SettingsIcon';
+import { HaloParticleVoid } from '../components/common/HaloParticleVoid';
+import '../design/halo.css';
 
 /**
- * HomePage — User Portal (`/user`)
+ * HomePage — User-facing voice session page.
  *
- * Full-viewport vibrant radiant emerald energy sphere + edge-to-edge floating particle void.
- * Reuses the exact 3D CoreSphere from admin panel with full real-time voice reactivity.
+ * HALO UI: Pure CSS reflective sphere driven by a single data-state attribute.
+ * No Three.js, no WebGL — just DOM + CSS for all visual state changes.
+ * Consumes the same useVoiceSession state and amplitude values.
  */
 export default function HomePage() {
   const navigate = useNavigate();
@@ -39,16 +38,12 @@ export default function HomePage() {
     setMuted,
     isActive,
   } = useVoiceSession();
-  const reducedMotion = useReducedMotion();
-  const [started, setStarted] = useState(false);
-  const transcriptScrollRef = useRef(null);
 
-  // Auto-scroll transcript feed container to bottom whenever new lines/partials arrive
-  useEffect(() => {
-    if (transcriptScrollRef.current) {
-      transcriptScrollRef.current.scrollTop = transcriptScrollRef.current.scrollHeight;
-    }
-  }, [transcriptLines, partialTranscript, partialAssistantTranscript]);
+  const [started, setStarted] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const orbRef = useRef(null);
+  const rafRef = useRef(null);
+  const transcriptScrollRef = useRef(null);
 
   // Fetch active bot runtime info from API (empty by default — no placeholder flash)
   const [bot, setBot] = useState({
@@ -61,15 +56,13 @@ export default function HomePage() {
   // Update page title with bot name
   useEffect(() => {
     if (bot.name) {
-      document.title = `${bot.name} — widTTS`;
-    } else {
-      document.title = 'widTTS — Voice Platform';
+      document.title = `${bot.name}`;
     }
+    return () => { document.title = 'Voice Platform'; };
   }, [bot.name]);
 
   useEffect(() => {
     if (botSlug) {
-      // Bot-specific route — fetch from public API
       fetch(`/api/bot/${botSlug}`)
         .then((r) => r.json())
         .then((data) => {
@@ -81,28 +74,89 @@ export default function HomePage() {
             }));
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     } else {
-      // Admin active bot route
       fetch('/admin/api/runtime/stats')
         .then((r) => r.json())
         .then((data) => {
           if (data?.active_bot) {
             const ab = data.active_bot;
-            const sttP = ab.stt_provider;
-            const ttsP = ab.tts_provider;
             setBot({
               name: ab.name || '',
               description: ab.description || ab.system_prompt || '',
               llmModel: ab.llm_model || '',
-              speechModel: sttP || ttsP ? `STT: ${sttP?.name || 'N/A'} • TTS: ${ttsP?.name || 'N/A'}` : '',
+              speechModel: '',
             });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [botSlug]);
 
+  // Auto-scroll transcript container to bottom whenever new lines/partials arrive
+  useEffect(() => {
+    if (transcriptScrollRef.current) {
+      transcriptScrollRef.current.scrollTop = transcriptScrollRef.current.scrollHeight;
+    }
+  }, [transcriptLines, partialTranscript, partialAssistantTranscript]);
+
+  // ─── Halo data-state:
+  // idle -> silver before start
+  // connecting / listening -> warm amber ready tone with breathing
+  // user_speaking -> warm amber + amplitude reactivity
+  // speaking -> warm saturated amber + TTS amplitude reactivity
+  // thinking -> cool violet pulse
+  // error -> muted red
+  const [voiceError, setVoiceError] = useState(false);
+
+  // Track voice errors from session events
+  useEffect(() => {
+    if (status === 'idle' && !isActive && started) {
+      setVoiceError(true);
+    } else if (isActive) {
+      setVoiceError(false);
+    }
+  }, [status, isActive, started]);
+
+  const haloState = useMemo(() => {
+    if (voiceError && !isActive && started) return 'error';
+    if (!isActive && !started) return 'idle';
+    if (status === 'listening' && partialTranscript) return 'user_speaking';
+    return status;
+  }, [status, partialTranscript, isActive, started, voiceError]);
+
+  // ─── Amplitude rAF loop: write --amp on orb only during reactive states
+  useEffect(() => {
+    const orb = orbRef.current;
+    if (!orb) return;
+
+    const isReactive = haloState === 'user_speaking' || haloState === 'speaking';
+    if (!isReactive) {
+      orb.style.removeProperty('--amp');
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    const tick = () => {
+      rafRef.current = requestAnimationFrame(tick);
+      const amp = haloState === 'user_speaking' ? listenLevel : audioLevel;
+      orb.style.setProperty('--amp', String(Math.min(1, amp)));
+    };
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      orb.style.removeProperty('--amp');
+    };
+  }, [haloState]);
+
+  // ─── Session handlers
   const handleStart = useCallback(() => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -110,8 +164,9 @@ export default function HomePage() {
         const tempCtx = new AudioCtx();
         tempCtx.resume().then(() => tempCtx.close());
       }
-    } catch (e) {}
+    } catch (e) { }
 
+    setVoiceError(false);
     setStarted(true);
     begin();
   }, [begin]);
@@ -119,11 +174,11 @@ export default function HomePage() {
   const handleStop = useCallback(() => {
     end();
     setStarted(false);
+    setVoiceError(false);
   }, [end]);
 
   const handleExit = useCallback(() => {
     if (isActive) end();
-    // Clear bot slug and metadata from session when exiting
     sessionStorage.removeItem('active_bot_slug');
     sessionStorage.removeItem('widtts_bot_slug');
     sessionStorage.removeItem('active_bot_name');
@@ -143,418 +198,151 @@ export default function HomePage() {
     }
   }, [isActive, status]);
 
-  const getStatusBadge = () => {
-    if (status === 'speaking') return { label: '🔊 Speaking...', color: userPalette.bright };
-    if (status === 'listening') return { label: '🎙 Listening...', color: 'hsl(160, 90%, 45%)' };
-    if (status === 'thinking') return { label: '🧠 Thinking...', color: 'hsl(45, 95%, 60%)' };
-    if (status === 'connecting') return { label: '⏳ Connecting...', color: tokens.color.ink60 };
-    if (!isActive || status === 'idle' || status === 'completed' || status === 'disconnected' || status === 'off') {
-      return { label: '● SESSION OFF', color: 'hsl(350, 90%, 55%)' };
+  // ─── Human-readable status label for the topbar
+  const statusLabel = useMemo(() => {
+    switch (haloState) {
+      case 'user_speaking': return 'Listening';
+      case 'listening': return 'Ready';
+      case 'speaking': return 'Responding';
+      case 'thinking': return 'Thinking';
+      case 'connecting': return 'Connecting';
+      case 'error': return 'Connection lost';
+      case 'disconnected': return 'Disconnected';
+      default: return 'Idle';
     }
-    return { label: '● READY', color: userPalette.bright };
-  };
+  }, [haloState]);
 
-  const statusBadge = getStatusBadge();
+  const hasTranscript = started && (
+    transcriptLines.length > 0 ||
+    Boolean(partialTranscript) ||
+    Boolean(partialAssistantTranscript)
+  );
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: tokens.color.void,
-        display: 'grid',
-        placeItems: 'center',
-        overflow: 'hidden',
-        userSelect: 'none',
-      }}
-    >
-      <div className="viewport-border viewport-border--top viewport-border--user" />
-      <div className="viewport-border viewport-border--bottom viewport-border--user" />
-      <div className="viewport-border viewport-border--left viewport-border--user" />
-      <div className="viewport-border viewport-border--right viewport-border--user" />
+    <div className="halo" data-state={haloState}>
+      {/* ── Ambient Cosmic Stardust Particles ── */}
+      <HaloParticleVoid />
 
-      {/* FULL-SCREEN 3D Canvas with exact Admin Panel CoreSphere */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100vw',
-          height: '100vh',
-          pointerEvents: 'none',
-          zIndex: 1,
-        }}
-      >
-        <Canvas
-          camera={{ fov: 45, position: [0, 0.4, 8.5] }}
-          gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
-          style={{ background: 'transparent', width: '100%', height: '100%' }}
-        >
-          <ambientLight intensity={0.15} />
-          <directionalLight position={[5, 10, 5]} intensity={0.4} color="hsl(155, 95%, 58%)" />
-          <pointLight position={[-5, 5, -5]} intensity={0.3} color="hsl(160, 90%, 42%)" />
-          <UserParticleVoid />
-          <CoreSphere
-            status={status}
-            isActive={isActive}
-            activated={isActive}
-            audioLevel={audioLevel}
-            listenLevel={listenLevel}
-            progress={0}
-          />
-        </Canvas>
-      </div>
-
-      {/* Top Navigation Bar */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '60px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '0 32px',
-          zIndex: 20,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: statusBadge.color,
-              boxShadow: `0 0 10px ${statusBadge.color}`,
-            }}
-          />
-          <span className="type-micro" style={{ color: tokens.color.ink60, fontSize: '11px' }}>
-            {statusBadge.label}
-          </span>
+      {/* ── Topbar ── */}
+      <div className="halo__topbar">
+        <span className="halo__label">{bot.name}</span>
+        <div className="halo__status">
+          <span className="halo__status-dot" />
+          <span className="halo__status-text">{statusLabel}</span>
         </div>
-
-        <button
-          onClick={handleExit}
-          style={{
-            background: 'transparent',
-            border: `1px solid ${tokens.color.ink35}`,
-            color: tokens.color.ink100,
-            fontFamily: tokens.font.body,
-            fontWeight: 600,
-            fontSize: '11px',
-            letterSpacing: '0.15em',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            padding: '8px 18px',
-            borderRadius: '4px',
-            boxShadow: '0 0 12px rgba(255,255,255,0.15)',
-            transition: `all ${tokens.motion.hoverMs}ms cubic-bezier(${tokens.easing.expoOut.join(',')})`,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = tokens.color.ink100;
-            e.currentTarget.style.boxShadow = '0 0 20px rgba(255,255,255,0.5)';
-            e.currentTarget.style.transform = 'scale(1.04)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = tokens.color.ink35;
-            e.currentTarget.style.boxShadow = '0 0 12px rgba(255,255,255,0.15)';
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-        >
-          Exit
-        </button>
       </div>
 
-      {/* Top Bot Identity (only visible when session is active) */}
-      {isActive && bot.name && (
-        <div style={{ position: 'absolute', top: '10%', textAlign: 'center', zIndex: 10, pointerEvents: 'none' }}>
-          <h1
-            style={{
-              fontFamily: tokens.font.display,
-              fontWeight: 400,
-              fontSize: '32px',
-              color: tokens.color.ink100,
-              letterSpacing: '-0.02em',
-              margin: 0,
-              textShadow: '0 0 20px rgba(255,255,255,0.3)',
-            }}
+      {/* ── Orb Stage ── */}
+      <div className="halo__stage">
+        <div className="halo__orb" ref={orbRef} />
+        <div className="halo__listen-ring" />
+        <div className="halo__contact-shadow" />
+        <div className="halo__reflection">
+          <div className="halo__reflection-inner" />
+        </div>
+      </div>
+
+      {/* ── Transcript: Growing, Scrollable, Fading History ── */}
+      <div className="halo__transcript-area">
+        {hasTranscript && (
+          <div className="halo__transcript-scroll" ref={transcriptScrollRef}>
+            {transcriptLines.map((line) => {
+              if (line.speaker === 'assistant') {
+                return (
+                  <div className="halo__card" key={line.id}>
+                    <div className="halo__card-label">{bot.name || 'Assistant'}</div>
+                    <div className="halo__card-text">{line.text}</div>
+                  </div>
+                );
+              }
+              return (
+                <div className="halo__user-line" key={line.id}>
+                  <div className="halo__card-label">You</div>
+                  <div className="halo__card-text">{line.text}</div>
+                </div>
+              );
+            })}
+
+            {/* Live Streaming Assistant Speech */}
+            {partialAssistantTranscript && (
+              <div className="halo__card halo--streaming" key="streaming-assistant">
+                <div className="halo__card-label">{bot.name || 'Assistant'}</div>
+                <div className="halo__card-text">{partialAssistantTranscript}</div>
+              </div>
+            )}
+
+            {/* Live User Speech (Partial STT) */}
+            {partialTranscript && (
+              <div className="halo__user-line halo--partial" key="partial-user">
+                <div className="halo__card-label">You</div>
+                <div className="halo__card-text">{partialTranscript}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Controls ── */}
+      {!started ? (
+        <div className="halo__controls">
+          <button className="halo__connect-btn" onClick={handleStart}>
+            Connect
+          </button>
+        </div>
+      ) : (
+        <div className="halo__controls">
+          <button
+            className={`halo__btn${muted ? ' halo__btn--muted' : ''}`}
+            onClick={() => setMuted(!muted)}
+            title={muted ? 'Unmute microphone' : 'Mute microphone'}
+            aria-label={muted ? 'Unmute microphone' : 'Mute microphone'}
           >
-            {bot.name}
-          </h1>
-          {(bot.llmModel || bot.speechModel) && (
-            <div
-              style={{
-                display: 'flex',
-                gap: '8px',
-                justifyContent: 'center',
-                marginTop: '8px',
-              }}
-            >
-              {bot.llmModel && (
-                <span
-                  style={{
-                    fontSize: '10px',
-                    fontFamily: 'monospace',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: userPalette.bright,
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                  }}
-                >
-                  LLM: {bot.llmModel}
-                </span>
-              )}
-              {bot.speechModel && (
-                <span
-                  style={{
-                    fontSize: '10px',
-                    fontFamily: 'monospace',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: 'rgba(255,255,255,0.8)',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                  }}
-                >
-                  SPEECH: {bot.speechModel}
-                </span>
-              )}
-            </div>
-          )}
+            {muted ? <MicMutedIcon size={18} /> : <MicIcon size={18} />}
+          </button>
+          <button className="halo__end-session" onClick={handleStop}>
+            End session
+          </button>
+          <button
+            className="halo__btn"
+            title="Assistant Details"
+            aria-label="Assistant Details"
+            onClick={() => setShowSettingsModal(true)}
+          >
+            <SettingsIcon size={18} />
+          </button>
         </div>
       )}
 
-      {/* Controls & Action Area */}
-      {!started ? (
-        <button
-          onClick={handleStart}
-          style={{
-            position: 'absolute',
-            bottom: '14%',
-            background: 'rgba(255,255,255,0.04)',
-            border: `1px solid ${userPalette.bright}`,
-            color: tokens.color.ink100,
-            padding: '14px 36px',
-            fontFamily: tokens.font.body,
-            fontWeight: 600,
-            fontSize: '12px',
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            borderRadius: '6px',
-            boxShadow: `0 0 25px 2px hsla(155, 95%, 58%, 0.35)`,
-            transition: `all ${tokens.motion.hoverMs}ms cubic-bezier(${tokens.easing.expoOut.join(',')})`,
-            zIndex: 10,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = userPalette.bloom;
-            e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
-            e.currentTarget.style.boxShadow = `0 0 35px 6px hsla(155, 95%, 58%, 0.55)`;
-            e.currentTarget.style.transform = 'scale(1.04)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = userPalette.bright;
-            e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-            e.currentTarget.style.boxShadow = `0 0 25px 2px hsla(155, 95%, 58%, 0.35)`;
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-        >
-          Connect with {bot.name || 'Assistant'}
-        </button>
-      ) : (
+      {/* ── Bot Description & Info Modal ── */}
+      {showSettingsModal && (
         <div
-          style={{
-            position: 'absolute',
-            bottom: '8%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '16px',
-            zIndex: 10,
-            width: '90%',
-            maxWidth: '560px',
-          }}
+          className="halo__modal-backdrop"
+          onClick={() => setShowSettingsModal(false)}
+          role="dialog"
+          aria-modal="true"
         >
-          {/* Live Subtitle Transcript Overlay (Minimal, Frameless) */}
-          {(transcriptLines.length > 0 || partialTranscript || partialAssistantTranscript) && (
-            <div
-              ref={transcriptScrollRef}
-              style={{
-                width: '100%',
-                maxHeight: '160px',
-                overflowY: 'auto',
-                padding: '8px 12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                pointerEvents: 'auto',
-                maskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 100%)',
-                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 100%)',
-              }}
-            >
-              {transcriptLines.slice(-6).map((line, idx) => {
-                const isUser = line.speaker === 'user';
-                const isLatest = idx === Math.min(transcriptLines.length, 6) - 1 && !partialTranscript && !partialAssistantTranscript;
-                return (
-                  <div
-                    key={line.id || idx}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: isUser ? 'flex-end' : 'flex-start',
-                      alignSelf: isUser ? 'flex-end' : 'flex-start',
-                      maxWidth: '88%',
-                      opacity: isLatest ? 1 : 0.65,
-                      transition: 'all 300ms ease-out',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: '9px',
-                        fontWeight: 700,
-                        letterSpacing: '0.15em',
-                        textTransform: 'uppercase',
-                        color: isUser ? 'rgba(52, 211, 153, 0.7)' : 'rgba(103, 232, 249, 0.7)',
-                        marginBottom: '2px',
-                      }}
-                    >
-                      {isUser ? 'YOU' : (bot.name || 'AI').toUpperCase()}
-                    </span>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: '14px',
-                        lineHeight: '1.4',
-                        fontWeight: isLatest ? 500 : 400,
-                        color: isUser ? 'rgba(236, 253, 245, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                        textShadow: isLatest ? '0 0 12px rgba(255, 255, 255, 0.2)' : 'none',
-                        textAlign: isUser ? 'right' : 'left',
-                      }}
-                    >
-                      {line.text}
-                    </p>
-                  </div>
-                );
-              })}
-
-              {/* Live partial user STT */}
-              {partialTranscript && (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-end',
-                    alignSelf: 'flex-end',
-                    maxWidth: '88%',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '9px',
-                      fontWeight: 700,
-                      letterSpacing: '0.15em',
-                      textTransform: 'uppercase',
-                      color: 'rgba(52, 211, 153, 0.9)',
-                      marginBottom: '2px',
-                    }}
-                  >
-                    YOU
-                  </span>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: '14px',
-                      lineHeight: '1.4',
-                      color: 'rgba(52, 211, 153, 0.95)',
-                      fontStyle: 'italic',
-                      textAlign: 'right',
-                    }}
-                  >
-                    "{partialTranscript}" <span className="animate-pulse">...</span>
-                  </p>
-                </div>
-              )}
-
-              {/* Live partial assistant stream */}
-              {partialAssistantTranscript && (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    alignSelf: 'flex-start',
-                    maxWidth: '88%',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '9px',
-                      fontWeight: 700,
-                      letterSpacing: '0.15em',
-                      textTransform: 'uppercase',
-                      color: 'rgba(103, 232, 249, 0.9)',
-                      marginBottom: '2px',
-                    }}
-                  >
-                    {(bot.name || 'AI').toUpperCase()}
-                  </span>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: '14px',
-                      lineHeight: '1.4',
-                      color: 'rgba(255, 255, 255, 0.95)',
-                      textAlign: 'left',
-                    }}
-                  >
-                    {partialAssistantTranscript} <span className="animate-pulse">...</span>
-                  </p>
-                </div>
-              )}
+          <div className="halo__modal" onClick={(e) => e.stopPropagation()}>
+            <div className="halo__modal-header">
+              <h3 className="halo__modal-title">{bot.name || 'Assistant Info'}</h3>
+              <button
+                className="halo__modal-close"
+                onClick={() => setShowSettingsModal(false)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
             </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <button
-              onClick={() => setMuted(!muted)}
-              style={{
-                background: muted ? 'rgba(255, 80, 80, 0.15)' : 'rgba(255,255,255,0.06)',
-                border: `1px solid ${muted ? 'rgba(255, 80, 80, 0.4)' : 'rgba(255,255,255,0.2)'}`,
-                color: tokens.color.ink100,
-                width: '48px',
-                height: '48px',
-                borderRadius: '50%',
-                display: 'grid',
-                placeItems: 'center',
-                cursor: 'pointer',
-                transition: 'all 200ms',
-              }}
-              title={muted ? 'Unmute microphone' : 'Mute microphone'}
-            >
-              {muted ? <MicMutedIcon size={20} /> : <MicIcon size={20} />}
-            </button>
-
-            <button
-              onClick={handleStop}
-              style={{
-                background: 'rgba(255, 80, 80, 0.2)',
-                border: '1px solid rgba(255, 80, 80, 0.5)',
-                color: '#fff',
-                padding: '12px 24px',
-                fontFamily: tokens.font.body,
-                fontWeight: 600,
-                fontSize: '11px',
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                cursor: 'pointer',
-                borderRadius: '4px',
-                boxShadow: '0 0 16px rgba(255, 80, 80, 0.3)',
-              }}
-            >
-              End Session
-            </button>
+            <div className="halo__modal-body">
+              {bot.description || 'No description available for this assistant.'}
+            </div>
+            <div className="halo__modal-footer">
+              <button
+                className="halo__modal-btn halo__modal-btn--secondary"
+                onClick={() => setShowSettingsModal(false)}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
