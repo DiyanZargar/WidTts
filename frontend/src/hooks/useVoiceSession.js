@@ -59,9 +59,9 @@ export function useVoiceSession() {
       case 'session_end':
       case 'session_timeout':
       case 'room_disconnected':
-        dispatch({ type: 'CLOSE_WIDGET' });
-        dispatch({ type: 'SET_LISTENING', value: false });
-        dispatch({ type: 'SET_SPEAKING', value: false });
+        // Transition to completed — orb turns amber/inactive
+        // instead of abruptly closing the widget.
+        dispatch({ type: 'SESSION_COMPLETED' });
         break;
       case 'session_reset':
         dispatch({ type: 'SESSION_RESET' });
@@ -104,7 +104,7 @@ export function useVoiceSession() {
   }, [state.transcriptLines, state.partialTranscript]);
 
   const begin = useCallback(() => {
-    dispatch({ type: 'OPEN_WIDGET' });
+    dispatch({ type: 'RESET_FOR_NEW_SESSION' });
     const botSlug = _resolveBotSlug();
     connect(stableOnEvent, stableOnStatusChange, botSlug);
   }, [dispatch, connect, stableOnEvent, stableOnStatusChange, _resolveBotSlug]);

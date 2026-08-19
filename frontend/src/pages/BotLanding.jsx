@@ -41,14 +41,18 @@ export default function BotLanding() {
   }, [bot?.name]);
 
   const handleEnter = useCallback(() => {
-    // Store the bot slug so the voice session knows which bot to connect to
+    // Store the bot slug and metadata so the voice session knows which bot to connect to
     sessionStorage.setItem('active_bot_slug', slug);
     sessionStorage.setItem('widtts_bot_slug', slug);
+    if (bot?.name) {
+      sessionStorage.setItem('active_bot_name', bot.name);
+      sessionStorage.setItem('active_bot_desc', bot.description || '');
+    }
     setEntering(true);
     setTimeout(() => {
-      navigate(`/bot/${slug}/session`);
+      navigate(`/bot/${slug}/session`, { state: { bot } });
     }, 600);
-  }, [slug, navigate]);
+  }, [slug, navigate, bot]);
 
   if (loading) {
     return (

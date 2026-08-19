@@ -100,7 +100,7 @@ class LiveKitSession:
                 llm=self._llm_bridge,
                 tts=self._tts_plugin,
                 user_away_timeout=timeout_sec,
-                aec_warmup_duration=0.0,
+                aec_warmup_duration=0.5,
                 turn_handling={
                     "endpointing": {
                         "min_delay": 0.5,
@@ -123,16 +123,39 @@ class LiveKitSession:
                 if getattr(ev, "new_state", None) == "away":
                     logger.info("[SESSION] Inactivity timeout (%ss) reached for session=%s", timeout_sec, self.snapshot.session_id)
                     import asyncio
-                    async def _disconnect_inactivity():
+
+                    async def _farewell_then_disconnect():
+                        # 1. Play a farewell message via TTS (prompt-independent)
                         try:
-                            if self._agent_session and self._agent_session.room:
+                            if self._agent_session and not self._is_destroyed:
+                                self._agent_session.say(
+                                    "It was nice talking with you. Goodbye!",
+                                    allow_interruptions=False,
+                                )
+                                # Give TTS time to synthesize + play the farewell
+                                await asyncio.sleep(4)
+                        except Exception as e:
+                            logger.warning("[SESSION] Farewell TTS failed: %s", e)
+
+                        # 2. Notify frontend before disconnecting
+                        try:
+                            target_room = self._room or (self._agent_session.room if self._agent_session else None)
+                            if target_room and target_room.local_participant:
                                 import json
-                                payload = json.dumps({"event": "session_end", "payload": {"reason": "inactivity_timeout"}}).encode('utf-8')
-                                await self._agent_session.room.local_participant.publish_data(payload)
-                        except Exception:
-                            pass
+                                payload = json.dumps({
+                                    "event": "session_end",
+                                    "payload": {"reason": "inactivity_timeout"},
+                                }).encode("utf-8")
+                                await target_room.local_participant.publish_data(payload)
+                                logger.info("[SESSION] Published session_end event to room for session=%s", self.snapshot.session_id)
+                                await asyncio.sleep(0.5)  # brief pause for data delivery
+                        except Exception as e:
+                            logger.warning("[SESSION] Failed to publish session_end: %s", e)
+
+                        # 3. Tear down session
                         await self.destroy()
-                    asyncio.create_task(_disconnect_inactivity())
+
+                    asyncio.create_task(_farewell_then_disconnect())
 
             # Build system instructions with bot identity and language
             bot_name = self.snapshot.bot_name or "Assistant"
@@ -173,8 +196,13 @@ class LiveKitSession:
                 ),
             )
 
-            # Instant Greeting Optimization:
-            # If a custom greeting is configured, say it directly to TTS (instant start without LLM delay)
+            # Greeting — wait for audio pipeline to stabilize before
+            # sending the first TTS utterance. Without this delay the
+            # WebRTC audio track isn't fully negotiated and the first
+            # word gets clipped/broken.
+            import asyncio as _aio
+            await _aio.sleep(0.5)
+
             custom_greeting = (self.snapshot.greeting or "").strip()
             if custom_greeting:
                 logger.info("[SESSION] Playing instant direct greeting: %s", custom_greeting[:60])
@@ -327,11 +355,16 @@ class LiveKitSession:
                 except Exception as e:
                     logger.warning("[SESSION] %s close error: %s", plugin_name, e)
 
+        if self._room:
+            try:
+                await self._room.disconnect()
+            except Exception as e:
+                logger.warning("[SESSION] Room disconnect error: %s", e)
+            self._room = None
         self._stt_plugin = None
         self._tts_plugin = None
         self._vad_plugin = None
         self._llm_bridge = None
-        self._room = None
         logger.info("[SESSION] Session destroyed: %s", self.snapshot.session_id)
         pl.session_end(session_id=self.snapshot.session_id, reason="session_destroyed")
 

@@ -7,8 +7,8 @@ export const tokens = {
     warn: 'hsl(28, 85%, 58%)',
   },
   font: {
-    display: '"Space Grotesk", sans-serif',
-    body: '"Inter", sans-serif',
+    display: '"Plus Jakarta Sans", "Outfit", sans-serif',
+    body: '"Plus Jakarta Sans", "Inter", sans-serif',
   },
   easing: {
     expoOut: [0.16, 1, 0.3, 1],

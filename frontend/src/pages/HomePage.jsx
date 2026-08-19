@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import { CoreSphere } from '../components/journey/CoreSphere';
 import { UserParticleVoid } from '../components/journey/ParticleVoid';
@@ -17,7 +17,14 @@ import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
 export default function HomePage() {
   const navigate = useNavigate();
   const params = useParams();
+  const location = useLocation();
   const botSlug = params.slug || sessionStorage.getItem('active_bot_slug') || sessionStorage.getItem('widtts_bot_slug') || null;
+
+  // Retrieve any passed or cached bot metadata so name renders instantly with no placeholder flash
+  const passedBot = location.state?.bot;
+  const cachedName = sessionStorage.getItem('active_bot_name') || '';
+  const cachedDesc = sessionStorage.getItem('active_bot_desc') || '';
+
   const {
     status,
     audioLevel,
@@ -43,22 +50,21 @@ export default function HomePage() {
     }
   }, [transcriptLines, partialTranscript, partialAssistantTranscript]);
 
-  // Fetch active bot runtime info from API
+  // Fetch active bot runtime info from API (empty by default — no placeholder flash)
   const [bot, setBot] = useState({
-    name: 'Voice Assistant',
-    description: 'Real-time Conversational Assistant',
+    name: passedBot?.name || cachedName || '',
+    description: passedBot?.description || cachedDesc || '',
     llmModel: '',
     speechModel: '',
   });
 
   // Update page title with bot name
   useEffect(() => {
-    if (bot.name && bot.name !== 'Voice Assistant') {
+    if (bot.name) {
       document.title = `${bot.name} — widTTS`;
-    }
-    return () => {
+    } else {
       document.title = 'widTTS — Voice Platform';
-    };
+    }
   }, [bot.name]);
 
   useEffect(() => {
@@ -68,12 +74,11 @@ export default function HomePage() {
         .then((r) => r.json())
         .then((data) => {
           if (data?.name) {
-            setBot({
-              name: data.name || 'Voice Assistant',
-              description: data.description || 'Real-time Conversational Assistant',
-              llmModel: '',
-              speechModel: '',
-            });
+            setBot((prev) => ({
+              ...prev,
+              name: data.name || '',
+              description: data.description || '',
+            }));
           }
         })
         .catch(() => {});
@@ -87,8 +92,8 @@ export default function HomePage() {
             const sttP = ab.stt_provider;
             const ttsP = ab.tts_provider;
             setBot({
-              name: ab.name || 'Voice Assistant',
-              description: ab.description || ab.system_prompt || 'Real-time Conversational Assistant',
+              name: ab.name || '',
+              description: ab.description || ab.system_prompt || '',
               llmModel: ab.llm_model || '',
               speechModel: sttP || ttsP ? `STT: ${sttP?.name || 'N/A'} • TTS: ${ttsP?.name || 'N/A'}` : '',
             });
@@ -118,9 +123,11 @@ export default function HomePage() {
 
   const handleExit = useCallback(() => {
     if (isActive) end();
-    // Clear bot slug from session when exiting
+    // Clear bot slug and metadata from session when exiting
     sessionStorage.removeItem('active_bot_slug');
     sessionStorage.removeItem('widtts_bot_slug');
+    sessionStorage.removeItem('active_bot_name');
+    sessionStorage.removeItem('active_bot_desc');
     if (botSlug) {
       navigate(`/bot/${botSlug}`);
     } else {
@@ -259,63 +266,65 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Top Bot Identity */}
-      <div style={{ position: 'absolute', top: '10%', textAlign: 'center', zIndex: 10, pointerEvents: 'none' }}>
-        <h1
-          style={{
-            fontFamily: tokens.font.display,
-            fontWeight: 400,
-            fontSize: '32px',
-            color: tokens.color.ink100,
-            letterSpacing: '-0.02em',
-            margin: 0,
-            textShadow: '0 0 20px rgba(255,255,255,0.3)',
-          }}
-        >
-          {bot.name}
-        </h1>
-        {(bot.llmModel || bot.speechModel) && (
-          <div
+      {/* Top Bot Identity (only visible when session is active) */}
+      {isActive && bot.name && (
+        <div style={{ position: 'absolute', top: '10%', textAlign: 'center', zIndex: 10, pointerEvents: 'none' }}>
+          <h1
             style={{
-              display: 'flex',
-              gap: '8px',
-              justifyContent: 'center',
-              marginTop: '8px',
+              fontFamily: tokens.font.display,
+              fontWeight: 400,
+              fontSize: '32px',
+              color: tokens.color.ink100,
+              letterSpacing: '-0.02em',
+              margin: 0,
+              textShadow: '0 0 20px rgba(255,255,255,0.3)',
             }}
           >
-            {bot.llmModel && (
-              <span
-                style={{
-                  fontSize: '10px',
-                  fontFamily: 'monospace',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: userPalette.bright,
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                }}
-              >
-                LLM: {bot.llmModel}
-              </span>
-            )}
-            {bot.speechModel && (
-              <span
-                style={{
-                  fontSize: '10px',
-                  fontFamily: 'monospace',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: 'rgba(255,255,255,0.8)',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                }}
-              >
-                SPEECH: {bot.speechModel}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
+            {bot.name}
+          </h1>
+          {(bot.llmModel || bot.speechModel) && (
+            <div
+              style={{
+                display: 'flex',
+                gap: '8px',
+                justifyContent: 'center',
+                marginTop: '8px',
+              }}
+            >
+              {bot.llmModel && (
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontFamily: 'monospace',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: userPalette.bright,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                  }}
+                >
+                  LLM: {bot.llmModel}
+                </span>
+              )}
+              {bot.speechModel && (
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontFamily: 'monospace',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: 'rgba(255,255,255,0.8)',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                  }}
+                >
+                  SPEECH: {bot.speechModel}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Controls & Action Area */}
       {!started ? (
@@ -352,7 +361,7 @@ export default function HomePage() {
             e.currentTarget.style.transform = 'scale(1)';
           }}
         >
-          Initialize Core
+          Connect with {bot.name || 'Assistant'}
         </button>
       ) : (
         <div

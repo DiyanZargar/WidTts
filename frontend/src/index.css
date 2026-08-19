@@ -15,8 +15,8 @@
   --warn: hsl(28 85% 58%);
 
   /* Typography */
-  --font-display: 'Space Grotesk', sans-serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Outfit', sans-serif;
+  --font-body: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Motion (§12.9) */
   --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);

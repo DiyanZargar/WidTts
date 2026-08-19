@@ -319,6 +319,7 @@ export function useLiveKitRoom() {
       room.on(RoomEvent.Disconnected, (reason) => {
         console.log('[LiveKit] Room disconnected:', reason);
         stopLevelLoop();
+        setMuted(false);
         onStatusChange?.('disconnected');
         onEvent?.({ event: 'session_end', payload: { reason: reason || 'disconnected' } });
       });
@@ -327,6 +328,7 @@ export function useLiveKitRoom() {
         console.log('[LiveKit] Participant disconnected:', participant?.identity);
         if (participant?.identity?.startsWith('agent-')) {
           stopLevelLoop();
+          setMuted(false);
           onStatusChange?.('disconnected');
           onEvent?.({ event: 'session_end', payload: { reason: 'agent_disconnected' } });
         }
@@ -336,8 +338,9 @@ export function useLiveKitRoom() {
       await room.connect(server_url, token);
       await room.startAudio().catch(() => {});
 
-      // Publish mic
+      // Publish mic & reset mute state to active
       await room.localParticipant.setMicrophoneEnabled(true);
+      setMuted(false);
       localTrackRef.current = room.localParticipant.getTrackPublication(Track.Source.Microphone);
 
       // Create AnalyserNode on the local mic track for level visualization
@@ -364,6 +367,7 @@ export function useLiveKitRoom() {
 
   const disconnect = useCallback(() => {
     cleanupAudio();
+    setMuted(false);
 
     if (roomRef.current) {
       roomRef.current.disconnect();
