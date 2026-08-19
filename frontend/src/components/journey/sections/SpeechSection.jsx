@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { ConfigCardList } from '../../common/ConfigCardList';
+import { GlassModal } from '../../common/GlassModal';
 
 /**
  * SpeechSection — Configure speech provider credentials (API key only).
@@ -8,7 +9,7 @@ import { createPortal } from 'react-dom';
 export function SpeechSection({ onProviderCreated }) {
   const [providers, setProviders] = useState([]);
   const [editingProviderId, setEditingProviderId] = useState(null);
-  const [deployedProviderIds, setDeployedProviderIds] = useState(new Set());
+  const [, setDeployedProviderIds] = useState(new Set());
   const [selectedType, setSelectedType] = useState(null);
   const verifyTimerRef = useRef(null);
   const [form, setForm] = useState({
@@ -25,9 +26,7 @@ export function SpeechSection({ onProviderCreated }) {
   // Deletion modal state
   const [deletingProviderId, setDeletingProviderId] = useState(null);
   const [deployedBotWarning, setDeployedBotWarning] = useState(null);
-  const [showAllProviders, setShowAllProviders] = useState(false);
   const formRef = useRef(null);
-  const PROVIDERS_VISIBLE = 3;
 
   const fetchProvidersList = useCallback(() => {
     fetch('/admin/api/speech-providers')
@@ -39,7 +38,7 @@ export function SpeechSection({ onProviderCreated }) {
       .then((r) => r.json())
       .then((bots) => {
         const ids = new Set();
-        (bots || []).filter(b => b.is_deployed).forEach(b => {
+        (bots || []).filter((b) => b.is_deployed).forEach((b) => {
           if (b.stt_provider_id) ids.add(b.stt_provider_id);
           if (b.tts_provider_id) ids.add(b.tts_provider_id);
         });
@@ -48,7 +47,9 @@ export function SpeechSection({ onProviderCreated }) {
       .catch(() => {});
   }, []);
 
-  useEffect(() => { fetchProvidersList(); }, [fetchProvidersList]);
+  useEffect(() => {
+    fetchProvidersList();
+  }, [fetchProvidersList]);
 
   const testConnection = useCallback(async (key, providerId) => {
     if (!key && !providerId) return;
@@ -90,6 +91,7 @@ export function SpeechSection({ onProviderCreated }) {
     });
     setConnectionValid(true);
     setTestResult({ success: true, message: `Editing "${provider.name}". Enter your API key and click Test to verify.` });
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
 
   const resetFormToNew = () => {
@@ -160,9 +162,9 @@ export function SpeechSection({ onProviderCreated }) {
     try {
       const res = await fetch('/admin/api/bots');
       const bots = await res.json();
-      const usingBots = (bots || []).filter(b => b.is_deployed && (b.stt_provider_id === providerId || b.tts_provider_id === providerId));
+      const usingBots = (bots || []).filter((b) => b.is_deployed && (b.stt_provider_id === providerId || b.tts_provider_id === providerId));
       if (usingBots.length > 0) {
-        setDeployedBotWarning({ providerId, botNames: usingBots.map(b => b.name) });
+        setDeployedBotWarning({ providerId, botNames: usingBots.map((b) => b.name) });
         return;
       }
     } catch {
@@ -201,319 +203,236 @@ export function SpeechSection({ onProviderCreated }) {
           Step 2 of 4
         </div>
 
-        <h2 className="type-display type-display-lg" style={{ marginBottom: '0.75rem' }}>
+        <h2 className="type-display type-display-lg mb-3">
           Speech Engine
         </h2>
-        <p className="type-body" style={{ marginBottom: '1.5rem', maxWidth: '520px' }}>
+        <p className="type-body mb-6 max-w-[520px]">
           Connect a speech provider by entering your API key. Model and language
           selection is configured per-bot in the Bot section.
         </p>
 
-        {/* Existing providers list */}
-        {providers.length > 0 && (
-          <div className="glass-pane" style={{ marginBottom: '1.5rem', padding: '1rem 1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span className="type-micro">Active Speech Providers ({providers.length})</span>
-              <button
-                onClick={() => { resetFormToNew(); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); }}
-                style={{
-                  background: 'var(--accent-bright)', border: 'none', color: '#000',
-                  fontSize: '11px', padding: '5px 14px', borderRadius: '6px',
-                  cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px',
-                  transition: 'opacity 200ms',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add Provider
-              </button>
-            </div>
-            {(showAllProviders ? providers : providers.slice(0, PROVIDERS_VISIBLE)).map((p) => {
-              const isSelected = editingProviderId === p.id;
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => handleSelectForEdit(p)}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '12px 14px', marginBottom: '6px',
-                    background: isSelected ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${isSelected ? 'var(--accent-mid)' : 'rgba(255,255,255,0.06)'}`,
-                    borderRadius: '8px', cursor: 'pointer', transition: 'all 200ms',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isSelected ? 'var(--accent-bright)' : 'var(--ink-35)', boxShadow: isSelected ? '0 0 6px var(--accent-bright)' : 'none' }} />
-                    <div>
-                      <div style={{ color: isSelected ? 'var(--accent-bright)' : 'var(--ink-100)', fontSize: '14px', fontWeight: 500 }}>
-                        {p.name} {isSelected && <span style={{ fontSize: '11px', opacity: 0.8 }}>(Editing)</span>}
-                        {deployedProviderIds.has(p.id) && (
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '3px',
-                            marginLeft: '8px', padding: '1px 6px', fontSize: '8px', fontWeight: 600,
-                            letterSpacing: '0.06em', borderRadius: '3px',
-                            background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)',
-                            color: 'var(--accent-bright)',
-                          }}>
-                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-bright)' }} />
-                            IN USE
-                          </span>
-                        )}
-                      </div>
-                      <div className="type-micro" style={{ fontSize: '10px', marginTop: '2px' }}>
-                        {p.provider_type}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); handleSelectForEdit(p); }} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--ink-90)', fontSize: '11px', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer' }}>Edit</button>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); handleRemoveClick(p.id); }} style={{ background: 'none', border: 'none', color: 'var(--ink-35)', fontSize: '12px', cursor: 'pointer' }} onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--warn)')} onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-35)')}>Remove</button>
-                  </div>
-                </div>
-              );
-            })}
+        {/* Reusable Configured Providers List */}
+        <ConfigCardList
+          title="Active Speech Providers"
+          count={providers.length}
+          items={providers}
+          selectedId={editingProviderId}
+          onSelect={handleSelectForEdit}
+          onRemove={handleRemoveClick}
+          onAddNew={() => {
+            resetFormToNew();
+            setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+          }}
+          addNewLabel="Add Provider"
+          renderSubtitle={(p) => (
+            p.provider_type === 'deepgram'
+              ? 'STT + TTS (Nova-3, Flux, Aura)'
+              : p.provider_type === 'elevenlabs'
+              ? 'TTS (Multilingual v2, Turbo v2.5)'
+              : 'TTS (S1, S2 Pro, Voice Cloning)'
+          )}
+        />
 
-            {providers.length > PROVIDERS_VISIBLE && (
+        {/* Configuration pane */}
+        <div className="glass-pane" ref={formRef}>
+          <div className="flex justify-between items-center mb-4">
+            <span className="type-micro">
+              {editingProviderId ? `Edit "${form.name}" Provider` : 'Add Speech Provider'}
+            </span>
+            {editingProviderId && (
               <button
-                onClick={() => setShowAllProviders(!showAllProviders)}
-                style={{
-                  width: '100%', padding: '8px', marginTop: '4px',
-                  background: 'none', border: '1px dashed rgba(255,255,255,0.1)',
-                  borderRadius: '6px', color: 'var(--ink-60)', fontSize: '11px',
-                  cursor: 'pointer', transition: 'color 200ms',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-bright)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-60)')}
+                type="button"
+                onClick={resetFormToNew}
+                className="text-xs text-white/60 hover:text-white transition cursor-pointer"
               >
-                {showAllProviders ? 'Show less' : `Show ${providers.length - PROVIDERS_VISIBLE} more`}
+                Cancel Editing
               </button>
             )}
           </div>
-        )}
 
-        {/* Provider selection buttons */}
-        <div ref={formRef} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-          {['deepgram', 'elevenlabs', 'fishaudio'].map((type) => (
-            <button
-              key={type}
-              onClick={() => selectProvider(type)}
-              style={{
-                flex: 1, padding: '1.5rem',
-                background: selectedType === type ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
-                border: `1px solid ${selectedType === type ? 'var(--accent-mid)' : 'rgba(255,255,255,0.08)'}`,
-                borderRadius: '12px', cursor: 'pointer', transition: 'all 300ms',
-                textAlign: 'center',
-                transform: selectedType === type ? 'scale(1.02)' : 'scale(1)',
-                boxShadow: selectedType === type ? '0 0 20px 2px hsla(275, 60%, 40%, 0.15)' : 'none',
-              }}
-            >
-              <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: '16px', fontWeight: 400, color: selectedType === type ? 'var(--accent-bright)' : 'var(--ink-60)', marginBottom: '6px' }}>
-                {type === 'deepgram' ? 'Deepgram' : type === 'elevenlabs' ? 'ElevenLabs' : 'Fish Audio'}
-              </span>
-              <span className="type-micro" style={{ fontSize: '10px' }}>
-                {type === 'deepgram' ? 'Nova STT + Aura TTS' : type === 'elevenlabs' ? 'Scribe STT + Flash TTS' : 'TTS Only (83 Languages)'}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Configuration Pane — just name + API key */}
-        {selectedType && (
-          <div className="glass-pane">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <span className="type-micro">
-                {editingProviderId ? `Edit "${form.name}"` : `Configure ${selectedType === 'deepgram' ? 'Deepgram' : selectedType === 'elevenlabs' ? 'ElevenLabs' : 'Fish Audio'}`}
-              </span>
-              {editingProviderId && (
-                <button type="button" onClick={resetFormToNew} style={{ background: 'none', border: 'none', color: 'var(--ink-60)', fontSize: '11px', cursor: 'pointer' }}>
-                  Cancel Editing
-                </button>
-              )}
+          <div className="grid gap-4">
+            {/* Provider Type Selection Cards */}
+            <div>
+              <label className="type-micro block mb-2">Select Provider *</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { type: 'deepgram', name: 'Deepgram', role: 'STT + TTS', desc: 'Real-time STT & Aura TTS' },
+                  { type: 'elevenlabs', name: 'ElevenLabs', role: 'TTS', desc: 'Ultra-realistic voices' },
+                  { type: 'fishaudio', name: 'Fish Audio', role: 'TTS', desc: 'Zero-shot voice cloning' },
+                ].map((p) => {
+                  const isSel = (selectedType || form.provider_type) === p.type;
+                  return (
+                    <div
+                      key={p.type}
+                      onClick={() => selectProvider(p.type)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        isSel
+                          ? 'bg-emerald-500/10 border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.15)]'
+                          : 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-white">{p.name}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/70">{p.role}</span>
+                      </div>
+                      <p className="text-[11px] text-white/40 leading-snug">{p.desc}</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gap: '1rem' }}>
-              <div>
-                <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>Provider Name *</label>
-                <input className="glass-input" placeholder="Provider Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <div>
+              <label className="type-micro block mb-1">Provider Name *</label>
+              <input
+                className="glass-input"
+                placeholder="Provider name (e.g. Deepgram Speech)"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="type-micro block mb-1">
+                API Key {editingProviderId ? '(Leave blank to keep saved key)' : '*'}
+              </label>
+              <input
+                className="glass-input"
+                type="password"
+                placeholder={editingProviderId ? '•••••••••••••••• (Saved - enter new key to update)' : 'API Key'}
+                value={form.credentials.api_key}
+                onChange={(e) => {
+                  const key = e.target.value;
+                  setForm({ ...form, credentials: { api_key: key } });
+                  clearTimeout(verifyTimerRef.current);
+                  if (key.trim()) {
+                    verifyTimerRef.current = setTimeout(() => {
+                      testConnection(key, editingProviderId);
+                    }, 600);
+                  } else {
+                    setTestResult(null);
+                    setConnectionValid(false);
+                  }
+                }}
+              />
+            </div>
+
+            {testing && (
+              <div className="flex items-center gap-2 p-2.5 rounded-md bg-white/[0.03] border border-white/[0.06]">
+                <span className="w-1.5 h-1.5 rounded-full bg-white/35 animate-pulse" />
+                <span className="text-xs text-white/60">Verifying API key...</span>
               </div>
+            )}
 
-              <div>
-                <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>
-                  API Key {editingProviderId ? '(Leave blank to keep saved key)' : '*'}
-                </label>
-                <input
-                  className="glass-input"
-                  type="password"
-                  placeholder={editingProviderId ? '•••••••• (Saved — enter new key to update)' : 'API Key'}
-                  value={form.credentials.api_key}
-                  onChange={(e) => {
-                    const key = e.target.value;
-                    setForm({ ...form, credentials: { api_key: key } });
-                    clearTimeout(verifyTimerRef.current);
-                    if (key.trim()) {
-                      verifyTimerRef.current = setTimeout(() => {
-                        testConnection(key, null);
-                      }, 600);
-                    } else {
-                      setConnectionValid(false);
-                      setTestResult(null);
-                    }
-                  }}
-                />
-              </div>
-
-              {testing && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  padding: '8px 12px', borderRadius: '6px',
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-                }}>
-                  <span style={{
-                    width: '6px', height: '6px', borderRadius: '50%',
-                    background: 'var(--ink-35)', animation: 'pulse 1.2s ease-in-out infinite',
-                  }} />
-                  <span style={{ fontSize: '11px', color: 'var(--ink-60)' }}>
-                    Verifying connection...
-                  </span>
-                </div>
-              )}
-
-              {testResult && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  padding: '8px 12px', borderRadius: '6px',
-                  background: testResult.success ? 'rgba(16,185,129,0.06)' : 'rgba(245,158,11,0.06)',
-                  border: `1px solid ${testResult.success ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}`,
-                }}>
-                  <span style={{
-                    width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-                    background: testResult.success ? 'var(--accent-bright)' : 'var(--warn)',
-                    boxShadow: testResult.success ? '0 0 6px var(--accent-mid)' : '0 0 6px rgba(245,158,11,0.4)',
-                  }} />
-                  <span style={{
-                    fontSize: '11px', fontWeight: 500,
-                    color: testResult.success ? 'var(--accent-bright)' : 'var(--warn)',
-                  }}>
-                    {testResult.message}
-                  </span>
-                </div>
-              )}
-
-              <button
-                className={`action-btn ${isFormValid ? 'action-btn--primary' : ''}`}
-                onClick={handleSave}
-                disabled={saving || !isFormValid}
-                style={{ marginTop: '0.5rem', opacity: isFormValid ? 1 : 0.4, cursor: isFormValid ? 'pointer' : 'not-allowed' }}
+            {testResult && (
+              <div
+                className={`flex items-center gap-2 p-2.5 rounded-md border ${
+                  testResult.success
+                    ? 'bg-emerald-500/[0.06] border-emerald-500/20 text-emerald-400'
+                    : 'bg-amber-500/[0.06] border-amber-500/20 text-amber-400'
+                }`}
               >
-                {saving && <span className="loading-ring" />}
-                {saving ? 'Saving...' : editingProviderId ? 'Update Provider' : 'Save Provider'}
-              </button>
-            </div>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    testResult.success ? 'bg-emerald-400 shadow-[0_0_6px_var(--accent-mid)]' : 'bg-amber-400'
+                  }`}
+                />
+                <span className="text-xs font-medium">{testResult.message}</span>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className={`action-btn mt-2 ${isFormValid ? 'action-btn--primary' : ''}`}
+              onClick={handleSave}
+              disabled={saving || !isFormValid}
+            >
+              {saving && <span className="loading-ring" />}
+              {saving ? 'Saving...' : editingProviderId ? 'Update Provider' : 'Save Provider'}
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Cannot Delete Warning Modal — deployed bot uses this provider */}
-      {deployedBotWarning && createPortal(
-        <div
-          style={{
-            position: 'fixed', inset: 0,
-            width: '100vw', height: '100vh',
-            background: 'rgba(0,0,0,0.8)',
-            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            display: 'grid', placeItems: 'center', zIndex: 99999,
-          }}
-        >
-          <div
-            className="glass-pane"
-            style={{
-              width: '90%', maxWidth: '420px', padding: '2rem',
-              textAlign: 'center',
-              border: '1px solid rgba(255,255,255,0.18)',
-              boxShadow: '0 0 50px rgba(0,0,0,0.9), 0 0 20px rgba(255,255,255,0.05)',
-            }}
+      {/* Reusable Cannot Delete Warning Modal */}
+      <GlassModal
+        open={Boolean(deployedBotWarning)}
+        title="Cannot Delete Provider"
+        onClose={() => setDeployedBotWarning(null)}
+        footer={
+          <button
+            type="button"
+            onClick={() => setDeployedBotWarning(null)}
+            className="action-btn text-xs py-1.5 px-4"
           >
-            <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--ink-100)', marginBottom: '0.75rem' }}>
-              Cannot Delete
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--ink-60)', marginBottom: '1rem' }}>
-              This provider is currently used by deployed bot(s). Undeploy them first before deleting.
-            </p>
-            <details style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
-              <summary style={{
-                fontSize: '12px', color: 'var(--accent-bright)', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                listStyle: 'none', userSelect: 'none', justifyContent: 'center',
-              }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transition: 'transform 200ms' }}>
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                {deployedBotWarning.botNames.length} deployed {deployedBotWarning.botNames.length === 1 ? 'bot' : 'bots'}
-              </summary>
-              <div style={{ marginTop: '0.5rem' }}>
-                {deployedBotWarning.botNames.map((name, i) => (
-                  <div key={i} style={{
-                    fontSize: '12px', color: 'var(--ink-90)', padding: '4px 0',
-                    borderBottom: i < deployedBotWarning.botNames.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
-                  }}>
-                    {name}
-                  </div>
-                ))}
-              </div>
-            </details>
-            <button
-              onClick={() => setDeployedBotWarning(null)}
-              style={{
-                padding: '8px 18px',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                color: 'var(--ink-100)', borderRadius: '6px',
-                cursor: 'pointer', fontSize: '12px',
-              }}
-            >
-              Close
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deletingProviderId && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)', display: 'grid', placeItems: 'center', zIndex: 99999 }}>
-          <div className="glass-pane" style={{ width: '90%', maxWidth: '420px', padding: '2rem', textAlign: 'center' }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--ink-100)', marginBottom: '0.75rem' }}>Confirm Deletion</h3>
-            <p style={{ fontSize: '13px', color: 'var(--ink-60)', marginBottom: '1.5rem' }}>Are you sure you want to remove this Speech provider? This action cannot be undone.</p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button onClick={() => setDeletingProviderId(null)} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--ink-100)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>Cancel</button>
-              <button onClick={confirmDelete} style={{ padding: '8px 18px', background: 'var(--accent-mid)', border: 'none', color: '#000', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>Delete</button>
+            Close
+          </button>
+        }
+      >
+        <p className="text-sm text-white/70 mb-3">
+          This speech provider is currently used by deployed bot(s). Undeploy them first before deleting.
+        </p>
+        {deployedBotWarning?.botNames && (
+          <div className="p-3 rounded-lg bg-white/[0.03] border border-white/10 text-xs text-white/90">
+            <div className="font-semibold text-emerald-400 mb-1.5">
+              Used by {deployedBotWarning.botNames.length} {deployedBotWarning.botNames.length === 1 ? 'bot' : 'bots'}:
             </div>
+            <ul className="list-disc pl-4 space-y-1">
+              {deployedBotWarning.botNames.map((name, i) => (
+                <li key={i}>{name}</li>
+              ))}
+            </ul>
           </div>
-        </div>,
-        document.body
-      )}
+        )}
+      </GlassModal>
 
-      {/* Sidebar hints */}
+      {/* Reusable Delete Confirmation Modal */}
+      <GlassModal
+        open={Boolean(deletingProviderId)}
+        title="Confirm Deletion"
+        onClose={() => setDeletingProviderId(null)}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setDeletingProviderId(null)}
+              className="action-btn text-xs py-1.5 px-4"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              className="action-btn action-btn--primary text-xs py-1.5 px-4 bg-amber-500 border-amber-500 text-black hover:bg-amber-400"
+            >
+              Delete
+            </button>
+          </>
+        }
+      >
+        Are you sure you want to remove this speech provider? This action cannot be undone.
+      </GlassModal>
+
+      {/* Sidebar Hints */}
       <div className="journey-section__sidebar">
         <div className="section-hint">
-          <div className="section-hint__title">Speech Provider</div>
+          <div className="section-hint__title">Speech Capabilities</div>
           <div className="section-hint__body">
-            Connect your speech provider with an API key. Models and languages are selected per-bot in the Bot section.
+            Speech providers convert voice audio to text (STT) and synthesize assistant speech into audio (TTS).
           </div>
         </div>
 
         <div className="section-hint">
-          <div className="section-hint__title">Supported Providers</div>
+          <div className="section-hint__title">Voice Flexibility</div>
           <div className="section-hint__body">
-            Deepgram (Nova STT, Aura TTS), ElevenLabs (Scribe STT, Flash TTS), and Fish Audio (TTS Only).
+            Deepgram handles lightning-fast conversational audio. ElevenLabs and Fish Audio offer lifelike natural speech.
           </div>
         </div>
 
         <div className="section-hint">
-          <div className="section-hint__title">Credentials Only</div>
+          <div className="section-hint__title">Per-Bot Configuration</div>
           <div className="section-hint__body">
-            This section stores your API key securely. All model and language configuration happens at the bot level.
+            Once saved, assign different voices, models, and languages to individual bots in Step 3.
           </div>
         </div>
       </div>

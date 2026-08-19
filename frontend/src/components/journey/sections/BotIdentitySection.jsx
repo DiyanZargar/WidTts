@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { LanguageMultiSelect } from '../../common/LanguageMultiSelect';
 import { GlassSelect } from '../../common/GlassSelect';
 import { GlassComboBox } from '../../common/GlassComboBox';
+import { ConfigCardList } from '../../common/ConfigCardList';
+import { GlassModal } from '../../common/GlassModal';
 import { DEFAULT_SYSTEM_PROMPT, EMPTY_FORM } from '../../../config/botTemplates';
 
 /**
@@ -25,9 +27,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
   }, [result]);
   const [customModelInput, setCustomModelInput] = useState(false);
   const [deletingBotId, setDeletingBotId] = useState(null);
-  const [showAllBots, setShowAllBots] = useState(false);
   const formRef = useRef(null);
-  const BOTS_VISIBLE = 3;
 
   // LLM models
   const [availableLlmModels, setAvailableLlmModels] = useState([]);
@@ -40,7 +40,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
   const [sttByLanguage, setSttByLanguage] = useState({});
   const [availableLanguages, setAvailableLanguages] = useState([]);
 
-  // Audio preview (Ported from dev branch SpeechSection)
+  // Audio preview
   const [previewingModel, setPreviewingModel] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const currentAudioRef = useRef(null);
@@ -70,7 +70,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     setPreviewError(null);
   }, []);
 
-  // Hybrid audio sample greeting player from dev branch with immediate cancellation
+  // Hybrid audio sample greeting player with immediate cancellation
   const playAudioGreeting = useCallback(async (ttsModel = '', voiceId = '') => {
     if (!form.tts_provider_id || !ttsModel) return;
     terminateActiveAudio();
@@ -81,12 +81,9 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     abortControllerRef.current = controller;
 
     // Look up the provider's configured voice if none explicitly passed
-    const provider = speechProviders.find(p => p.id === form.tts_provider_id);
+    const provider = speechProviders.find((p) => p.id === form.tts_provider_id);
     const providerVoiceId = provider?.tts_voice_id || '';
 
-    // Detect voice profile IDs vs engine model IDs:
-    // - Fish Audio voice profiles: 24-char hex (MongoDB ObjectIds)
-    // - ElevenLabs voice profiles: 20-char alphanumeric
     let resolvedModel = ttsModel;
     let resolvedVoiceId = voiceId || providerVoiceId;
     if (/^[0-9a-f]{24}$/i.test(ttsModel)) {
@@ -94,7 +91,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
       resolvedVoiceId = ttsModel;
       resolvedModel = '';
     } else if (/^[a-zA-Z0-9]{20}$/.test(ttsModel) && !ttsModel.startsWith('eleven_') && !ttsModel.startsWith('scribe_')) {
-      // ElevenLabs voice profile (20-char alphanumeric, not a model ID)
+      // ElevenLabs voice profile
       resolvedVoiceId = ttsModel;
       resolvedModel = '';
     }
@@ -116,7 +113,6 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
       if (res.ok) {
         const arrayBuffer = await res.arrayBuffer();
-        // Detect content type from response for correct playback
         const contentType = res.headers.get('content-type') || 'audio/wav';
         const isMp3 = contentType.includes('mpeg') || contentType.includes('mp3');
 
@@ -158,12 +154,10 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
         await audio.play();
       } else {
-        // Extract the actual API error message
         let errorMsg = 'Voice preview failed';
         try {
           const errData = await res.json();
           errorMsg = errData.detail || `API error (${res.status})`;
-          // Simplify common error patterns
           if (errorMsg.includes('payment_required') || errorMsg.includes('paid_plan_required')) {
             errorMsg = 'ElevenLabs: Free plan cannot use library voices — upgrade or use a custom voice';
           } else if (errorMsg.includes('Insufficient API credit')) {
@@ -186,7 +180,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     fetch('/admin/api/bots')
       .then((r) => r.json())
       .then((data) => setBots(data || []))
-      .catch(() => { });
+      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchBotsList(); }, [fetchBotsList]);
@@ -223,9 +217,9 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
   // When STT provider changes, fetch its models
   useEffect(() => {
-    const provider = speechProviders.find(p => p.id === form.stt_provider_id);
+    const provider = speechProviders.find((p) => p.id === form.stt_provider_id);
     if (provider) {
-      fetchSpeechModels(provider.provider_type).then(data => {
+      fetchSpeechModels(provider.provider_type).then((data) => {
         setSttModels(data.stt || []);
         setSttByLanguage(data.stt_by_language || {});
         setAvailableLanguages(data.languages || []);
@@ -238,29 +232,26 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
   // When TTS provider changes, fetch its models
   useEffect(() => {
-    const provider = speechProviders.find(p => p.id === form.tts_provider_id);
+    const provider = speechProviders.find((p) => p.id === form.tts_provider_id);
     if (provider) {
-      fetchSpeechModels(provider.provider_type).then(data => {
+      fetchSpeechModels(provider.provider_type).then((data) => {
         const models = data.tts || [];
         setTtsModels(models);
         setTtsByLanguage(data.tts_by_language || {});
         if (data.languages?.length) setAvailableLanguages(data.languages);
 
-        // For Fish Audio & ElevenLabs: fetch real voice profiles from the provider API
         if (provider.provider_type === 'fishaudio' || provider.provider_type === 'elevenlabs') {
           fetch(`/admin/api/bots/speech-voices/${form.tts_provider_id}`)
-            .then(r => r.json())
-            .then(voiceData => {
+            .then((r) => r.json())
+            .then((voiceData) => {
               const voices = voiceData.voices || [];
               if (voices.length > 0) {
-                // Merge real voices into tts_by_language (keep static entries too)
-                setTtsByLanguage(prev => {
+                setTtsByLanguage((prev) => {
                   const merged = { ...prev };
                   for (const v of voices) {
                     const lang = v.language || 'en';
                     if (!merged[lang]) merged[lang] = { language: { code: lang, name: lang }, voices: [] };
-                    // Avoid duplicate voice IDs
-                    if (!merged[lang].voices.some(x => x.id === v.id)) {
+                    if (!merged[lang].voices.some((x) => x.id === v.id)) {
                       merged[lang].voices.push({ id: v.id, name: v.name });
                     }
                   }
@@ -270,14 +261,13 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
             })
             .catch(() => {});
         }
-          // Fire-and-forget: batch prewarm for all providers
-          if (models.length > 0) {
-            fetch('/admin/api/speech-providers/prewarm', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ provider_id: form.tts_provider_id, models: models.map(m => m.id) }),
-            }).catch(() => {});
-          }
+        if (models.length > 0) {
+          fetch('/admin/api/speech-providers/prewarm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider_id: form.tts_provider_id, models: models.map((m) => m.id) }),
+          }).catch(() => {});
+        }
       });
     } else {
       setTtsModels([]);
@@ -330,6 +320,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     setCustomModelInput(false);
     if (bot.llm_provider_id) fetchModelsForProvider(bot.llm_provider_id);
     setResult({ success: true, message: `Editing "${bot.name}". Modify configuration below and click Update.` });
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
 
   const resetFormToNew = () => {
@@ -360,7 +351,6 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
   const handleSave = async () => {
     if (!isFormValid) return;
-    // On new bot creation, show slug confirmation first
     if (!editingBotId) {
       const slug = form.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'bot';
       setSlugConfirm({ slug });
@@ -397,7 +387,12 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
         if (!isEdit) {
           setEditingBotId(null);
-          setForm({ ...EMPTY_FORM, llm_provider_id: llmProviders[0]?.id || '', stt_provider_id: speechProviders[0]?.id || '', tts_provider_id: speechProviders[0]?.id || '' });
+          setForm({
+            ...EMPTY_FORM,
+            llm_provider_id: llmProviders[0]?.id || '',
+            stt_provider_id: speechProviders[0]?.id || '',
+            tts_provider_id: speechProviders[0]?.id || '',
+          });
           setCustomModelInput(false);
         }
 
@@ -421,7 +416,7 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
   const confirmDeleteBot = async () => {
     if (!deletingBotId) return;
-    const bot = bots.find(b => b.id === deletingBotId);
+    const bot = bots.find((b) => b.id === deletingBotId);
     if (bot?.is_deployed) {
       setResult({ success: false, message: `"${bot.name}" is deployed. Undeploy it first.` });
       setDeletingBotId(null);
@@ -441,10 +436,6 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
     form.stt_provider_id !== '' &&
     form.tts_provider_id !== '';
 
-  // Resolve provider types for model dropdowns
-  const sttProviderType = speechProviders.find(p => p.id === form.stt_provider_id)?.provider_type || '';
-  const ttsProviderType = speechProviders.find(p => p.id === form.tts_provider_id)?.provider_type || '';
-
   return (
     <div className="journey-section journey-section--split">
       <div className="journey-section__content">
@@ -453,187 +444,166 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
           Step 3 of 4
         </div>
 
-        <h2 className="type-display type-display-lg" style={{ marginBottom: '0.75rem' }}>
-          Bot Identity
+        <h2 className="type-display type-display-lg mb-3">
+          Bot Persona & Intelligence
         </h2>
-        <p className="type-body" style={{ marginBottom: '1.5rem', maxWidth: '520px' }}>
-          Define who your bot is and how it behaves.
-          Click any configured bot to view or edit its settings.
+        <p className="type-body mb-6 max-w-[520px]">
+          Define your bot's personality, assign speech models and voices from your configured
+          providers, and set system instructions.
         </p>
 
-        {/* Existing bots list */}
-        {bots.length > 0 && (
-          <div className="glass-pane" style={{ marginBottom: '1.5rem', padding: '1rem 1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span className="type-micro">Configured Bots ({bots.length})</span>
-              <button
-                onClick={() => { resetFormToNew(); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); }}
-                style={{
-                  background: 'var(--accent-bright)',
-                  border: 'none',
-                  color: '#000',
-                  fontSize: '11px',
-                  padding: '5px 14px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  transition: 'opacity 200ms',
+        {/* Reusable Configured Bots List */}
+        <ConfigCardList
+          title="Configured Bots"
+          count={bots.length}
+          items={bots}
+          selectedId={editingBotId}
+          onSelect={handleSelectBotForEdit}
+          onRemove={(id) => setDeletingBotId(id)}
+          onAddNew={() => {
+            resetFormToNew();
+            setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+          }}
+          addNewLabel="Add Bot"
+          renderBadge={(b) => (
+            b.is_deployed ? (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigateToDeploy?.(b.id);
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+                className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold cursor-pointer hover:bg-emerald-500/25 transition"
               >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add Bot
-              </button>
-            </div>
-            {(showAllBots ? bots : bots.slice(0, BOTS_VISIBLE)).map((b) => {
-              const isSelected = editingBotId === b.id;
-              const llmP = llmProviders.find((p) => p.id === b.llm_provider_id);
-              const sttP = speechProviders.find((p) => p.id === b.stt_provider_id);
-              const ttsP = speechProviders.find((p) => p.id === b.tts_provider_id);
-              return (
-                <div
-                  key={b.id}
-                  onClick={() => handleSelectBotForEdit(b)}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '12px 14px', marginBottom: '6px',
-                    background: isSelected ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${isSelected ? 'var(--accent-mid)' : 'rgba(255,255,255,0.06)'}`,
-                    borderRadius: '8px', cursor: 'pointer', transition: 'all 200ms',
-                    boxShadow: isSelected ? '0 0 16px rgba(0,0,0,0.5)' : 'none',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isSelected ? 'var(--accent-bright)' : 'var(--ink-35)', boxShadow: isSelected ? '0 0 6px var(--accent-bright)' : 'none' }} />
-                    <div>
-                      <div style={{ color: isSelected ? 'var(--accent-bright)' : 'var(--ink-100)', fontSize: '14px', fontWeight: 500 }}>
-                        {b.name} {isSelected && <span style={{ fontSize: '11px', opacity: 0.8 }}>(Editing)</span>}
-                        {b.is_deployed && (
-                          <span
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '3px',
-                              marginLeft: '8px', padding: '1px 6px', fontSize: '8px', fontWeight: 600,
-                              letterSpacing: '0.06em', borderRadius: '3px',
-                              background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)',
-                              color: 'var(--accent-bright)',
-                            }}
-                          >
-                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-bright)' }} />
-                            DEPLOYED
-                          </span>
-                        )}
-                      </div>
-                      <div className="type-micro" style={{ fontSize: '10px', marginTop: '2px' }}>
-                        LLM: {llmP?.name || 'N/A'} • STT: {sttP?.name || 'N/A'}{b.stt_model ? ` (${b.stt_model})` : ''} • TTS: {ttsP?.name || 'N/A'}{b.tts_model ? ` (${b.tts_model})` : ''}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); handleSelectBotForEdit(b); }} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'var(--ink-90)', fontSize: '11px', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer' }}>Edit</button>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setDeletingBotId(b.id); }} style={{ background: 'none', border: 'none', color: 'var(--ink-35)', fontSize: '12px', cursor: 'pointer' }} onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--warn)')} onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-35)')}>Remove</button>
-                  </div>
-                </div>
-              );
-            })}
+                DEPLOYED ↗
+              </span>
+            ) : null
+          )}
+          renderSubtitle={(b) => {
+            const llm = llmProviders.find((p) => p.id === b.llm_provider_id);
+            const stt = speechProviders.find((p) => p.id === b.stt_provider_id);
+            const tts = speechProviders.find((p) => p.id === b.tts_provider_id);
+            const parts = [
+              b.llm_model || llm?.name,
+              b.tts_model ? `Voice: ${b.tts_model}` : tts?.name,
+              stt ? `STT: ${stt.name}` : null,
+            ].filter(Boolean);
+            return parts.join(' • ');
+          }}
+        />
 
-            {bots.length > BOTS_VISIBLE && (
+        {/* Configuration pane */}
+        <div className="glass-pane mb-6" ref={formRef}>
+          <div className="flex justify-between items-center mb-4">
+            <span className="type-micro">
+              {editingBotId ? `Edit "${form.name}" Configuration` : 'New Bot Configuration'}
+            </span>
+            {editingBotId && (
               <button
-                onClick={() => setShowAllBots(!showAllBots)}
-                style={{
-                  width: '100%', padding: '8px', marginTop: '4px',
-                  background: 'none', border: '1px dashed rgba(255,255,255,0.1)',
-                  borderRadius: '6px', color: 'var(--ink-60)', fontSize: '11px',
-                  cursor: 'pointer', transition: 'color 200ms',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-bright)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-60)')}
+                type="button"
+                onClick={resetFormToNew}
+                className="text-xs text-white/60 hover:text-white transition cursor-pointer"
               >
-                {showAllBots ? 'Show less' : `Show ${bots.length - BOTS_VISIBLE} more`}
+                Cancel Editing
               </button>
             )}
           </div>
-        )}
 
-        {/* Identity & Provider Selection */}
-        <div className="glass-pane" ref={formRef} style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <span className="type-micro">{editingBotId ? 'Edit Bot Identity & Provider Setup' : 'Identity & Provider Setup'}</span>
-            {editingBotId && <button type="button" onClick={resetFormToNew} style={{ background: 'none', border: 'none', color: 'var(--ink-60)', fontSize: '11px', cursor: 'pointer' }}>Cancel Editing</button>}
-          </div>
-
-          <div style={{ display: 'grid', gap: '1rem' }}>
-            <div>
-              <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>
-                Bot Name * {editingBotId && <span style={{ color: 'var(--ink-35)', fontSize: '9px' }}>(locked — endpoint is permanent)</span>}
-              </label>
-              <div style={{ position: 'relative' }}>
+          <div className="grid gap-4">
+            {/* Name + Description */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="type-micro block mb-1">Bot Name *</label>
                 <input
                   className="glass-input"
-                  placeholder="Bot name (e.g. Sales Assistant)"
+                  placeholder="e.g. Maya AI"
                   value={form.name}
-                  disabled={Boolean(editingBotId)}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  style={editingBotId ? { opacity: 0.5, cursor: 'not-allowed', paddingRight: '36px' } : {}}
                 />
-                {editingBotId && (
-                  <svg
-                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                    style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                  >
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                )}
+              </div>
+              <div>
+                <label className="type-micro block mb-1">Description</label>
+                <input
+                  className="glass-input"
+                  placeholder="e.g. Senior Medical Assistant"
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
               </div>
             </div>
+
+            {/* Greeting */}
             <div>
-              <label className="type-micro" style={{ display: 'block', marginBottom: '4px' }}>Description (Optional)</label>
-              <input className="glass-input" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <label className="type-micro block mb-1">Opening Voice Greeting</label>
+              <input
+                className="glass-input"
+                placeholder="e.g. Hello, I'm Maya! How can I help you today?"
+                value={form.greeting}
+                onChange={(e) => setForm({ ...form, greeting: e.target.value })}
+              />
             </div>
 
             {/* LLM Provider + Model */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <GlassSelect
                 label="LLM Provider *"
-                options={llmProviders.map(p => ({ value: p.id, label: `${p.name} (${p.provider_type})` }))}
+                options={llmProviders.map((p) => ({ value: p.id, label: `${p.name} (${p.provider_type})` }))}
                 value={form.llm_provider_id}
-                onChange={(val) => { handleLlmProviderChange(val); }}
+                onChange={(val) => handleLlmProviderChange(val)}
                 placeholder="Select LLM Provider"
               />
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <div className="flex justify-between items-center mb-1">
                   <label className="type-micro">LLM Model *</label>
                   {customModelInput ? (
-                    <button type="button" onClick={() => setCustomModelInput(false)} style={{ background: 'none', border: 'none', color: 'var(--accent-bright)', fontSize: '10px', cursor: 'pointer' }}>← Select list</button>
-                  ) : loadingModels && <span style={{ fontSize: '10px', color: 'var(--ink-60)' }}>Loading...</span>}
+                    <button
+                      type="button"
+                      onClick={() => setCustomModelInput(false)}
+                      className="text-[10px] text-emerald-400 hover:underline cursor-pointer"
+                    >
+                      ← Select list
+                    </button>
+                  ) : loadingModels && (
+                    <span className="text-[10px] text-white/60">Loading...</span>
+                  )}
                 </div>
                 {!customModelInput ? (
                   <GlassSelect
-                    options={[...availableLlmModels.map(m => ({ value: m.id, label: m.name || m.id })), { value: '__custom__', label: '+ Write custom model...' }]}
+                    options={[
+                      ...availableLlmModels.map((m) => ({ value: m.id, label: m.name || m.id })),
+                      { value: '__custom__', label: '+ Write custom model...' },
+                    ]}
                     value={form.llm_model}
-                    onChange={(val) => { if (val === '__custom__') { setCustomModelInput(true); setForm({ ...form, llm_model: '' }); } else { setForm({ ...form, llm_model: val }); } }}
+                    onChange={(val) => {
+                      if (val === '__custom__') {
+                        setCustomModelInput(true);
+                        setForm({ ...form, llm_model: '' });
+                      } else {
+                        setForm({ ...form, llm_model: val });
+                      }
+                    }}
                     placeholder="Select LLM Model"
                     disabled={!form.llm_provider_id || loadingModels}
                   />
                 ) : (
-                  <input className="glass-input" placeholder="Enter custom model name" value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })} />
+                  <input
+                    className="glass-input"
+                    placeholder="Enter custom model name"
+                    value={form.llm_model}
+                    onChange={(e) => setForm({ ...form, llm_model: e.target.value })}
+                  />
                 )}
               </div>
             </div>
 
             {/* STT Configuration */}
-            <div className="glass-pane" style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)' }}>
-              <label className="type-micro" style={{ display: 'block', marginBottom: '0.75rem', color: 'var(--accent-bright)' }}>
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              <label className="type-micro block mb-3 text-emerald-400">
                 STT — Speech-to-Text
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <GlassSelect
                   label="Provider *"
-                  options={speechProviders.map(p => ({ value: p.id, label: p.name }))}
+                  options={speechProviders.map((p) => ({ value: p.id, label: p.name }))}
                   value={form.stt_provider_id}
                   onChange={(val) => handleSttProviderChange(val)}
                   placeholder="Select Provider"
@@ -643,7 +613,9 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   selected={form.stt_languages}
                   primary={form.stt_primary_language}
                   onChange={(selected) => {
-                    const newPrimary = selected.includes(form.stt_primary_language) ? form.stt_primary_language : (selected[0] || 'en');
+                    const newPrimary = selected.includes(form.stt_primary_language)
+                      ? form.stt_primary_language
+                      : selected[0] || 'en';
                     setForm({ ...form, stt_languages: selected, stt_primary_language: newPrimary });
                   }}
                   onSetPrimary={(code) => {
@@ -655,12 +627,10 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   label="Model"
                   options={[
                     { value: '', label: 'Default' },
-                    // Language-matching models first
-                    ...(sttByLanguage[form.stt_primary_language]?.models || []).map(m => ({ value: m.id, label: m.name })),
-                    // Then all other models (deduplicated)
+                    ...(sttByLanguage[form.stt_primary_language]?.models || []).map((m) => ({ value: m.id, label: m.name })),
                     ...sttModels
-                      .filter(m => !(sttByLanguage[form.stt_primary_language]?.models || []).some(x => x.id === m.id))
-                      .map(m => ({ value: m.id, label: m.name })),
+                      .filter((m) => !(sttByLanguage[form.stt_primary_language]?.models || []).some((x) => x.id === m.id))
+                      .map((m) => ({ value: m.id, label: m.name })),
                   ]}
                   value={form.stt_model}
                   onChange={(val) => setForm({ ...form, stt_model: val })}
@@ -671,34 +641,38 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
             </div>
 
             {/* TTS Configuration */}
-            <div className="glass-pane" style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)' }}>
-              <label className="type-micro" style={{ display: 'block', marginBottom: '0.75rem', color: 'var(--accent-bright)' }}>
-                TTS — Text-to-Speech
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              <div className="flex items-center justify-between mb-3">
+                <label className="type-micro text-emerald-400">
+                  TTS — Text-to-Speech
+                </label>
                 {previewingModel && (
-                  <span style={{ marginLeft: '8px', fontSize: '10px', color: 'var(--ink-60)' }}>
+                  <span className="text-[10px] text-white/70 animate-pulse flex items-center gap-1">
                     🔊 Playing {previewingModel}...
                   </span>
                 )}
-              </label>
+              </div>
+
               {previewError && (
-                <div style={{
-                  marginBottom: '0.75rem', padding: '8px 12px', borderRadius: '6px',
-                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
-                  fontSize: '11px', color: '#f87171', lineHeight: '1.4',
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                }}>
-                  <span style={{ fontWeight: 700, flexShrink: 0 }}>⚠</span>
-                  <span>{previewError}</span>
+                <div className="mb-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/25 text-xs text-red-400 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold flex-shrink-0">⚠</span>
+                    <span>{previewError}</span>
+                  </div>
                   <button
+                    type="button"
                     onClick={() => setPreviewError(null)}
-                    style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '14px', padding: '0 4px', opacity: 0.7 }}
-                  >×</button>
+                    className="text-red-400 hover:text-white text-sm px-1.5"
+                  >
+                    ×
+                  </button>
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <GlassSelect
                   label="Provider *"
-                  options={speechProviders.map(p => ({ value: p.id, label: p.name }))}
+                  options={speechProviders.map((p) => ({ value: p.id, label: p.name }))}
                   value={form.tts_provider_id}
                   onChange={(val) => handleTtsProviderChange(val)}
                   placeholder="Select Provider"
@@ -708,7 +682,9 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   selected={form.tts_languages}
                   primary={form.tts_primary_language}
                   onChange={(selected) => {
-                    const newPrimary = selected.includes(form.tts_primary_language) ? form.tts_primary_language : (selected[0] || 'en');
+                    const newPrimary = selected.includes(form.tts_primary_language)
+                      ? form.tts_primary_language
+                      : selected[0] || 'en';
                     setForm({ ...form, tts_languages: selected, tts_primary_language: newPrimary });
                   }}
                   onSetPrimary={(code) => {
@@ -720,18 +696,15 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
                   label="Voice"
                   options={[
                     { value: '', label: 'Default' },
-                    // TTS engine models (e.g. Fish Audio s2.1-pro, ElevenLabs eleven_v3)
-                    ...ttsModels.map(m => ({ value: m.id, label: m.name })),
-                    // Language-matching voices first
+                    ...ttsModels.map((m) => ({ value: m.id, label: m.name })),
                     ...(ttsByLanguage[form.tts_primary_language]?.voices || [])
-                      .filter(v => !ttsModels.some(m => m.id === v.id))
-                      .map(m => ({ value: m.id, label: m.name })),
-                    // Then all other voices (deduplicated)
+                      .filter((v) => !ttsModels.some((m) => m.id === v.id))
+                      .map((v) => ({ value: v.id, label: v.name })),
                     ...Object.entries(ttsByLanguage)
                       .filter(([lang]) => lang !== form.tts_primary_language)
                       .flatMap(([, group]) => group.voices || [])
-                      .filter(v => !ttsModels.some(m => m.id === v.id) && !(ttsByLanguage[form.tts_primary_language]?.voices || []).some(x => x.id === v.id))
-                      .map(m => ({ value: m.id, label: m.name })),
+                      .filter((v) => !ttsModels.some((m) => m.id === v.id) && !(ttsByLanguage[form.tts_primary_language]?.voices || []).some((x) => x.id === v.id))
+                      .map((v) => ({ value: v.id, label: v.name })),
                   ]}
                   value={form.tts_model}
                   onChange={(val) => {
@@ -754,55 +727,53 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
 
         {/* System Prompt */}
         <div className="glass-pane">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+          <div className="flex justify-between items-center mb-1">
             <label className="type-micro">SYSTEM PROMPT *</label>
-            <button type="button" onClick={() => setForm((prev) => ({ ...prev, system_prompt: DEFAULT_SYSTEM_PROMPT }))} style={{ background: 'none', border: 'none', color: 'var(--accent-bright)', fontSize: '10px', cursor: 'pointer' }}>Load Example Prompt</button>
+            <button
+              type="button"
+              onClick={() => setForm((prev) => ({ ...prev, system_prompt: DEFAULT_SYSTEM_PROMPT }))}
+              className="text-[10px] text-emerald-400 hover:underline cursor-pointer"
+            >
+              Load Example Prompt
+            </button>
           </div>
           <textarea
-            className="glass-input"
+            className="glass-input font-mono text-xs leading-relaxed"
             rows={12}
-            style={{ fontFamily: 'monospace', fontSize: '12px', lineHeight: '1.5' }}
             placeholder={DEFAULT_SYSTEM_PROMPT}
             value={form.system_prompt}
             onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
           />
 
-          {/* Result toast — rendered via portal to avoid layout shift */}
+          {/* Result Toast Portal */}
           {result && createPortal(
-            <div style={{
-              position: 'fixed',
-              bottom: '24px',
-              right: '24px',
-              zIndex: 99998,
-              padding: '12px 20px',
-              borderRadius: '10px',
-              background: result.success ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-              border: `1px solid ${result.success ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              display: 'flex', alignItems: 'center', gap: '10px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-              animation: 'toast-in 300ms cubic-bezier(0.16, 1, 0.3, 1)',
-              maxWidth: '360px',
-            }}>
-              <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: result.success ? '#10b981' : '#ef4444', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: '12px', flexShrink: 0 }}>
+            <div className="fixed bottom-6 right-6 z-[99998] py-3 px-5 rounded-xl bg-black/80 border border-emerald-500/40 backdrop-blur-xl flex items-center gap-3 shadow-2xl animate-[halo-fade-in_200ms_ease-out] max-w-sm">
+              <div
+                className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                  result.success ? 'bg-emerald-500 text-black' : 'bg-red-500 text-white'
+                }`}
+              >
                 {result.success ? '✓' : '✕'}
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: '10px', color: result.success ? '#34d399' : '#f87171', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                <div
+                  className={`text-[10px] font-bold tracking-wider uppercase ${
+                    result.success ? 'text-emerald-400' : 'text-red-400'
+                  }`}
+                >
                   {result.success ? 'Saved & Active' : 'Error'}
                 </div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>{result.message}</div>
+                <div className="text-xs text-white/90 font-medium leading-snug">{result.message}</div>
               </div>
             </div>,
             document.body
           )}
 
           <button
-            className={`action-btn ${isFormValid ? 'action-btn--primary' : ''}`}
+            type="button"
+            className={`action-btn mt-4 w-full ${isFormValid ? 'action-btn--primary' : ''}`}
             onClick={handleSave}
             disabled={saving || !isFormValid}
-            style={{ marginTop: '1rem', width: '100%', opacity: isFormValid ? 1 : 0.4, cursor: isFormValid ? 'pointer' : 'not-allowed' }}
           >
             {saving && <span className="loading-ring" />}
             {saving ? 'Saving...' : editingBotId ? 'Update Bot Configuration' : 'Save & Connect Bot'}
@@ -810,94 +781,95 @@ export function BotIdentitySection({ llmProviders = [], speechProviders = [], on
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {deletingBotId && (() => {
-        const targetBot = bots.find(b => b.id === deletingBotId);
+      {/* Reusable Delete Confirmation Modal */}
+      {(() => {
+        const targetBot = bots.find((b) => b.id === deletingBotId);
         const isDeployed = targetBot?.is_deployed;
-        return createPortal(
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)', display: 'grid', placeItems: 'center', zIndex: 99999 }}>
-            <div className="glass-pane" style={{ width: '90%', maxWidth: '420px', padding: '2rem', textAlign: 'center' }}>
-              <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--ink-100)', marginBottom: '0.75rem' }}>
-                {isDeployed ? 'Cannot Delete' : 'Confirm Deletion'}
-              </h3>
-              <p style={{ fontSize: '13px', color: 'var(--ink-60)', marginBottom: '1.5rem' }}>
-                {isDeployed
-                  ? `"${targetBot?.name}" is currently deployed. Undeploy it first before deleting.`
-                  : 'Are you sure you want to remove this Bot configuration? This action cannot be undone.'
-                }
-              </p>
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                <button onClick={() => setDeletingBotId(null)} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--ink-100)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+        return (
+          <GlassModal
+            open={Boolean(deletingBotId)}
+            title={isDeployed ? 'Cannot Delete' : 'Confirm Deletion'}
+            onClose={() => setDeletingBotId(null)}
+            footer={
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDeletingBotId(null)}
+                  className="action-btn text-xs py-1.5 px-4"
+                >
                   {isDeployed ? 'Close' : 'Cancel'}
                 </button>
                 {!isDeployed && (
-                  <button onClick={confirmDeleteBot} style={{ padding: '8px 18px', background: 'var(--accent-mid)', border: 'none', color: '#000', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>Delete</button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteBot}
+                    className="action-btn action-btn--primary text-xs py-1.5 px-4 bg-amber-500 border-amber-500 text-black hover:bg-amber-400"
+                  >
+                    Delete
+                  </button>
                 )}
               </div>
-            </div>
-          </div>,
-          document.body
+            }
+          >
+            {isDeployed
+              ? `"${targetBot?.name}" is currently deployed. Undeploy it first before deleting.`
+              : 'Are you sure you want to remove this Bot configuration? This action cannot be undone.'}
+          </GlassModal>
         );
       })()}
 
-      {/* Slug Confirmation Modal — first-time bot creation */}
-      {slugConfirm && createPortal(
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)', display: 'grid', placeItems: 'center', zIndex: 99999 }}
-          onClick={(e) => { if (e.target === e.currentTarget) setSlugConfirm(null); }}
-        >
-          <div className="glass-pane" style={{ width: '90%', maxWidth: '440px', padding: '2rem', border: '1px solid rgba(16,185,129,0.2)' }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--ink-100)', marginBottom: '0.75rem', fontSize: '18px' }}>
-              Confirm bot endpoint
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--ink-60)', marginBottom: '1rem', lineHeight: '1.5' }}>
-              Your bot will be accessible at:
-            </p>
-            <div style={{
-              padding: '10px 14px', marginBottom: '1rem',
-              background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)',
-              borderRadius: '6px', fontFamily: 'monospace', fontSize: '13px',
-              color: 'var(--accent-bright)',
-            }}>
-              {window.location.origin}/bot/{slugConfirm.slug}
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--ink-35)', marginBottom: '1.5rem', lineHeight: '1.5' }}>
-              The endpoint <strong style={{ color: 'var(--ink-100)' }}>/bot/{slugConfirm.slug}</strong> will be permanent and cannot be changed after creation. The host URL adapts automatically wherever you deploy.
-            </p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-              <button
-                className="action-btn"
-                onClick={() => setSlugConfirm(null)}
-                style={{ fontSize: '12px', padding: '8px 16px' }}
-              >
-                Cancel
-              </button>
-              <button
-                className="action-btn action-btn--primary"
-                onClick={() => doSave()}
-                style={{ fontSize: '12px', padding: '8px 20px' }}
-              >
-                Confirm & Save
-              </button>
-            </div>
+      {/* Reusable Slug Confirmation Modal */}
+      <GlassModal
+        open={Boolean(slugConfirm)}
+        title="Confirm Bot Endpoint"
+        onClose={() => setSlugConfirm(null)}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button
+              type="button"
+              className="action-btn text-xs py-1.5 px-4"
+              onClick={() => setSlugConfirm(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="action-btn action-btn--primary text-xs py-1.5 px-4"
+              onClick={() => doSave()}
+            >
+              Confirm & Save
+            </button>
           </div>
-        </div>,
-        document.body
-      )}
+        }
+      >
+        <p className="text-sm text-white/70 mb-2">Your bot will be accessible at:</p>
+        <div className="p-2.5 mb-3 rounded-lg bg-emerald-500/10 border border-emerald-500/25 font-mono text-xs text-emerald-400">
+          {window.location.origin}/bot/{slugConfirm?.slug}
+        </div>
+        <p className="text-xs text-white/40 leading-relaxed">
+          The endpoint <strong className="text-white">/bot/{slugConfirm?.slug}</strong> will be permanent and cannot be changed after creation. The host URL adapts automatically wherever you deploy.
+        </p>
+      </GlassModal>
 
       {/* Sidebar hints */}
       <div className="journey-section__sidebar">
         <div className="section-hint">
           <div className="section-hint__title">System Prompt</div>
-          <div className="section-hint__body">Defines your bot's identity, personality, knowledge boundaries, and behavioral tone.</div>
+          <div className="section-hint__body">
+            Defines your bot's identity, personality, knowledge boundaries, and behavioral tone.
+          </div>
         </div>
         <div className="section-hint">
           <div className="section-hint__title">Speech Models</div>
-          <div className="section-hint__body">Choose specific STT and TTS models from your configured providers. Each bot can use different models from the same provider.</div>
+          <div className="section-hint__body">
+            Choose specific STT and TTS models from your configured providers. Each bot can use different models from the same provider.
+          </div>
         </div>
         <div className="section-hint">
           <div className="section-hint__title">Languages</div>
-          <div className="section-hint__body">Select supported languages for this bot. The primary language is used by default for speech recognition and synthesis.</div>
+          <div className="section-hint__body">
+            Select supported languages for this bot. The primary language is used by default for speech recognition and synthesis.
+          </div>
         </div>
       </div>
     </div>

@@ -26,35 +26,48 @@ export function GlassComboBox({ options = [], value, onChange, label, placeholde
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  const selectedOption = options.find((o) => o.value === value);
+  const displayLabel = selectedOption ? selectedOption.label : value || '';
+
+  const filtered = search.trim()
+    ? options.filter(
+        (o) =>
+          o.label.toLowerCase().includes(search.toLowerCase()) ||
+          o.value.toLowerCase().includes(search.toLowerCase())
+      )
+    : options;
+
   useEffect(() => {
     if (!open) return;
     const updatePos = () => {
       if (ref.current) {
         const rect = ref.current.getBoundingClientRect();
-        setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const panelHeight = Math.min(filtered.length * 36 + 60, 320);
+        const top = spaceBelow < panelHeight && rect.top > panelHeight ? rect.top - panelHeight - 4 : rect.bottom + 4;
+        setPanelPos({ top, left: rect.left, width: rect.width });
       }
     };
     window.addEventListener('scroll', updatePos, true);
     window.addEventListener('resize', updatePos);
-    return () => { window.removeEventListener('scroll', updatePos, true); window.removeEventListener('resize', updatePos); };
-  }, [open]);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open, filtered.length]);
 
   const openPanel = () => {
     if (disabled) return;
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const panelHeight = Math.min(options.length * 36 + 60, 320);
+      const top = spaceBelow < panelHeight && rect.top > panelHeight ? rect.top - panelHeight - 4 : rect.bottom + 4;
+      setPanelPos({ top, left: rect.left, width: rect.width });
     }
     setOpen(true);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
-
-  const selectedOption = options.find(o => o.value === value);
-  const displayLabel = selectedOption ? selectedOption.label : value || '';
-
-  const filtered = search.trim()
-    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()) || o.value.toLowerCase().includes(search.toLowerCase()))
-    : options;
 
   const handleSelect = (opt) => {
     onChange(opt.value);

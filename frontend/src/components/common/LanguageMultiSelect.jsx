@@ -20,34 +20,44 @@ export function LanguageMultiSelect({ languages = [], selected = [], primary, on
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Keep panel position synced on scroll/resize
+  const langs = languages.length > 0 ? languages : [{ code: 'en', name: 'English' }];
+  const displayText =
+    selected.length === 0
+      ? 'None'
+      : selected.length === 1
+      ? langs.find((l) => l.code === selected[0])?.name || selected[0]
+      : `${langs.find((l) => l.code === primary)?.name || primary} +${selected.length - 1}`;
+
+  // Keep panel position synced on scroll/resize with bottom viewport boundary check
   useEffect(() => {
     if (!open) return;
     const updatePos = () => {
       if (ref.current) {
         const rect = ref.current.getBoundingClientRect();
-        setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const panelHeight = Math.min(langs.length * 36 + 10, 200);
+        const top = spaceBelow < panelHeight && rect.top > panelHeight ? rect.top - panelHeight - 4 : rect.bottom + 4;
+        setPanelPos({ top, left: rect.left, width: rect.width });
       }
     };
     window.addEventListener('scroll', updatePos, true);
     window.addEventListener('resize', updatePos);
-    return () => { window.removeEventListener('scroll', updatePos, true); window.removeEventListener('resize', updatePos); };
-  }, [open]);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open, langs.length]);
 
   const openPanel = () => {
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const panelHeight = Math.min(langs.length * 36 + 10, 200);
+      const top = spaceBelow < panelHeight && rect.top > panelHeight ? rect.top - panelHeight - 4 : rect.bottom + 4;
+      setPanelPos({ top, left: rect.left, width: rect.width });
     }
     setOpen(true);
   };
-
-  const langs = languages.length > 0 ? languages : [{ code: 'en', name: 'English' }];
-  const displayText = selected.length === 0
-    ? 'None'
-    : selected.length === 1
-      ? langs.find(l => l.code === selected[0])?.name || selected[0]
-      : `${langs.find(l => l.code === primary)?.name || primary} +${selected.length - 1}`;
 
   const toggle = (code) => {
     const next = selected.includes(code)

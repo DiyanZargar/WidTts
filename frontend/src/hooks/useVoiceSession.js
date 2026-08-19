@@ -92,7 +92,7 @@ export function useVoiceSession() {
     if (state.isSpeaking) return 'speaking';
     if (state.isListening) return 'listening';
     if (state.status === 'active') return 'thinking';
-    return 'idle';
+    return 'connecting';
   }, [state.isOpen, state.status, state.isSpeaking, state.isListening]);
 
   // Single transcript line
@@ -134,11 +134,9 @@ export function useVoiceSession() {
     begin,
     end,
     restart,
-    micStream: null,
     muted,
     setMuted,
     isCompleted: state.status === 'completed',
-    isCancelled: state.status === 'cancelled',
     isActive: state.isOpen && state.status !== 'completed' && state.status !== 'cancelled',
   };
 }

@@ -20,25 +20,31 @@ export function GlassSelect({ options = [], value, onChange, label, placeholder,
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Keep panel position synced on scroll/resize
+  // Keep panel position synced on scroll/resize with bottom viewport boundary check
   useEffect(() => {
     if (!open) return;
     const updatePos = () => {
       if (ref.current) {
         const rect = ref.current.getBoundingClientRect();
-        setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const panelHeight = Math.min(options.length * 36 + 10, 220);
+        const top = spaceBelow < panelHeight && rect.top > panelHeight ? rect.top - panelHeight - 4 : rect.bottom + 4;
+        setPanelPos({ top, left: rect.left, width: rect.width });
       }
     };
     window.addEventListener('scroll', updatePos, true);
     window.addEventListener('resize', updatePos);
     return () => { window.removeEventListener('scroll', updatePos, true); window.removeEventListener('resize', updatePos); };
-  }, [open]);
+  }, [open, options.length]);
 
   const openPanel = () => {
     if (disabled) return;
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      setPanelPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const panelHeight = Math.min(options.length * 36 + 10, 220);
+      const top = spaceBelow < panelHeight && rect.top > panelHeight ? rect.top - panelHeight - 4 : rect.bottom + 4;
+      setPanelPos({ top, left: rect.left, width: rect.width });
     }
     setOpen(true);
   };

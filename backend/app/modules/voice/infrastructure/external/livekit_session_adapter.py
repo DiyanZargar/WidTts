@@ -56,8 +56,8 @@ def _get_vad_plugin():
     if _CACHED_VAD is None:
         from livekit.plugins import silero
         _CACHED_VAD = silero.VAD.load(
-            min_silence_duration=0.4,
-            activation_threshold=0.35,
+            min_silence_duration=0.55,
+            activation_threshold=0.45,
             min_speech_duration=0.05,
         )
     return _CACHED_VAD
@@ -103,12 +103,12 @@ class LiveKitSession:
                 aec_warmup_duration=0.5,
                 turn_handling={
                     "endpointing": {
-                        "min_delay": 0.5,
-                        "max_delay": 1.5,
+                        "min_delay": 0.8,
+                        "max_delay": 3.0,
                     },
                     "interruption": {
                         "enabled": True,
-                        "min_duration": 0.15,
+                        "min_duration": 0.2,
                         "min_words": 0,
                         "resume_false_interruption": False,
                         "backchannel_boundary": None,

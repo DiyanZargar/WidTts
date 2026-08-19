@@ -12,24 +12,12 @@ const initialState = {
 
 function reducer(state, action) {
   switch (action.type) {
-    case "OPEN_WIDGET":
-      return { ...state, isOpen: true };
     case "CLOSE_WIDGET":
       return { ...initialState, isOpen: false };
     case "SESSION_STARTED":
       return { ...state, status: "active", sessionId: action.sessionId, isListening: true };
     case "SET_LISTENING":
       return { ...state, isListening: action.value };
-    case "RECOVER_TRANSCRIPT":
-      return {
-        ...state,
-        transcriptLines: action.messages.map((m, i) => ({
-          id: i,
-          speaker: m.sender === "system" ? "assistant" : "user",
-          text: m.text,
-          isHighlighted: false,
-        })),
-      };
     case "APPEND_TRANSCRIPT_LINE":
       // Avoid duplicate adjacent lines if identical text arrived
       const existing = state.transcriptLines;
@@ -55,10 +43,7 @@ function reducer(state, action) {
       return { ...state, isSpeaking: action.value };
     case "SESSION_COMPLETED":
       return { ...state, status: "completed", isSpeaking: false, isListening: false };
-    case "SESSION_CANCELLED":
-      return { ...state, status: "cancelled", isSpeaking: false, isListening: false };
     case "RESET_FOR_NEW_SESSION":
-      return { ...initialState, isOpen: true };
     case "SESSION_RESET":
       return { ...initialState, isOpen: true };
     default:

@@ -4,6 +4,7 @@ import { useVoiceSession } from '../hooks/useVoiceSession';
 import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
 import { SettingsIcon } from '../components/icons/SettingsIcon';
 import { HaloParticleVoid } from '../components/common/HaloParticleVoid';
+import { GlassModal } from '../components/common/GlassModal';
 import '../design/halo.css';
 
 /**
@@ -39,7 +40,6 @@ export default function HomePage() {
     isActive,
   } = useVoiceSession();
 
-  const [started, setStarted] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const orbRef = useRef(null);
   const rafRef = useRef(null);
@@ -111,19 +111,19 @@ export default function HomePage() {
 
   // Track voice errors from session events
   useEffect(() => {
-    if (status === 'idle' && !isActive && started) {
-      setVoiceError(true);
+    if (status === 'idle' && !isActive) {
+      setVoiceError(false);
     } else if (isActive) {
       setVoiceError(false);
     }
-  }, [status, isActive, started]);
+  }, [status, isActive]);
 
   const haloState = useMemo(() => {
-    if (voiceError && !isActive && started) return 'error';
-    if (!isActive && !started) return 'idle';
+    if (voiceError && !isActive) return 'error';
+    if (!isActive) return 'idle';
     if (status === 'listening' && partialTranscript) return 'user_speaking';
     return status;
-  }, [status, partialTranscript, isActive, started, voiceError]);
+  }, [status, partialTranscript, isActive, voiceError]);
 
   // ─── Amplitude rAF loop: write --amp on orb only during reactive states
   useEffect(() => {
@@ -154,7 +154,7 @@ export default function HomePage() {
       }
       orb.style.removeProperty('--amp');
     };
-  }, [haloState]);
+  }, [haloState, listenLevel, audioLevel]);
 
   // ─── Session handlers
   const handleStart = useCallback(() => {
@@ -167,13 +167,11 @@ export default function HomePage() {
     } catch (e) { }
 
     setVoiceError(false);
-    setStarted(true);
     begin();
   }, [begin]);
 
   const handleStop = useCallback(() => {
     end();
-    setStarted(false);
     setVoiceError(false);
   }, [end]);
 
@@ -190,14 +188,6 @@ export default function HomePage() {
     }
   }, [end, isActive, navigate, botSlug]);
 
-  useEffect(() => {
-    if (isActive) {
-      setStarted(true);
-    } else if (status === 'idle') {
-      setStarted(false);
-    }
-  }, [isActive, status]);
-
   // ─── Human-readable status label for the topbar
   const statusLabel = useMemo(() => {
     switch (haloState) {
@@ -208,11 +198,11 @@ export default function HomePage() {
       case 'connecting': return 'Connecting';
       case 'error': return 'Connection lost';
       case 'disconnected': return 'Disconnected';
-      default: return 'Idle';
+      default: return 'Standby';
     }
   }, [haloState]);
 
-  const hasTranscript = started && (
+  const hasTranscript = isActive && (
     transcriptLines.length > 0 ||
     Boolean(partialTranscript) ||
     Boolean(partialAssistantTranscript)
@@ -283,7 +273,7 @@ export default function HomePage() {
       </div>
 
       {/* ── Controls ── */}
-      {!started ? (
+      {!isActive ? (
         <div className="halo__controls">
           <button className="halo__connect-btn" onClick={handleStart}>
             Connect
@@ -314,38 +304,24 @@ export default function HomePage() {
       )}
 
       {/* ── Bot Description & Info Modal ── */}
-      {showSettingsModal && (
-        <div
-          className="halo__modal-backdrop"
-          onClick={() => setShowSettingsModal(false)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="halo__modal" onClick={(e) => e.stopPropagation()}>
-            <div className="halo__modal-header">
-              <h3 className="halo__modal-title">{bot.name || 'Assistant Info'}</h3>
-              <button
-                className="halo__modal-close"
-                onClick={() => setShowSettingsModal(false)}
-                aria-label="Close modal"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="halo__modal-body">
-              {bot.description || 'No description available for this assistant.'}
-            </div>
-            <div className="halo__modal-footer">
-              <button
-                className="halo__modal-btn halo__modal-btn--secondary"
-                onClick={() => setShowSettingsModal(false)}
-              >
-                Done
-              </button>
-            </div>
-          </div>
+      <GlassModal
+        open={showSettingsModal}
+        title={bot.name || 'Assistant Info'}
+        onClose={() => setShowSettingsModal(false)}
+        footer={
+          <button
+            type="button"
+            className="action-btn text-xs py-1.5 px-4"
+            onClick={() => setShowSettingsModal(false)}
+          >
+            Done
+          </button>
+        }
+      >
+        <div className="text-sm text-white/80 leading-relaxed">
+          {bot.description || 'No description available for this assistant.'}
         </div>
-      )}
+      </GlassModal>
     </div>
   );
 }

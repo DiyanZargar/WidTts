@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { GlassModal } from '../../common/GlassModal';
 
 /**
  * DeploySection — Deploy bots with unique shareable links.
@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
  * Deployed bots show their link with copy + open icon actions.
  * Undeploy requires typing the bot name to confirm (like GitHub repo deletion).
  */
-export function DeploySection({ onActivated, refreshTrigger, highlightBotId, onExtraPages }) {
+export function DeploySection({ refreshTrigger, highlightBotId, onExtraPages }) {
   const [bots, setBots] = useState([]);
   const [deploying, setDeploying] = useState(null);
   const [copiedSlug, setCopiedSlug] = useState(null);
@@ -20,20 +20,25 @@ export function DeploySection({ onActivated, refreshTrigger, highlightBotId, onE
   const [undeployConfirmText, setUndeployConfirmText] = useState('');
 
   const load = () => {
-    fetch('/admin/api/bots').then(r => r.json()).then(data => {
-      // Latest bots first
-      setBots(Array.isArray(data) ? data.reverse() : []);
-    }).catch(() => {});
+    fetch('/admin/api/bots')
+      .then((r) => r.json())
+      .then((data) => {
+        // Latest bots first
+        setBots(Array.isArray(data) ? data.reverse() : []);
+      })
+      .catch(() => {});
   };
 
   useEffect(load, []);
-  useEffect(() => { if (refreshTrigger) load(); }, [refreshTrigger]);
+  useEffect(() => {
+    if (refreshTrigger) load();
+  }, [refreshTrigger]);
 
   // When a bot is highlighted (navigated from BotIdentitySection),
   // auto-expand the list if the bot is hidden and flash it.
   useEffect(() => {
     if (!highlightBotId || bots.length === 0) return;
-    const idx = bots.findIndex(b => b.id === highlightBotId);
+    const idx = bots.findIndex((b) => b.id === highlightBotId);
     if (idx === -1) return;
     if (idx >= BOTS_VISIBLE) setShowAllBots(true);
     setHighlightedId(highlightBotId);
@@ -46,7 +51,7 @@ export function DeploySection({ onActivated, refreshTrigger, highlightBotId, onE
     if (!onExtraPages) return;
     if (showAllBots && bots.length > BOTS_VISIBLE) {
       const extraCards = bots.length - BOTS_VISIBLE;
-      const extraPages = Math.ceil(extraCards * 80 / window.innerHeight); // ~80px per compact card
+      const extraPages = Math.ceil((extraCards * 80) / window.innerHeight);
       onExtraPages(extraPages);
     } else {
       onExtraPages(0);
@@ -98,131 +103,118 @@ export function DeploySection({ onActivated, refreshTrigger, highlightBotId, onE
           Step 4 of 4
         </div>
 
-        <h2
-          className="type-display type-display-lg"
-          style={{ marginBottom: '0.75rem' }}
-        >
+        <h2 className="type-display type-display-lg mb-3">
           Review & Deploy
         </h2>
-        <p className="type-body" style={{ marginBottom: '1.5rem', maxWidth: '520px' }}>
+        <p className="type-body mb-6 max-w-[520px]">
           Deploy your configured bots to generate shareable links.
           Each bot gets its own unique URL that users can access directly.
         </p>
 
         {bots.length === 0 ? (
-          <div className="glass-pane" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-            <p style={{ fontSize: '14px', color: 'var(--ink-60)', marginBottom: '0.5rem' }}>
-              No bots configured yet
-            </p>
-            <p className="type-micro">
-              Create a bot in the previous step to see it here
-            </p>
+          <div className="glass-pane text-center py-12 px-8">
+            <p className="text-sm text-white/60 mb-2">No bots configured yet</p>
+            <p className="type-micro">Create a bot in the previous step to see it here</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {(showAllBots ? bots : bots.slice(0, BOTS_VISIBLE)).map(bot => (
+          <div className="flex flex-col gap-3">
+            {(showAllBots ? bots : bots.slice(0, BOTS_VISIBLE)).map((bot) => (
               <div
                 key={bot.id}
                 data-bot-id={bot.id}
-                ref={el => { if (el) botRefs.current[bot.id] = el; }}
-                className={`glass-pane ${deploying === bot.id ? 'flash-success' : ''}`}
-                style={{
-                  padding: '0.9rem 1.1rem',
-                  borderColor: highlightedId === bot.id ? 'var(--accent-bright)' : bot.is_deployed ? 'var(--accent-mid)' : undefined,
-                  background: highlightedId === bot.id ? 'rgba(16,185,129,0.1)' : bot.is_deployed ? 'rgba(255,255,255,0.05)' : undefined,
-                  boxShadow: highlightedId === bot.id ? '0 0 20px rgba(16,185,129,0.3)' : 'none',
-                  transition: 'all 400ms',
-                }}
+                ref={(el) => { if (el) botRefs.current[bot.id] = el; }}
+                className={`glass-pane p-4 transition-all duration-300 ${
+                  deploying === bot.id ? 'flash-success' : ''
+                } ${
+                  highlightedId === bot.id
+                    ? 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
+                    : bot.is_deployed
+                    ? 'border-emerald-500/30 bg-white/[0.04]'
+                    : ''
+                }`}
               >
-                {/* Top row: name + status + description + metadata + actions — all inline */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{
-                    width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-                    background: bot.is_deployed ? 'var(--accent-bright)' : 'rgba(255,255,255,0.15)',
-                    boxShadow: bot.is_deployed ? '0 0 6px var(--accent-mid)' : 'none',
-                  }} />
-                  <span style={{
-                    fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 500,
-                    color: bot.is_deployed ? 'var(--accent-bright)' : 'var(--ink-100)',
-                  }}>
+                {/* Top row: name + status + description + metadata + actions */}
+                <div className="flex items-center gap-2.5 mb-2 flex-wrap">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      bot.is_deployed
+                        ? 'bg-emerald-400 shadow-[0_0_6px_var(--accent-mid)]'
+                        : 'bg-white/20'
+                    }`}
+                  />
+                  <span
+                    className={`font-display text-sm font-medium ${
+                      bot.is_deployed ? 'text-emerald-400' : 'text-white'
+                    }`}
+                  >
                     {bot.name}
                   </span>
                   {bot.is_deployed && (
-                    <span className="type-micro" style={{ color: 'var(--accent-bright)', fontSize: '8px' }}>DEPLOYED</span>
+                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold">
+                      DEPLOYED
+                    </span>
                   )}
                   {bot.description && (
-                    <span style={{ color: 'var(--ink-35)', fontSize: '11px', marginLeft: '0.25rem' }}>
+                    <span className="text-xs text-white/40 ml-1 truncate max-w-[200px]">
                       {bot.description}
                     </span>
                   )}
-                  <span style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <span className="ml-auto flex gap-3 items-center">
                     {bot.llm_model && (
-                      <span className="type-micro" style={{ fontSize: '9px' }}>MODEL: {bot.llm_model}</span>
+                      <span className="type-micro text-[9px]">MODEL: {bot.llm_model}</span>
                     )}
                     {bot.system_prompt && (
-                      <span className="type-micro" style={{ fontSize: '9px' }}>PROMPT: {bot.system_prompt.length} CHARS</span>
+                      <span className="type-micro text-[9px]">
+                        PROMPT: {bot.system_prompt.length} CHARS
+                      </span>
                     )}
                   </span>
                 </div>
 
                 {/* Deploy link + actions — single compact row */}
                 {bot.is_deployed && bot.deploy_slug && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '0.4rem',
-                    padding: '6px 10px', marginTop: '0.35rem',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '5px',
-                  }}>
-                    <span style={{
-                      flex: 1, fontFamily: 'monospace', fontSize: '11px',
-                      color: 'var(--accent-bright)', overflow: 'hidden',
-                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
+                  <div className="flex items-center gap-2 p-2 mt-1.5 bg-white/[0.04] border border-white/10 rounded-md">
+                    <span className="flex-1 font-mono text-xs text-emerald-400 overflow-hidden text-ellipsis whitespace-nowrap">
                       {`${window.location.origin}/bot/${bot.deploy_slug}`}
                     </span>
                     <button
+                      type="button"
                       onClick={() => handleCopyLink(bot.deploy_slug)}
                       title={copiedSlug === bot.deploy_slug ? 'Copied!' : 'Copy link'}
-                      style={{
-                        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-                        borderRadius: '4px', padding: '4px 6px', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: copiedSlug === bot.deploy_slug ? 'var(--accent-bright)' : 'var(--ink-60)',
-                        transition: 'all 150ms',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.color = 'var(--accent-bright)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = copiedSlug === bot.deploy_slug ? 'var(--accent-bright)' : 'var(--ink-60)'; }}
+                      className={`p-1.5 rounded border border-white/10 bg-white/5 hover:border-emerald-400 hover:text-emerald-400 transition cursor-pointer ${
+                        copiedSlug === bot.deploy_slug ? 'text-emerald-400 border-emerald-400' : 'text-white/60'
+                      }`}
                     >
                       {copiedSlug === bot.deploy_slug ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
                       ) : (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
                       )}
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleOpenLink(bot.deploy_slug)}
                       title="Open in new tab"
-                      style={{
-                        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-                        borderRadius: '4px', padding: '4px 6px', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'var(--ink-60)', transition: 'all 150ms',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.color = 'var(--accent-bright)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = 'var(--ink-60)'; }}
+                      className="p-1.5 rounded border border-white/10 bg-white/5 text-white/60 hover:border-emerald-400 hover:text-emerald-400 transition cursor-pointer"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" y1="14" x2="21" y2="3" />
+                      </svg>
                     </button>
                     <button
-                      className="action-btn"
-                      onClick={() => { setUndeployTarget({ id: bot.id, name: bot.name }); setUndeployConfirmText(''); }}
-                      style={{
-                        fontSize: '10px', padding: '4px 10px',
-                        borderColor: 'rgba(255,255,255,0.08)', color: 'var(--ink-35)',
+                      type="button"
+                      className="action-btn text-[10px] py-1 px-2.5 border-white/10 text-white/40 hover:border-amber-500 hover:text-amber-500 transition"
+                      onClick={() => {
+                        setUndeployTarget({ id: bot.id, name: bot.name });
+                        setUndeployConfirmText('');
                       }}
-                      onMouseEnter={e => { e.target.style.borderColor = 'var(--warn)'; e.target.style.color = 'var(--warn)'; }}
-                      onMouseLeave={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.color = 'var(--ink-35)'; }}
                     >
                       Undeploy
                     </button>
@@ -231,12 +223,12 @@ export function DeploySection({ onActivated, refreshTrigger, highlightBotId, onE
 
                 {/* Deploy button for non-deployed bots */}
                 {!bot.is_deployed && (
-                  <div style={{ marginTop: '0.35rem' }}>
+                  <div className="mt-2">
                     <button
-                      className="action-btn action-btn--primary"
+                      type="button"
+                      className="action-btn action-btn--primary text-xs py-1.5 px-4"
                       onClick={() => handleDeploy(bot.id)}
                       disabled={deploying === bot.id}
-                      style={{ fontSize: '11px', padding: '5px 16px' }}
                     >
                       {deploying === bot.id ? 'Deploying...' : 'Deploy'}
                     </button>
@@ -247,15 +239,9 @@ export function DeploySection({ onActivated, refreshTrigger, highlightBotId, onE
 
             {bots.length > BOTS_VISIBLE && (
               <button
+                type="button"
                 onClick={() => setShowAllBots(!showAllBots)}
-                style={{
-                  width: '100%', padding: '8px', marginTop: '4px',
-                  background: 'none', border: '1px dashed rgba(255,255,255,0.1)',
-                  borderRadius: '6px', color: 'var(--ink-60)', fontSize: '11px',
-                  cursor: 'pointer', transition: 'color 200ms',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-bright)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--ink-60)')}
+                className="w-full p-2 mt-1 border border-dashed border-white/10 rounded-md text-xs text-white/60 hover:text-emerald-400 hover:border-emerald-400/40 transition"
               >
                 {showAllBots ? 'Show less' : `Show ${bots.length - BOTS_VISIBLE} more`}
               </button>
@@ -269,117 +255,72 @@ export function DeploySection({ onActivated, refreshTrigger, highlightBotId, onE
         <div className="section-hint">
           <div className="section-hint__title">Deployment</div>
           <div className="section-hint__body">
-            Deploying a bot generates a unique shareable link.
-            Users with this link can interact directly with that specific bot.
+            Deploying a bot generates a unique shareable link. Users with this link can interact directly with that specific bot.
           </div>
         </div>
 
         <div className="section-hint">
           <div className="section-hint__title">Per-bot isolation</div>
           <div className="section-hint__body">
-            Each deployed bot runs independently with its own configuration,
-            system prompt, and LLM/speech providers.
+            Each deployed bot runs independently with its own configuration, system prompt, and LLM/speech providers.
           </div>
         </div>
 
         <div className="section-hint">
           <div className="section-hint__title">What's next</div>
           <div className="section-hint__body">
-            Share the deploy link with your users. They'll land on a
-            dedicated page for that bot and can start a voice session.
+            Share the deploy link with your users. They'll land on a dedicated page for that bot and can start a voice session.
           </div>
         </div>
       </div>
 
-      {/* Undeploy Confirmation Modal — GitHub-style name confirmation */}
-      {undeployTarget && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            width: '100vw',
-            height: '100vh',
-            background: 'rgba(0,0,0,0.8)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            display: 'grid',
-            placeItems: 'center',
-            zIndex: 99999,
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setUndeployTarget(null);
-              setUndeployConfirmText('');
-            }
-          }}
-        >
-          <div
-            className="glass-pane"
-            style={{
-              width: '90%',
-              maxWidth: '460px',
-              padding: '2rem',
-              border: '1px solid rgba(16,185,129,0.2)',
-              boxShadow: '0 0 50px rgba(0,0,0,0.9), 0 0 20px rgba(16,185,129,0.05)',
-            }}
-          >
-            <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--ink-100)', marginBottom: '0.75rem', fontSize: '18px' }}>
-              Undeploy bot
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--ink-60)', marginBottom: '1.25rem', lineHeight: '1.5' }}>
-              This will remove the deploy link for <strong style={{ color: 'var(--accent-bright)' }}>{undeployTarget.name}</strong>.
-              Users will no longer be able to access this bot via its link.
-              To confirm, type <strong style={{ color: 'var(--ink-100)' }}>{undeployTarget.name}</strong> below.
-            </p>
-            <input
-              className="glass-input"
-              placeholder={`Type "${undeployTarget.name}" to confirm`}
-              value={undeployConfirmText}
-              onChange={(e) => setUndeployConfirmText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && isUndeployConfirmed) handleUndeploy();
+      {/* Reusable Undeploy Confirmation Modal */}
+      <GlassModal
+        open={Boolean(undeployTarget)}
+        title="Undeploy Bot"
+        onClose={() => {
+          setUndeployTarget(null);
+          setUndeployConfirmText('');
+        }}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button
+              type="button"
+              className="action-btn text-xs py-1.5 px-4"
+              onClick={() => {
+                setUndeployTarget(null);
+                setUndeployConfirmText('');
               }}
-              autoFocus
-              style={{
-                width: '100%',
-                marginBottom: '1.25rem',
-                borderColor: undeployConfirmText && !isUndeployConfirmed
-                  ? 'rgba(16,185,129,0.4)'
-                  : undefined,
-              }}
-            />
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-              <button
-                className="action-btn"
-                onClick={() => {
-                  setUndeployTarget(null);
-                  setUndeployConfirmText('');
-                }}
-                style={{ fontSize: '12px', padding: '8px 16px' }}
-              >
-                Cancel
-              </button>
-              <button
-                className="action-btn"
-                disabled={!isUndeployConfirmed}
-                onClick={handleUndeploy}
-                style={{
-                  fontSize: '12px',
-                  padding: '8px 20px',
-                  background: isUndeployConfirmed ? 'rgba(16,185,129,0.15)' : 'transparent',
-                  borderColor: isUndeployConfirmed ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.08)',
-                  color: isUndeployConfirmed ? 'var(--accent-bright)' : 'var(--ink-35)',
-                  cursor: isUndeployConfirmed ? 'pointer' : 'not-allowed',
-                  opacity: isUndeployConfirmed ? 1 : 0.5,
-                }}
-              >
-                Undeploy
-              </button>
-            </div>
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="action-btn action-btn--primary text-xs py-1.5 px-4 bg-amber-500 border-amber-500 text-black hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={handleUndeploy}
+              disabled={!isUndeployConfirmed}
+            >
+              I understand, undeploy this bot
+            </button>
           </div>
-        </div>,
-        document.body
-      )}
+        }
+      >
+        <p className="text-sm text-white/70 mb-3">
+          This will deactivate the shareable link for <strong className="text-white font-semibold">{undeployTarget?.name}</strong>. Anyone with the URL will no longer be able to connect.
+        </p>
+        <div className="mb-4">
+          <label className="type-micro block mb-1.5 text-white/60">
+            Type <span className="text-white font-semibold">{undeployTarget?.name}</span> to confirm:
+          </label>
+          <input
+            className="glass-input text-xs"
+            placeholder={undeployTarget?.name}
+            value={undeployConfirmText}
+            onChange={(e) => setUndeployConfirmText(e.target.value)}
+            autoFocus
+          />
+        </div>
+      </GlassModal>
     </div>
   );
 }

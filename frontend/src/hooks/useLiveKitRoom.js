@@ -407,7 +407,6 @@ export function useLiveKitRoom() {
     disconnect,
     toggleMute,
     sendData,
-    micStream: null, // legacy compat — LiveKit owns the mic
     muted,
     setMuted: toggleMute,
     // Audio level getters for Orb visual reactivity

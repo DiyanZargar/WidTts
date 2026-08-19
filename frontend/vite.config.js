@@ -26,7 +26,7 @@ export default defineConfig({
         manualChunks: {
           vendor_react: ["react", "react-dom", "react-router-dom"],
           vendor_livekit: ["livekit-client"],
-          vendor_icons: ["lucide-react"],
+          vendor_three: ["three", "@react-three/fiber", "@react-three/drei"],
         },
       },
     },
