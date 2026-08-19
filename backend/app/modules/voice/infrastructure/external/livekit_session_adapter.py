@@ -57,7 +57,7 @@ def _get_vad_plugin():
         from livekit.plugins import silero
         _CACHED_VAD = silero.VAD.load(
             min_silence_duration=0.4,
-            activation_threshold=0.45,
+            activation_threshold=0.35,
             min_speech_duration=0.05,
         )
     return _CACHED_VAD
@@ -100,6 +100,21 @@ class LiveKitSession:
                 llm=self._llm_bridge,
                 tts=self._tts_plugin,
                 user_away_timeout=timeout_sec,
+                aec_warmup_duration=0.0,
+                turn_handling={
+                    "endpointing": {
+                        "min_delay": 0.5,
+                        "max_delay": 1.5,
+                    },
+                    "interruption": {
+                        "enabled": True,
+                        "min_duration": 0.15,
+                        "min_words": 0,
+                        "resume_false_interruption": False,
+                        "backchannel_boundary": None,
+                        "discard_audio_if_uninterruptible": False,
+                    },
+                },
             )
 
             # Handle inactivity timeout (user away for timeout_sec)
