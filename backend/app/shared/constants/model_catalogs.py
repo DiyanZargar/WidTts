@@ -23,30 +23,13 @@ FLUX_TO_AURA_MAP = {
 # ── Deepgram Fallback Models ────────────────────────────────────────
 
 DEEPGRAM_STT_MODELS = [
-    {"id": "base", "name": "Base"},
-    {"id": "enhanced-general", "name": "Enhanced General"},
-    {"id": "flux-general-en", "name": "Flux (English)"},
-    {"id": "nova-2-atc", "name": "Nova-2 ATC"},
-    {"id": "nova-2-automotive", "name": "Nova-2 Automotive"},
+    {"id": "nova-3", "name": "Nova-3 (Latest, High Accuracy)"},
+    {"id": "nova-3-general", "name": "Nova-3 General"},
+    {"id": "nova-2", "name": "Nova-2 (Multilingual & Conversational)"},
+    {"id": "nova-2-general", "name": "Nova-2 General (Multilingual)"},
     {"id": "nova-2-conversationalai", "name": "Nova-2 Conversational AI"},
-    {"id": "nova-2-drivethru", "name": "Nova-2 Drive-Thru"},
-    {"id": "nova-2-finance", "name": "Nova-2 Finance"},
-    {"id": "nova-2-general", "name": "Nova-2 General"},
     {"id": "nova-2-meeting", "name": "Nova-2 Meeting"},
     {"id": "nova-2-medical", "name": "Nova-2 Medical"},
-    {"id": "nova-2-phonecall", "name": "Nova-2 Phone Call"},
-    {"id": "nova-2-video", "name": "Nova-2 Video"},
-    {"id": "nova-2-voicemail", "name": "Nova-2 Voicemail"},
-    {"id": "nova-3", "name": "Nova-3 (Latest)"},
-    {"id": "nova-3-general", "name": "Nova-3 General"},
-    {"id": "nova-3-medical", "name": "Nova-3 Medical"},
-    {"id": "nova-3-multilingual", "name": "Nova-3 Multilingual"},
-    {"id": "nova-general", "name": "Nova v1 General"},
-    {"id": "whisper-base", "name": "Whisper Base"},
-    {"id": "whisper-large", "name": "Whisper Large"},
-    {"id": "whisper-medium", "name": "Whisper Medium"},
-    {"id": "whisper-small", "name": "Whisper Small"},
-    {"id": "whisper-tiny", "name": "Whisper Tiny"},
 ]
 
 DEEPGRAM_TTS_MODELS = [
@@ -74,11 +57,9 @@ DEEPGRAM_TTS_MODELS = [
 # ── ElevenLabs Fallback Models ──────────────────────────────────────
 
 ELEVENLABS_FALLBACK_MODELS = [
-    {"id": "eleven_flash_v2_5", "name": "Eleven Flash v2.5 (75ms Ultra-Low Latency Streaming)"},
-    {"id": "eleven_monolingual_v1", "name": "Eleven Monolingual v1"},
-    {"id": "eleven_multilingual_v1", "name": "Eleven Multilingual v1"},
-    {"id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2 (High Quality Conversational)"},
     {"id": "eleven_turbo_v2_5", "name": "Eleven Turbo v2.5 (Low Latency Real-time TTS)"},
+    {"id": "eleven_flash_v2_5", "name": "Eleven Flash v2.5 (75ms Ultra-Low Latency Streaming)"},
+    {"id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2 (High Quality Conversational)"},
 ]
 
 ELEVENLABS_FALLBACK_VOICES = [
@@ -270,32 +251,20 @@ def get_speech_models(provider_type: str) -> dict:
         available_langs = [{"code": c, "name": lang_names.get(c, c.upper())} for c in all_lang_codes]
 
         # STT models with language support metadata (from Deepgram docs)
-        # Nova-3: all languages. Nova-2: many. Nova-1: en, es, hi. Enhanced: subset. English-only models listed separately.
         stt_all = [
-            {"id": "base", "name": "Base"},
-            {"id": "enhanced-general", "name": "Enhanced General"},
-            {"id": "flux-general-en", "name": "Flux (English)"},
+            {"id": "nova-3", "name": "Nova-3 (Latest, High Accuracy)"},
+            {"id": "nova-3-general", "name": "Nova-3 General"},
+            {"id": "nova-2", "name": "Nova-2 (Multilingual & Conversational)"},
+            {"id": "nova-2-general", "name": "Nova-2 General (Multilingual)"},
             {"id": "nova-2-conversationalai", "name": "Nova-2 Conversational AI"},
-            {"id": "nova-2-finance", "name": "Nova-2 Finance"},
-            {"id": "nova-2-general", "name": "Nova-2 General"},
             {"id": "nova-2-meeting", "name": "Nova-2 Meeting"},
             {"id": "nova-2-medical", "name": "Nova-2 Medical"},
-            {"id": "nova-2-phonecall", "name": "Nova-2 Phone Call"},
-            {"id": "nova-2-video", "name": "Nova-2 Video"},
-            {"id": "nova-2-voicemail", "name": "Nova-2 Voicemail"},
-            {"id": "nova-3", "name": "Nova-3 (Latest)"},
-            {"id": "nova-3-general", "name": "Nova-3 General"},
-            {"id": "nova-3-medical", "name": "Nova-3 Medical"},
-            {"id": "nova-3-multilingual", "name": "Nova-3 Multilingual"},
-            {"id": "nova-general", "name": "Nova v1 General"},
         ]
         # Models that support all languages
-        stt_nova3_models = {"nova-3", "nova-3-general", "nova-3-multilingual"}
+        stt_nova3_models = {"nova-3", "nova-3-general"}
         # Models that support many (but not all) languages
         stt_nova2_langs = {"bg","ca","zh","cs","da","nl","en","et","fi","fr","de","el","hi","hu","id","it","ja","ko","lv","lt","ms","no","pl","pt","ro","ru","sk","es","sv","th","tr","uk","vi"}
-        stt_nova1_langs = {"en", "es", "hi"}
-        stt_enhanced_langs = {"da","nl","en","fr","de","hi","it","ja","ko","no","pl","pt","es","sv","ta"}
-        stt_english_only = {"flux-general-en", "nova-2-meeting", "nova-2-phonecall", "nova-2-video", "nova-2-medical", "nova-2-finance", "nova-2-voicemail", "nova-2-conversationalai", "nova-3-medical"}
+        stt_english_only = {"nova-2-meeting", "nova-2-medical", "nova-2-conversationalai"}
 
         stt_by_lang = {}
         for lang in available_langs:
@@ -305,13 +274,7 @@ def get_speech_models(provider_type: str) -> dict:
                 mid = m["id"]
                 if mid in stt_nova3_models:
                     models_for_lang.append(m)
-                elif mid == "nova-2-general" and code in stt_nova2_langs:
-                    models_for_lang.append(m)
-                elif mid == "nova-general" and code in stt_nova1_langs:
-                    models_for_lang.append(m)
-                elif mid == "base" and code in stt_nova2_langs:
-                    models_for_lang.append(m)
-                elif mid == "enhanced-general" and code in stt_enhanced_langs:
+                elif mid in ("nova-2", "nova-2-general") and code in stt_nova2_langs:
                     models_for_lang.append(m)
                 elif mid in stt_english_only and code == "en":
                     models_for_lang.append(m)

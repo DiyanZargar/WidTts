@@ -334,8 +334,15 @@ export function useLiveKitRoom() {
         }
       });
 
-      // Connect to room
-      await room.connect(server_url, token);
+      // Connect to room — if accessing via localhost, connect directly to local LiveKit
+      let connectUrl = server_url;
+      if (
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+        (server_url.includes('ngrok') || server_url.includes('loca.lt') || !server_url)
+      ) {
+        connectUrl = `ws://${window.location.hostname}:7880`;
+      }
+      await room.connect(connectUrl, token);
       await room.startAudio().catch(() => {});
 
       // Publish mic & reset mute state to active
@@ -402,6 +409,9 @@ export function useLiveKitRoom() {
     }
   }, []);
 
+  const getMicAnalyser = useCallback(() => localAnalyserRef.current, []);
+  const getAudioAnalyser = useCallback(() => remoteAnalyserRef.current, []);
+
   return {
     connect,
     disconnect,
@@ -412,5 +422,7 @@ export function useLiveKitRoom() {
     // Audio level getters for Orb visual reactivity
     audioLevel,   // 0-1 RMS of remote agent TTS audio
     listenLevel,  // 0-1 RMS of local user mic input
+    getMicAnalyser,
+    getAudioAnalyser,
   };
 }

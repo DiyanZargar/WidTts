@@ -3,7 +3,7 @@ in a LiveKit room — building STT/TTS plugins, the LLM bridge, and the
 AgentSession, then tearing everything down on destroy."""
 import logging
 import time
-from typing import Optional, Any
+from typing import Optional, Any, cast
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("livekit_session")
@@ -41,6 +41,7 @@ class SessionSnapshot:
     tts_primary_language: str = "en"
     llm_api_key: str = ""
     llm_base_url: str = ""
+    llm_provider_type: str = ""
     encrypted_stt_credentials: dict = field(default_factory=dict)
     stt_key_version: int = 0
     encrypted_tts_credentials: dict = field(default_factory=dict)
@@ -55,11 +56,8 @@ def _get_vad_plugin():
     global _CACHED_VAD
     if _CACHED_VAD is None:
         from livekit.plugins import silero
-        _CACHED_VAD = silero.VAD.load(
-            min_silence_duration=0.55,
-            activation_threshold=0.45,
-            min_speech_duration=0.05,
-        )
+        from app.shared.config.knobs import knobs
+        _CACHED_VAD = silero.VAD.load(**knobs.to_silero_vad_kwargs())
     return _CACHED_VAD
 
 
@@ -84,15 +82,15 @@ class LiveKitSession:
         )
         try:
             from livekit.agents import AgentSession, Agent
-            from livekit.agents.voice.room_io import RoomOptions, TextOutputOptions
+            from livekit.agents.voice.room_io import RoomOptions, TextOutputOptions, AudioOutputOptions
+            from app.shared.config.knobs import knobs
 
             self._stt_plugin = await self._build_stt()
             self._tts_plugin = await self._build_tts()
             self._llm_bridge = self._build_llm_bridge()
             self._vad_plugin = _get_vad_plugin()
 
-            from app.shared.config.settings import settings
-            timeout_sec = settings.room_inactivity_timeout_seconds
+            timeout_sec = knobs.runtime.user_away_timeout
 
             self._agent_session = AgentSession(
                 vad=self._vad_plugin,
@@ -100,21 +98,16 @@ class LiveKitSession:
                 llm=self._llm_bridge,
                 tts=self._tts_plugin,
                 user_away_timeout=timeout_sec,
-                aec_warmup_duration=0.5,
-                turn_handling={
-                    "endpointing": {
-                        "min_delay": 0.8,
-                        "max_delay": 3.0,
-                    },
-                    "interruption": {
-                        "enabled": True,
-                        "min_duration": 0.2,
-                        "min_words": 0,
-                        "resume_false_interruption": False,
-                        "backchannel_boundary": None,
-                        "discard_audio_if_uninterruptible": False,
-                    },
-                },
+                turn_handling=cast(Any, knobs.to_turn_handling_dict()),
+                aec_warmup_duration=knobs.runtime.aec_warmup_duration,
+                transcription_timeout=knobs.runtime.transcription_timeout,
+                session_close_transcript_timeout=knobs.runtime.session_close_transcript_timeout,
+                min_consecutive_speech_delay=knobs.runtime.min_consecutive_speech_delay,
+                max_tool_steps=knobs.runtime.max_tool_steps,
+                use_tts_aligned_transcript=knobs.runtime.use_tts_aligned_transcript,
+                tts_text_transforms=cast(Any, knobs.runtime.tts_text_transforms),
+                expressive=knobs.runtime.expressive,
+                ivr_detection=knobs.runtime.ivr_detection,
             )
 
             # Handle inactivity timeout (user away for timeout_sec)
@@ -129,11 +122,11 @@ class LiveKitSession:
                         try:
                             if self._agent_session and not self._is_destroyed:
                                 self._agent_session.say(
-                                    "It was nice talking with you. Goodbye!",
+                                    knobs.llm.default_farewell_speech,
                                     allow_interruptions=False,
                                 )
                                 # Give TTS time to synthesize + play the farewell
-                                await asyncio.sleep(4)
+                                await asyncio.sleep(knobs.runtime.farewell_drain_delay)
                         except Exception as e:
                             logger.warning("[SESSION] Farewell TTS failed: %s", e)
 
@@ -148,7 +141,7 @@ class LiveKitSession:
                                 }).encode("utf-8")
                                 await target_room.local_participant.publish_data(payload)
                                 logger.info("[SESSION] Published session_end event to room for session=%s", self.snapshot.session_id)
-                                await asyncio.sleep(0.5)  # brief pause for data delivery
+                                await asyncio.sleep(knobs.runtime.farewell_publish_delay)  # brief pause for data delivery
                         except Exception as e:
                             logger.warning("[SESSION] Failed to publish session_end: %s", e)
 
@@ -157,21 +150,48 @@ class LiveKitSession:
 
                     asyncio.create_task(_farewell_then_disconnect())
 
-            # Build system instructions with bot identity and language
-            bot_name = self.snapshot.bot_name or "Assistant"
-            bot_desc = self.snapshot.bot_description or ""
+            # Fast barge-in for short concrete words ("wait", "stop", "no no", etc.)
+            @self._agent_session.on("user_input_transcribed")
+            def _on_user_input_transcribed(ev):
+                transcript = (getattr(ev, "transcript", None) or "").strip().lower()
+                if not transcript:
+                    return
+
+                # If agent is currently speaking, check if the utterance contains urgent interruption words
+                is_speaking = getattr(self._agent_session, "agent_state", None) == "speaking" or bool(getattr(self._agent_session, "current_speech", None))
+                if is_speaking:
+                    urgent_words = knobs.policy.urgent_interruption_words
+                    clean_text = "".join(c for c in transcript if c.isalnum() or c.isspace()).strip()
+                    words = clean_text.split()
+                    if clean_text in urgent_words or any(w in urgent_words for w in words):
+                        logger.info("[SESSION] Urgent interruption keyword detected: '%s' — interrupting agent", transcript)
+                        try:
+                            self._agent_session.interrupt()
+                        except Exception as e:
+                            logger.warning("[SESSION] Urgent interruption failed: %s", e)
+
+            # Build system instructions with bot identity and language (strictly from snapshot)
+            bot_name = (self.snapshot.bot_name or "").strip()
+            bot_desc = (self.snapshot.bot_description or "").strip()
             lang = self.snapshot.tts_primary_language or "en"
-            identity = f"Your name is \"{bot_name}\". You MUST use this name when introducing yourself — never invent, guess, or substitute a different name."
+            farewell_marker = knobs.llm.farewell_marker
+
+            if bot_name:
+                identity = f"Your name is \"{bot_name}\". You MUST use this name when introducing yourself — never invent, guess, or substitute a different name."
+            else:
+                identity = ""
+
             if bot_desc:
-                identity += f" {bot_desc}"
+                identity = f"{identity} {bot_desc}".strip()
+
             if lang and lang != "en":
                 identity += (
                     f" You MUST ALWAYS respond in language '{lang}' and no other language."
                     f" This is non-negotiable — every response, every word, must be in '{lang}'."
-                    f" When you need to end the conversation or say goodbye, append the marker [END_SESSION] at the very end of your response."
+                    f" When you need to end the conversation or say goodbye, append the marker {farewell_marker} at the very end of your response."
                 )
             else:
-                identity += " When you need to end the conversation or say goodbye, append the marker [END_SESSION] at the very end of your response."
+                identity += f" When you need to end the conversation or say goodbye, append the marker {farewell_marker} at the very end of your response."
             
             instructions = f"{identity}\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else identity
 
@@ -192,7 +212,18 @@ class LiveKitSession:
                 room=room,
                 agent=agent,
                 room_options=RoomOptions(
-                    text_output=TextOutputOptions(sync_transcription=False),
+                    text_output=TextOutputOptions(
+                        sync_transcription=knobs.room.sync_transcription,
+                        transcription_speed_factor=knobs.room.transcription_speed_factor,
+                        json_format=knobs.room.json_format,
+                    ),
+                    audio_output=AudioOutputOptions(
+                        sample_rate=knobs.room.audio_output_sample_rate,
+                        num_channels=knobs.room.audio_output_num_channels,
+                        track_name=knobs.room.audio_output_track_name,
+                    ),
+                    close_on_disconnect=knobs.room.close_on_disconnect,
+                    delete_room_on_close=knobs.room.delete_room_on_close,
                 ),
             )
 
@@ -201,16 +232,13 @@ class LiveKitSession:
             # WebRTC audio track isn't fully negotiated and the first
             # word gets clipped/broken.
             import asyncio as _aio
-            await _aio.sleep(0.5)
+            await _aio.sleep(knobs.runtime.greeting_stabilization_delay)
 
             custom_greeting = (self.snapshot.greeting or "").strip()
-            if custom_greeting:
-                logger.info("[SESSION] Playing instant direct greeting: %s", custom_greeting[:60])
-                self._agent_session.say(custom_greeting)
-            else:
-                self._agent_session.generate_reply(
-                    user_input=f'A new user has just joined. Your name is "{bot_name}". Introduce yourself using that exact name and greet them warmly in character.',
-                )
+            if not custom_greeting:
+                custom_greeting = f"Hello! I am {bot_name}. How can I help you today?" if bot_name else "Hello! How can I help you today?"
+            logger.info("[SESSION] Playing instant direct greeting: %s", custom_greeting[:60])
+            self._agent_session.say(custom_greeting)
 
             duration_ms = int((time.monotonic() - self._started_at) * 1000)
             logger.info(
@@ -285,6 +313,7 @@ class LiveKitSession:
             "api_key": self.snapshot.llm_api_key,
             "base_url": self.snapshot.llm_base_url,
             "model": self.snapshot.llm_model,
+            "provider_type": self.snapshot.llm_provider_type,
         }
         conversation_adapter = DefaultConversationAdapter(llm_config)
 
@@ -293,6 +322,7 @@ class LiveKitSession:
             "system_prompt": effective_prompt,
             "llm_model": self.snapshot.llm_model,
             "llm_provider_id": self.snapshot.llm_provider_id,
+            "llm_provider_type": self.snapshot.llm_provider_type,
             "api_key": self.snapshot.llm_api_key,
             "base_url": self.snapshot.llm_base_url,
         }

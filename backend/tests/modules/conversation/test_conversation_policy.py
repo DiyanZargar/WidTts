@@ -50,3 +50,10 @@ def test_evaluate_retry_normal(policy):
     assert result["should_advance"] is False
     assert result["max_retries_exceeded"] is False
     assert result["retry_increment"] == 1
+
+
+def test_urgent_interruption_words():
+    from app.shared.config.knobs import knobs
+    urgent = knobs.policy.urgent_interruption_words
+    for word in ["wait", "stop", "no", "no no", "hold on", "hang on", "pause", "one sec"]:
+        assert word in urgent

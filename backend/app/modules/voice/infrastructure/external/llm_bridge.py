@@ -50,6 +50,7 @@ from app.modules.conversation.domain.policy.conversation_policy import (
     ConversationPolicy,
     PolicyAction,
 )
+from app.shared.config.knobs import knobs
 from app.shared.logging import pipeline_logger as pl
 
 logger = logging.getLogger("llm_bridge")
@@ -87,29 +88,200 @@ class ConversationAdapterProtocol(Protocol):
 
 class DefaultConversationAdapter:
     """
-    Default implementation of :class:`ConversationAdapterProtocol`.
+    Independent multi-engine implementation of :class:`ConversationAdapterProtocol`.
 
-    Uses ``litellm.acompletion()`` to stream chat completions, supporting
-    100+ LLM providers via the model string (e.g. ``gpt-4o``,
-    ``gemini/gemini-2.0-flash``, ``anthropic/claude-3-5-sonnet``,
-    ``deepseek/deepseek-chat``).  Provider routing is handled entirely
-    by litellm — no provider-specific code here.
+    Each provider family is handled independently without forced coupling:
+    1. **OpenAI-Compatible Engine** (OpenAI, Groq, OpenRouter, Mistral, Moonshot,
+       DeepSeek, Together, Ollama, Google OpenAI endpoint, vLLM, LM Studio, custom proxies):
+       Uses direct ``AsyncOpenAI`` with HTTP/2 connection pooling.
+    2. **Native Anthropic Engine** (Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus):
+       Uses direct async HTTP SSE streaming to Anthropic's ``/v1/messages`` API.
+    3. **LiteLLM Engine** (When explicitly selected or configured as proxy):
+       Uses ``litellm.acompletion()`` with custom ``api_base`` support.
 
     Parameters
     ----------
     llm_config:
-        LLM provider config with ``api_key``, ``base_url``, ``model``.
+        LLM provider config with ``api_key``, ``base_url``, ``model``, ``provider_type``.
     """
 
     def __init__(self, llm_config: Dict[str, Any]) -> None:
-        self._model = llm_config.get("model", "gpt-4o-mini")
+        from app.shared.config.knobs import knobs
+        from app.shared.constants.provider_urls import PROVIDER_DEFAULT_BASE_URLS
+
+        self._model = llm_config.get("model", knobs.llm.default_model)
         self._api_key = llm_config.get("api_key", "")
-        self._base_url = llm_config.get("base_url") or None
+        self._provider_type = llm_config.get("provider_type", "")
+        
+        # Resolve effective base_url
+        explicit_url = llm_config.get("base_url") or None
+        if explicit_url:
+            self._base_url = explicit_url.rstrip("/")
+        elif self._provider_type in PROVIDER_DEFAULT_BASE_URLS:
+            self._base_url = PROVIDER_DEFAULT_BASE_URLS[self._provider_type]
+        else:
+            self._base_url = None
+
+        # Pre-initialize AsyncOpenAI client for OpenAI-compatible endpoints
+        self._openai_client = None
+        if self._base_url and self._provider_type != "anthropic":
+            from openai import AsyncOpenAI
+            import httpx
+            self._openai_client = AsyncOpenAI(
+                api_key=self._api_key or "sk-dummy",
+                base_url=self._base_url,
+                http_client=httpx.AsyncClient(
+                    timeout=httpx.Timeout(30.0, connect=5.0),
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+                ),
+            )
+
         logger.info(
-            "[ADAPTER] DefaultConversationAdapter initialized: model=%s base_url=%s",
+            "[ADAPTER] Initialized: model=%s provider_type=%s base_url=%s (client=%s)",
             self._model,
-            self._base_url or "(litellm default)",
+            self._provider_type or "unspecified",
+            self._base_url or "(native/direct)",
+            "AnthropicNative" if self._provider_type == "anthropic" else ("AsyncOpenAI" if self._openai_client else "dynamic"),
         )
+
+    async def _stream_openai_compatible(
+        self,
+        *,
+        model: str,
+        api_key: Optional[str],
+        base_url: Optional[str],
+        messages: List[Dict[str, Any]],
+    ) -> AsyncIterator[str]:
+        """Stream from any OpenAI-compatible endpoint using AsyncOpenAI."""
+        from openai import AsyncOpenAI
+        import httpx
+
+        client = self._openai_client
+        if not client or (base_url and str(client.base_url).rstrip('/') != str(base_url).rstrip('/')):
+            client = AsyncOpenAI(
+                api_key=api_key or "sk-dummy",
+                base_url=base_url,
+                http_client=httpx.AsyncClient(
+                    timeout=httpx.Timeout(30.0, connect=5.0),
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+                ),
+            )
+
+        response = await client.chat.completions.create(
+            model=model,
+            messages=messages,  # type: ignore
+            stream=True,
+            temperature=knobs.llm.temperature,
+            top_p=knobs.llm.top_p,
+        )
+        async for chunk in response:
+            if chunk.choices and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta
+                token = getattr(delta, "content", None)
+                if token:
+                    yield token
+
+    async def _stream_anthropic(
+        self,
+        *,
+        model: str,
+        api_key: Optional[str],
+        base_url: Optional[str],
+        system_prompt: str,
+        context: List[Dict[str, str]],
+        user_text: str,
+    ) -> AsyncIterator[str]:
+        """Stream directly from Anthropic /v1/messages API via async SSE."""
+        import json
+        import httpx
+
+        endpoint = f"{(base_url or 'https://api.anthropic.com/v1').rstrip('/')}/messages"
+        headers = {
+            "x-api-key": api_key or "",
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            "accept": "text/event-stream",
+        }
+
+        # Build clean Anthropic messages (alternating user/assistant)
+        anthropic_messages: List[Dict[str, str]] = []
+        for msg in context:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role in ("user", "assistant") and content:
+                anthropic_messages.append({"role": role, "content": content})
+
+        if not anthropic_messages or anthropic_messages[-1].get("content") != user_text:
+            anthropic_messages.append({"role": "user", "content": user_text})
+
+        payload = {
+            "model": model,
+            "messages": anthropic_messages,
+            "max_tokens": knobs.llm.max_tokens or 1024,
+            "stream": True,
+            "temperature": knobs.llm.temperature,
+        }
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            async with client.stream("POST", endpoint, headers=headers, json=payload) as resp:
+                if resp.status_code != 200:
+                    err_body = await resp.aread()
+                    raise RuntimeError(f"Anthropic API Error ({resp.status_code}): {err_body.decode('utf-8', errors='ignore')}")
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            event_data = json.loads(data_str)
+                            if event_data.get("type") == "content_block_delta":
+                                delta = event_data.get("delta", {})
+                                if delta.get("type") == "text_delta":
+                                    text = delta.get("text")
+                                    if text:
+                                        yield text
+                        except Exception:
+                            continue
+
+    async def _stream_litellm(
+        self,
+        *,
+        model: str,
+        api_key: Optional[str],
+        base_url: Optional[str],
+        messages: List[Dict[str, Any]],
+    ) -> AsyncIterator[str]:
+        """Stream via LiteLLM multi-provider router when explicitly selected."""
+        import os
+        os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+        try:
+            import litellm
+            litellm.telemetry = False
+            litellm.suppress_debug_info = True
+        except Exception:
+            pass
+
+        import litellm
+        kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": knobs.llm.stream,
+            "temperature": knobs.llm.temperature,
+            "top_p": knobs.llm.top_p,
+        }
+        if api_key:
+            kwargs["api_key"] = api_key
+        if base_url:
+            kwargs["api_base"] = base_url
+
+        response = await litellm.acompletion(**kwargs)
+        async for chunk in response:
+            delta = chunk.choices[0].delta
+            token = getattr(delta, "content", None)
+            if token:
+                yield token
 
     async def stream_chat(
         self,
@@ -119,16 +291,25 @@ class DefaultConversationAdapter:
         context: List[Dict[str, str]],
         llm_config: Dict[str, Any],
     ) -> AsyncIterator[str]:
-        """Stream LLM response tokens via litellm."""
-        import litellm
+        """Route and stream LLM response tokens through the appropriate independent engine."""
+        from app.shared.constants.provider_urls import PROVIDER_DEFAULT_BASE_URLS
 
-        messages: List[Dict[str, str]] = []
+        messages: List[Any] = []
 
-        if system_prompt:
+        # Check if a system message already exists in context to prevent duplicate injection
+        has_system = any(msg.get("role") == "system" for msg in context)
+        if not has_system and system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
         for msg in context:
-            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+            content = msg.get("content", "")
+            if not content:
+                continue
+            # If system message is in context but empty, replace with system_prompt
+            if msg.get("role") == "system" and system_prompt and len(content.strip()) < 10:
+                messages.append({"role": "system", "content": system_prompt})
+            else:
+                messages.append({"role": msg.get("role", "user"), "content": content})
 
         # Append user_text only if it isn't already present at the end of context
         if not messages or messages[-1].get("content") != user_text:
@@ -136,47 +317,70 @@ class DefaultConversationAdapter:
 
         model = llm_config.get("model") or self._model
         api_key = llm_config.get("api_key") or self._api_key or None
-        base_url = llm_config.get("base_url") or self._base_url or None
+        provider_type = llm_config.get("provider_type") or self._provider_type or ""
 
-        # When using a custom endpoint (proxy), litellm always needs "openai/"
-        # prefix to route via OpenAI-compatible transport to the api_base URL.
-        if base_url and not model.startswith("openai/"):
-            model = f"openai/{model}"
+        explicit_url = llm_config.get("base_url") or self._base_url or None
+        if explicit_url:
+            base_url = explicit_url.rstrip("/")
+        elif provider_type in PROVIDER_DEFAULT_BASE_URLS:
+            base_url = PROVIDER_DEFAULT_BASE_URLS[provider_type]
+        else:
+            base_url = None
 
         try:
-            kwargs: Dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "stream": True,
-            }
-            if api_key:
-                kwargs["api_key"] = api_key
-            if base_url:
-                kwargs["api_base"] = base_url
-
-            response = await litellm.acompletion(**kwargs)
-
-            async for chunk in response:
-                delta = chunk.choices[0].delta
-                token = getattr(delta, "content", None)
-                if token:
+            # 1. Native Anthropic Engine
+            if provider_type == "anthropic" or (not base_url and model.startswith("claude-")):
+                async for token in self._stream_anthropic(
+                    model=model,
+                    api_key=api_key,
+                    base_url=base_url,
+                    system_prompt=system_prompt,
+                    context=context,
+                    user_text=user_text,
+                ):
                     yield token
+                return
+
+            # 2. LiteLLM Engine (when explicitly configured as provider)
+            if provider_type in ("litellm", "litellm_proxy"):
+                async for token in self._stream_litellm(
+                    model=model,
+                    api_key=api_key,
+                    base_url=base_url,
+                    messages=messages,
+                ):
+                    yield token
+                return
+
+            # 3. Direct OpenAI-Compatible Engine (Default for OpenAI, Groq, OpenRouter, Mistral, Moonshot, Ollama, DeepSeek, Together, Google, custom base_url)
+            async for token in self._stream_openai_compatible(
+                model=model,
+                api_key=api_key,
+                base_url=base_url or "https://api.openai.com/v1",
+                messages=messages,
+            ):
+                yield token
 
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            logger.error("[ADAPTER] LLM stream error: %s", e, exc_info=True)
-            yield "I'm sorry, I had trouble generating a response. Could you try again?"
+            err_msg = str(e)
+            if "Use litellm._turn_on_debug()" in err_msg:
+                err_msg = err_msg.split("Use litellm._turn_on_debug()")[0].strip()
+            logger.error("[ADAPTER] LLM stream error (provider=%s model=%s base_url=%s): %s", provider_type or "default", model, base_url or "direct", err_msg)
+            yield knobs.llm.error_fallback_text
 
 
-# ── Policy response constants ────────────────────────────────────────
+# ── Policy response constants (wired from knobs) ────────────────────
 
-_STOP_ACK = "Alright, I'll pause here. Just say 'continue' when you're ready."
-_END_ACK = "Thanks for chatting! Goodbye."
-_REPEAT_FALLBACK = "I don't have a previous response to repeat."
-_ERROR_ACK = "I'm sorry, something went wrong. Could you try again?"
+from app.shared.config.knobs import knobs as _knobs
 
-_FAREWELL_MARKER = "[END_SESSION]"
+_STOP_ACK = _knobs.llm.stop_ack_text
+_END_ACK = _knobs.llm.end_ack_text
+_REPEAT_FALLBACK = _knobs.llm.repeat_fallback_text
+_ERROR_ACK = _knobs.llm.error_fallback_text
+
+_FAREWELL_MARKER = _knobs.llm.farewell_marker
 
 
 # ── LLMStream subclass ──────────────────────────────────────────────

@@ -138,6 +138,7 @@ async def start_session(
             audio_sample_rate=audio_sample_rate,
             llm_api_key=llm_creds.get("api_key", ""),
             llm_base_url=llm_provider.get("base_url", "") if llm_provider else "",
+            llm_provider_type=llm_provider.get("provider_type", "") if llm_provider else "",
             encrypted_stt_credentials=stt_cred_blob,
             stt_key_version=stt_kv,
             encrypted_tts_credentials=tts_cred_blob,
@@ -164,6 +165,9 @@ async def start_session(
                 room=room_name,
                 can_publish=True,
                 can_subscribe=True,
+                can_publish_data=True,
+                can_update_own_metadata=True,
+                agent=True,
             )
         )
         agent_token.with_ttl(timedelta(seconds=settings.agent_token_ttl_seconds))

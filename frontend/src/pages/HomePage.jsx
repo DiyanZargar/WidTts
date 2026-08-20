@@ -4,6 +4,7 @@ import { useVoiceSession } from '../hooks/useVoiceSession';
 import { MicIcon, MicMutedIcon } from '../components/icons/MicIcons';
 import { SettingsIcon } from '../components/icons/SettingsIcon';
 import { HaloParticleVoid } from '../components/common/HaloParticleVoid';
+import { AnalogWaveform } from '../components/common/AnalogWaveform';
 import { GlassModal } from '../components/common/GlassModal';
 import '../design/halo.css';
 
@@ -37,6 +38,8 @@ export default function HomePage() {
     restart,
     muted,
     setMuted,
+    getMicAnalyser,
+    getAudioAnalyser,
     isActive,
   } = useVoiceSession();
 
@@ -230,6 +233,16 @@ export default function HomePage() {
         <div className="halo__reflection">
           <div className="halo__reflection-inner" />
         </div>
+
+        {/* ── Real-Time Analog Signal Waveform Line ── */}
+        <AnalogWaveform
+          getMicAnalyser={getMicAnalyser}
+          getAudioAnalyser={getAudioAnalyser}
+          active={isActive && !muted}
+          haloState={haloState}
+          listenLevel={listenLevel}
+          audioLevel={audioLevel}
+        />
       </div>
 
       {/* ── Transcript: Growing, Scrollable, Fading History ── */}

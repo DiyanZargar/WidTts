@@ -125,6 +125,7 @@ async def create_voice_session(
                 can_publish=True,
                 can_subscribe=True,
                 can_publish_data=True,
+                can_update_own_metadata=True,
             )
         )
         token.with_ttl(timedelta(seconds=ttl))

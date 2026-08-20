@@ -33,8 +33,10 @@ class FishAudioProvider(BaseSpeechProvider):
         )
 
     def build_tts(self, config: Dict[str, Any], creds: Dict[str, Any]) -> Any:
+        from app.shared.config.knobs import knobs
+
         api_key: str = creds["api_key"]
-        model: str = config.get("tts_custom_model") or config.get("tts_model") or "s2.1-pro"
+        model: str = config.get("tts_custom_model") or config.get("tts_model") or knobs.fish_audio_tts.default_model
         reference_id: str = config.get("tts_custom_voice_id") or config.get("tts_voice_id") or ""
         language: str = config.get("tts_language") or ""
         custom_endpoint: str = config.get("tts_custom_endpoint") or ""
@@ -71,15 +73,17 @@ class FishAudioTTS(_LiveKitTTS):
         self,
         *,
         api_key: str,
-        model: str = "s2.1-pro",
+        model: str = "",
         reference_id: str = "",
         language: str = "",
         custom_endpoint: str = "",
     ) -> None:
+        from app.shared.config.knobs import knobs
+        model = model or knobs.fish_audio_tts.default_model
         super().__init__(
             capabilities=TTSCapabilities(streaming=False),
-            sample_rate=24000,
-            num_channels=1,
+            sample_rate=knobs.fish_audio_tts.sample_rate,
+            num_channels=knobs.fish_audio_tts.num_channels,
         )
         self._api_key = api_key
         self._model = model
@@ -237,13 +241,15 @@ class _FishAudioChunkedStream(ChunkedStream):
                 self._model, len(self._input_text), self._custom_endpoint or "(default)",
             )
 
-            timeout_sec = self._conn_options.timeout if self._conn_options else 15
+            from app.shared.config.knobs import knobs
+            timeout_sec = self._conn_options.timeout if self._conn_options else knobs.fish_audio_tts.connect_timeout_seconds
+            total_timeout_sec = knobs.fish_audio_tts.total_timeout_seconds
             api_url = self._custom_endpoint.rstrip("/") + "/v1/tts" if self._custom_endpoint else f"{FISH_AUDIO_API_URL}/v1/tts"
             async with session.post(
                 api_url,
                 json=payload,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=30, sock_connect=timeout_sec),
+                timeout=aiohttp.ClientTimeout(total=total_timeout_sec, sock_connect=timeout_sec),
             ) as resp:
                 if resp.status != 200:
                     body = await resp.text()

@@ -10,7 +10,18 @@ import { useLiveKitRoom } from './useLiveKitRoom';
  */
 export function useVoiceSession() {
   const { state, dispatch } = useContext(ConversationContext);
-  const { connect, disconnect, toggleMute, sendData, muted, setMuted, audioLevel, listenLevel } = useLiveKitRoom();
+  const {
+    connect,
+    disconnect,
+    toggleMute,
+    sendData,
+    muted,
+    setMuted,
+    audioLevel,
+    listenLevel,
+    getMicAnalyser,
+    getAudioAnalyser,
+  } = useLiveKitRoom();
 
   // Resolve bot slug from URL params first (works after reload / direct nav),
   // then fall back to sessionStorage (set by BotLanding on normal entry).
@@ -136,6 +147,8 @@ export function useVoiceSession() {
     restart,
     muted,
     setMuted,
+    getMicAnalyser,
+    getAudioAnalyser,
     isCompleted: state.status === 'completed',
     isActive: state.isOpen && state.status !== 'completed' && state.status !== 'cancelled',
   };

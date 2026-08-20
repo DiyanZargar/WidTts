@@ -46,7 +46,12 @@ class TestDeepgramProviderStrategy:
         config = {"tts_model": "flux-rufus-en"}
         creds = {"api_key": "dg-key"}
         provider.build_tts(config, creds)
-        mock_tts.assert_called_once_with(api_key="dg-key", model="aura-orion-en")
+        mock_tts.assert_called_once()
+        kwargs = mock_tts.call_args.kwargs
+        assert kwargs["api_key"] == "dg-key"
+        assert kwargs["model"] == "aura-orion-en"
+        assert kwargs["sample_rate"] == 24000
+        assert kwargs["encoding"] == "linear16"
 
 
 class TestElevenLabsProviderStrategy:
@@ -64,7 +69,12 @@ class TestElevenLabsProviderStrategy:
         config = {}
         creds = {"api_key": "el-key"}
         provider.build_tts(config, creds)
-        mock_tts.assert_called_once_with(api_key="el-key", voice_id="EXAVITQu4vr4xnSDxMaL")
+        mock_tts.assert_called_once()
+        kwargs = mock_tts.call_args.kwargs
+        assert kwargs["api_key"] == "el-key"
+        assert kwargs["voice_id"] == "EXAVITQu4vr4xnSDxMaL"
+        assert kwargs["model"] == "eleven_turbo_v2_5"
+        assert kwargs["auto_mode"] is True
 
 
 class TestFishAudioProviderStrategy:

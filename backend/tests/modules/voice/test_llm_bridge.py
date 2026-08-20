@@ -99,3 +99,35 @@ def test_llm_config_from_bot():
     assert bridge._llm_config["api_key"] == "sk-test"
     assert bridge._llm_config["base_url"] == "https://api.example.com/v1"
     assert bridge._llm_config["model"] == "gpt-4o"
+
+
+def test_default_conversation_adapter_openai_compatible():
+    from app.modules.voice.infrastructure.external.llm_bridge import DefaultConversationAdapter
+    adapter = DefaultConversationAdapter({
+        "model": "gpt-4o-mini",
+        "api_key": "sk-test",
+        "base_url": "https://api.groq.com/openai/v1",
+        "provider_type": "groq",
+    })
+    assert adapter._base_url == "https://api.groq.com/openai/v1"
+    assert adapter._openai_client is not None
+
+
+def test_default_conversation_adapter_anthropic():
+    from app.modules.voice.infrastructure.external.llm_bridge import DefaultConversationAdapter
+    adapter = DefaultConversationAdapter({
+        "model": "claude-3-5-sonnet-20241022",
+        "api_key": "sk-ant-test",
+        "provider_type": "anthropic",
+    })
+    assert adapter._provider_type == "anthropic"
+
+
+def test_default_conversation_adapter_litellm():
+    from app.modules.voice.infrastructure.external.llm_bridge import DefaultConversationAdapter
+    adapter = DefaultConversationAdapter({
+        "model": "vertex-ai/gemini-pro",
+        "api_key": "test",
+        "provider_type": "litellm",
+    })
+    assert adapter._provider_type == "litellm"

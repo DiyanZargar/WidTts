@@ -29,12 +29,31 @@ class ConversationPolicy:
     The Conversation Engine asks: "Given this classification, what should we do?"
     """
 
-    # Deterministic system commands — exact string matches for instant response
-    _STOP_COMMANDS = {"stop", "stop talking", "be quiet", "shut up", "pause", "quiet"}
-    _END_COMMANDS = {"end", "end conversation", "start over", "reset", "quit", "i'm done", "goodbye"}
-    _REPEAT_COMMANDS = {"repeat", "say that again", "what did you say", "pardon"}
-    _CONTINUE_COMMANDS = {"continue", "go on", "proceed", "keep going"}
-    _FORGET_COMMANDS = {"forget that", "never mind", "disregard", "ignore that"}
+    # Deterministic system commands — loaded dynamically from knobs
+    @property
+    def _STOP_COMMANDS(self):
+        from app.shared.config.knobs import knobs
+        return knobs.policy.stop_commands
+
+    @property
+    def _END_COMMANDS(self):
+        from app.shared.config.knobs import knobs
+        return knobs.policy.end_commands
+
+    @property
+    def _REPEAT_COMMANDS(self):
+        from app.shared.config.knobs import knobs
+        return knobs.policy.repeat_commands
+
+    @property
+    def _CONTINUE_COMMANDS(self):
+        from app.shared.config.knobs import knobs
+        return knobs.policy.continue_commands
+
+    @property
+    def _FORGET_COMMANDS(self):
+        from app.shared.config.knobs import knobs
+        return knobs.policy.forget_commands
 
     def __init__(self, max_retries: Optional[int] = None):
         self.max_retries = max_retries

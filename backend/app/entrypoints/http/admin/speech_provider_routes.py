@@ -65,12 +65,13 @@ def _fetch_elevenlabs_data_sync(api_key: str):
         return models, voices, False
 
     # Fetch dynamic voices
+    from app.shared.config.knobs import knobs
     req = urllib.request.Request(
         f"{ELEVENLABS_API_URL}/voices",
         headers={"xi-api-key": api_key, "Accept": "application/json"},
         method="GET",
     )
-    with urllib.request.urlopen(req, timeout=8) as resp:
+    with urllib.request.urlopen(req, timeout=knobs.network.provider_verify_timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
         for v in data.get("voices", []):
             name = v.get("name", "Voice")
@@ -89,32 +90,50 @@ def _fetch_deepgram_data_sync(api_key: str):
     if not api_key:
         return stt_models, tts_models, False
 
+    from app.shared.config.knobs import knobs
     req = urllib.request.Request(
         f"{DEEPGRAM_API_URL}/v1/models",
         headers={"Authorization": f"Token {api_key}", "Accept": "application/json"},
         method="GET",
     )
-    with urllib.request.urlopen(req, timeout=8) as resp:
+    with urllib.request.urlopen(req, timeout=knobs.network.provider_verify_timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
         stt_raw = data.get("stt") or data.get("models") or []
+        stt_seen = set()
         if isinstance(stt_raw, list):
             for m in stt_raw:
                 if isinstance(m, dict):
                     mid = m.get("canonical_name") or m.get("name") or m.get("id") or ""
+                    if not mid or mid in stt_seen:
+                        continue
+                    if not m.get("streaming", True):
+                        continue
+                    # Only include real-time streaming Nova models
+                    if not any(family in mid for family in ("nova-3", "nova-2")):
+                        continue
+                    if "multilingual" in mid or mid == "nova-2-ea":
+                        continue
                     name = m.get("name") or mid
-                    arch = m.get("architecture") or ""
-                    if mid:
-                        stt_models.append({"id": mid, "name": f"{name} ({arch})"})
+                    stt_seen.add(mid)
+                    stt_models.append({"id": mid, "name": f"{name.capitalize()} (Real-time)"})
 
         tts_raw = data.get("tts") or []
+        tts_seen = set()
         if isinstance(tts_raw, list):
             for m in tts_raw:
                 if isinstance(m, dict):
                     mid = m.get("canonical_name") or m.get("name") or m.get("id") or ""
-                    name = m.get("name") or mid
-                    arch = m.get("architecture") or ""
-                    if mid:
-                        tts_models.append({"id": mid, "name": f"{name} ({arch})"})
+                    if not mid or mid in tts_seen:
+                        continue
+                    # Only include Aura and Aura-2 voices
+                    if not (mid.startswith("aura-") or mid.startswith("aura-2-") or m.get("architecture") in ("aura", "aura-2")):
+                        continue
+                    meta = m.get("metadata") or {}
+                    display_name = meta.get("display_name") or m.get("name") or mid
+                    accent = meta.get("accent") or ""
+                    tag_str = f" ({accent})" if accent else ""
+                    tts_seen.add(mid)
+                    tts_models.append({"id": mid, "name": f"{display_name}{tag_str}"})
 
     return stt_models, tts_models, True
 
@@ -147,7 +166,8 @@ def _fetch_fish_models_sync(api_key: str):
             },
             method="GET",
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        from app.shared.config.knobs import knobs
+        with urllib.request.urlopen(req, timeout=knobs.network.model_fetch_timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             items = data.get("items") or data.get("data") or []
             seen = set()
@@ -395,18 +415,13 @@ async def fetch_speech_models(req: SpeechModelFetchRequest):
         else:  # Deepgram
             live_stt, live_tts, is_valid = await asyncio.to_thread(_fetch_deepgram_data_sync, api_key)
             
-            stt_map = {m["id"]: m for m in DEEPGRAM_STT_MODELS}
-            for m in live_stt:
-                stt_map[m["id"]] = m
-
-            tts_map = {m["id"]: m for m in DEEPGRAM_TTS_MODELS}
-            for m in live_tts:
-                tts_map[m["id"]] = m
+            final_stt = live_stt if (live_stt and is_valid) else DEEPGRAM_STT_MODELS
+            final_tts = live_tts if (live_tts and is_valid) else DEEPGRAM_TTS_MODELS
 
             return {
-                "stt_models": list(stt_map.values()),
-                "tts_models": list(tts_map.values()),
-                "tts_voices": list(tts_map.values()),
+                "stt_models": final_stt,
+                "tts_models": final_tts,
+                "tts_voices": final_tts,
                 "fetched": is_valid,
             }
     except urllib.error.HTTPError as e:

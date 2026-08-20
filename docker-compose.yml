@@ -19,6 +19,8 @@ services:
       dockerfile: Dockerfile
     container_name: voice-backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       DB_PATH: ${DB_PATH:-/app/data/widtts.db}
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY}
@@ -36,6 +38,7 @@ services:
       - "8000:8000"
     volumes:
       - voice_data:/app/data
+      - ./backend:/app
     depends_on:
       livekit:
         condition: service_started

@@ -130,8 +130,9 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
             headers["Authorization"] = f"Bearer {api_key}"
 
     try:
+        from app.shared.config.knobs import knobs
         req = urllib.request.Request(endpoint, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=knobs.network.provider_verify_timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             models = []
             if isinstance(data, dict):

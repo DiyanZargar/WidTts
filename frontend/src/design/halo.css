@@ -189,6 +189,27 @@
   z-index: 3;
 }
 
+/* -------------------- analog signal waveform -------------------- */
+
+.halo__waveform-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 14px;
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}
+
+.halo__waveform-canvas {
+  display: block;
+  width: 380px;
+  height: 54px;
+}
+
 /* -------------------- transcript -------------------- */
 
 .halo__transcript-area {
