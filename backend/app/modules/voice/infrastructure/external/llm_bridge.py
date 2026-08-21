@@ -40,7 +40,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, Union, cast, runtime_checkable
 
 from livekit.agents.llm import ChatChunk, ChoiceDelta, LLM, LLMStream
 from livekit.agents.llm.chat_context import ChatContext
@@ -157,7 +157,7 @@ class DefaultConversationAdapter:
         import httpx
 
         client = self._openai_client
-        if not client or (base_url and str(client.base_url).rstrip('/') != str(base_url).rstrip('/')):
+        if not client or (base_url and str(client.base_url).rstrip('/') != base_url.rstrip('/')):
             client = AsyncOpenAI(
                 api_key=api_key or "sk-dummy",
                 base_url=base_url,
@@ -169,7 +169,7 @@ class DefaultConversationAdapter:
 
         response = await client.chat.completions.create(
             model=model,
-            messages=messages,  # type: ignore
+            messages=cast(Any, messages),
             stream=True,
             temperature=knobs.llm.temperature,
             top_p=knobs.llm.top_p,
@@ -688,7 +688,7 @@ class CustomLLMBridge(LLM):
 
 # ── Module-level helpers ────────────────────────────────────────────
 
-def _extract_user_text(chat_ctx: ChatContext) -> str:
+def _extract_user_text(chat_ctx: Any) -> str:
     """Extract the most recent committed user transcript from the chat context."""
     items = getattr(chat_ctx, "items", None) or []
     for item in reversed(items):
@@ -708,7 +708,7 @@ def _extract_user_text(chat_ctx: ChatContext) -> str:
     return ""
 
 
-def _find_last_assistant_message(chat_ctx: ChatContext) -> Optional[str]:
+def _find_last_assistant_message(chat_ctx: Any) -> Optional[str]:
     """Find the last assistant message for REPEAT action."""
     items = getattr(chat_ctx, "items", None) or []
     for item in reversed(items):
@@ -730,7 +730,7 @@ def _find_last_assistant_message(chat_ctx: ChatContext) -> Optional[str]:
     return None
 
 
-def _build_context_messages(chat_ctx: ChatContext) -> List[Dict[str, str]]:
+def _build_context_messages(chat_ctx: Any) -> List[Dict[str, str]]:
     """Convert ``ChatContext`` items into a plain message list for the conversation adapter."""
     messages: List[Dict[str, str]] = []
     items = getattr(chat_ctx, "items", None) or []

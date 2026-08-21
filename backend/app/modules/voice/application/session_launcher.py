@@ -75,6 +75,7 @@ async def start_session(
         SessionSnapshot,
     )
 
+    session = None
     try:
         # STT credentials — pass encrypted blob to factory (factory decrypts)
         stt_cred_blob = {}
@@ -187,7 +188,7 @@ async def start_session(
     except Exception as e:
         logger.error("[SESSION] Session adapter failed for %s: %s", session_id, e)
     finally:
-        if "session" in locals():
+        if session is not None:
             try:
                 await session.destroy()
             except Exception:
