@@ -24,3 +24,6 @@ venv/
 *.zip
 test_output.mp3
 test_input.wav
+
+# Documentation / Notes
+knobs.md
