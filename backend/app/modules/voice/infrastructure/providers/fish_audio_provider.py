@@ -36,14 +36,14 @@ class FishAudioProvider(BaseSpeechProvider):
         from app.shared.config.knobs import knobs
 
         api_key: str = creds["api_key"]
-        model: str = config.get("tts_custom_model") or config.get("tts_model") or knobs.fish_audio_tts.default_model
-        reference_id: str = config.get("tts_custom_voice_id") or config.get("tts_voice_id") or ""
+        model: str = config.get("tts_model") or knobs.fish_audio_tts.default_model
+        reference_id: str = config.get("tts_voice_id") or ""
         language: str = config.get("tts_language") or ""
-        custom_endpoint: str = config.get("tts_custom_endpoint") or ""
+        custom_endpoint: str = config.get("custom_endpoint") or ""
 
         logger.info(
-            "[FISH_AUDIO] TTS  model=%s  reference_id=%s  language=%s  endpoint=%s",
-            model, mask(reference_id), language, custom_endpoint or "(default)",
+            "[FISH_AUDIO] TTS  model=%s  reference_id=%s  language=%s",
+            model, mask(reference_id), language,
         )
         return FishAudioTTS(
             api_key=api_key,

@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.modules.provider.infrastructure.persistence.llm_provider_repository import LLMProviderRepository
 from app.shared.security.envelope_encryption import encrypt_and_store, load_and_decrypt
+from app.shared.schemas import LLMProviderResponse, StatusResponse
 from app.shared.constants.provider_urls import (
     OPENAI_API_URL, ANTHROPIC_API_URL, MISTRAL_API_URL, MOONSHOT_API_URL,
     OPENROUTER_API_URL, OLLAMA_API_URL, GOOGLE_API_URL,
@@ -25,7 +26,6 @@ class LLMProviderCreateRequest(BaseModel):
     provider_type: str  # 'openai' | 'anthropic' | 'google' | 'openai_compatible'
     base_url: str = ""
     credentials: Dict[str, Any]  # plaintext {"api_key": "..."}
-    is_default: bool = False
 
 
 class LLMProviderUpdateRequest(BaseModel):
@@ -33,7 +33,6 @@ class LLMProviderUpdateRequest(BaseModel):
     provider_type: Optional[str] = None
     base_url: Optional[str] = None
     credentials: Optional[Dict[str, Any]] = None
-    is_default: Optional[bool] = None
 
 
 class LLMModelFetchRequest(BaseModel):
@@ -158,7 +157,7 @@ def _fetch_models_sync(base_url: str, api_key: str, provider_type: str) -> List[
         return []
 
 
-@router.get("")
+@router.get("", response_model=List[LLMProviderResponse])
 async def list_llm_providers():
     providers = await _repo.list_all()
     for p in providers:
@@ -192,7 +191,7 @@ async def fetch_llm_models(req: LLMModelFetchRequest):
     return {"models": models, "fetched": True}
 
 
-@router.post("")
+@router.post("", response_model=StatusResponse)
 async def create_llm_provider(req: LLMProviderCreateRequest):
     blob, key_version = await encrypt_and_store(req.credentials)
     provider_data = {
@@ -201,13 +200,12 @@ async def create_llm_provider(req: LLMProviderCreateRequest):
         "base_url": req.base_url,
         "credentials_enc": blob,
         "key_version": key_version,
-        "is_default": req.is_default,
     }
     pid = await _repo.create(provider_data)
     return {"id": pid, "status": "created"}
 
 
-@router.get("/{provider_id}")
+@router.get("/{provider_id}", response_model=LLMProviderResponse)
 async def get_llm_provider(provider_id: str):
     provider = await _repo.get_by_id(provider_id)
     if not provider:
@@ -216,7 +214,7 @@ async def get_llm_provider(provider_id: str):
     return provider
 
 
-@router.put("/{provider_id}")
+@router.put("/{provider_id}", response_model=LLMProviderResponse)
 async def update_llm_provider(provider_id: str, req: LLMProviderUpdateRequest):
     existing = await _repo.get_by_id(provider_id)
     if not existing:
@@ -233,7 +231,10 @@ async def update_llm_provider(provider_id: str, req: LLMProviderUpdateRequest):
         updates["key_version"] = key_version
 
     await _repo.update(provider_id, updates)
-    return {"status": "updated"}
+    updated = await _repo.get_by_id(provider_id)
+    if updated:
+        updated["credentials_enc"] = {"encrypted": True}
+    return updated
 
 
 @router.delete("/{provider_id}")

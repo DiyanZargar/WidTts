@@ -36,7 +36,7 @@ class ElevenLabsProvider(BaseSpeechProvider):
         from app.shared.config.knobs import knobs
 
         api_key: str = creds["api_key"]
-        voice_id: str = config.get("tts_custom_voice_id") or config.get("tts_voice_id") or ""
+        voice_id: str = config.get("tts_voice_id") or ""
 
         # Extract 20-char voice ID from tts_model if passed there
         if not voice_id and config.get("tts_model"):
@@ -46,7 +46,7 @@ class ElevenLabsProvider(BaseSpeechProvider):
 
         # Fallback to default voice ID from knobs (Sarah) which is available on all tiers
         voice_id = voice_id or knobs.elevenlabs_tts.default_voice_id
-        model = config.get("tts_custom_model") or config.get("tts_model") or knobs.elevenlabs_tts.default_model
+        model = config.get("tts_model") or knobs.elevenlabs_tts.default_model
         language: str = config.get("tts_language") or ""
         logger.info("[ELEVENLABS] TTS  voice_id=%s  language=%s", mask(voice_id), language)
 

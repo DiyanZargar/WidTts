@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from app.modules.provider.infrastructure.persistence.speech_provider_repository import SpeechProviderRepository
 from app.shared.security.envelope_encryption import encrypt_and_store, load_and_decrypt
+from app.shared.schemas import SpeechProviderResponse, StatusResponse
 from app.shared.constants.provider_urls import ELEVENLABS_API_URL, DEEPGRAM_API_URL, FISH_AUDIO_API_URL
 from app.shared.constants.model_catalogs import (
     DEEPGRAM_STT_MODELS, DEEPGRAM_TTS_MODELS,
@@ -355,7 +356,7 @@ async def _trigger_prewarm(api_key: str, provider_type: str, models: List[str]):
     await asyncio.to_thread(_prewarm_models_background, api_key, provider_type, models)
 
 
-@router.get("")
+@router.get("", response_model=List[SpeechProviderResponse])
 async def list_speech_providers():
     providers = await _repo.list_all()
     for p in providers:
@@ -505,7 +506,7 @@ async def create_speech_provider(req: SpeechProviderCreateRequest):
     return {"id": pid, "status": "created"}
 
 
-@router.get("/{provider_id}")
+@router.get("/{provider_id}", response_model=SpeechProviderResponse)
 async def get_speech_provider(provider_id: str):
     provider = await _repo.get_by_id(provider_id)
     if not provider:
@@ -514,7 +515,7 @@ async def get_speech_provider(provider_id: str):
     return provider
 
 
-@router.put("/{provider_id}")
+@router.put("/{provider_id}", response_model=SpeechProviderResponse)
 async def update_speech_provider(provider_id: str, req: SpeechProviderUpdateRequest):
     existing = await _repo.get_by_id(provider_id)
     if not existing:
@@ -531,7 +532,10 @@ async def update_speech_provider(provider_id: str, req: SpeechProviderUpdateRequ
         updates["key_version"] = key_version
 
     await _repo.update(provider_id, updates)
-    return {"status": "updated"}
+    updated = await _repo.get_by_id(provider_id)
+    if updated:
+        updated["credentials_enc"] = {"encrypted": True}
+    return updated
 
 
 @router.delete("/{provider_id}")

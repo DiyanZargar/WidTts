@@ -3,7 +3,7 @@
 import re
 import asyncio
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.modules.bot.infrastructure.persistence.bot_repository import BotRepository
 from app.shared.schemas import BotResponse, StatusResponse
@@ -21,7 +21,6 @@ def _generate_slug(name: str) -> str:
 class BotCreateRequest(BaseModel):
     name: str
     description: str = ""
-    personality: str = ""
     system_prompt: str = ""
     llm_provider_id: Optional[str] = None
     llm_model: str = ""
@@ -34,15 +33,11 @@ class BotCreateRequest(BaseModel):
     tts_languages: List[str] = ["en"]
     tts_primary_language: str = "en"
     greeting: str = ""
-    tts_custom_model: str = ""
-    tts_custom_voice_id: str = ""
-    tts_custom_endpoint: str = ""
 
 
 class BotUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    personality: Optional[str] = None
     system_prompt: Optional[str] = None
     llm_provider_id: Optional[str] = None
     llm_model: Optional[str] = None
@@ -55,9 +50,6 @@ class BotUpdateRequest(BaseModel):
     tts_languages: Optional[List[str]] = None
     tts_primary_language: Optional[str] = None
     greeting: Optional[str] = None
-    tts_custom_model: Optional[str] = None
-    tts_custom_voice_id: Optional[str] = None
-    tts_custom_endpoint: Optional[str] = None
 
 
 @router.get("", response_model=List[BotResponse])
@@ -65,19 +57,35 @@ async def list_bots():
     return await _repo.list_all()
 
 
+import sqlite3
+
+
 @router.post("", response_model=StatusResponse)
 async def create_bot(req: BotCreateRequest):
-    bot_id = await _repo.create(req.model_dump())
-    await _repo.update(bot_id, {"name_locked": True})
-    await _repo.activate(bot_id)
-    return {"id": bot_id, "status": "created"}
+    data = req.model_dump()
+    for pid_field in ("llm_provider_id", "stt_provider_id", "tts_provider_id"):
+        if data.get(pid_field) in ("", "string", "null"):
+            data[pid_field] = None
+    if isinstance(data.get("stt_languages"), list) and data["stt_languages"] == ["string"]:
+        data["stt_languages"] = ["en"]
+    if isinstance(data.get("tts_languages"), list) and data["tts_languages"] == ["string"]:
+        data["tts_languages"] = ["en"]
+
+    try:
+        bot_id = await _repo.create(data)
+        await _repo.update(bot_id, {"name_locked": True})
+        await _repo.activate(bot_id)
+        return {"id": bot_id, "status": "created"}
+    except sqlite3.IntegrityError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Database constraint error: Check that llm_provider_id, stt_provider_id, and tts_provider_id are valid provider UUIDs. ({str(e)})"
+        )
 
 
-@router.get("/active")
+@router.get("/active", response_model=Optional[BotResponse])
 async def get_active_bot():
     bot = await _repo.get_active()
-    if not bot:
-        return {"active": None}
     return bot
 
 
@@ -88,37 +96,54 @@ async def list_speech_models(provider_type: str):
 
 @router.get("/speech-voices/{provider_id}")
 async def list_speech_voices(provider_id: str):
-    """Fetch actual voice names from a speech provider's API (e.g. Fish Audio voice library, ElevenLabs voices)."""
+    """Fetch actual voice names from a speech provider's API (e.g. Fish Audio voice library, ElevenLabs voices, Deepgram Aura).
+    
+    Accepts either a provider UUID or provider_type ('elevenlabs', 'fishaudio', 'deepgram').
+    """
     from app.modules.provider.infrastructure.persistence.speech_provider_repository import SpeechProviderRepository
     from app.shared.security.envelope_encryption import load_and_decrypt
     from app.entrypoints.http.admin.speech_provider_routes import _fetch_fish_models_sync, _fetch_elevenlabs_data_sync
+    from app.shared.constants.model_catalogs import get_speech_models
 
     speech_repo = SpeechProviderRepository()
     provider = await speech_repo.get_by_id(provider_id)
     if not provider:
-        return {"voices": []}
+        all_providers = await speech_repo.list_all()
+        matching = [p for p in all_providers if p.get("provider_type") == provider_id]
+        if matching:
+            provider = matching[0]
 
-    provider_type = provider.get("provider_type", "")
+    provider_type = provider.get("provider_type", "") if provider else provider_id
+
+    if provider_type == "deepgram":
+        catalog = get_speech_models("deepgram")
+        return {"voices": catalog.get("tts", [])}
+
+    if not provider:
+        catalog = get_speech_models(provider_type)
+        return {"voices": catalog.get("tts", [])}
 
     try:
         creds = await load_and_decrypt(provider["credentials_enc"], provider.get("key_version", 1))
         api_key = creds.get("api_key", "")
         if not api_key:
-            return {"voices": []}
+            catalog = get_speech_models(provider_type)
+            return {"voices": catalog.get("tts", [])}
 
         if provider_type == "fishaudio":
             _, voices, _ = await asyncio.to_thread(_fetch_fish_models_sync, api_key)
             return {"voices": voices}
         elif provider_type == "elevenlabs":
             _, voices, _ = await asyncio.to_thread(_fetch_elevenlabs_data_sync, api_key)
-            # ElevenLabs voices don't have language info; tag them as 'multi'
             for v in voices:
                 v["language"] = "en"
             return {"voices": voices}
         else:
-            return {"voices": []}
+            catalog = get_speech_models(provider_type)
+            return {"voices": catalog.get("tts", [])}
     except Exception:
-        return {"voices": []}
+        catalog = get_speech_models(provider_type)
+        return {"voices": catalog.get("tts", [])}
 
 
 @router.get("/{bot_id}", response_model=BotResponse)
@@ -129,18 +154,41 @@ async def get_bot(bot_id: str):
     return bot
 
 
-@router.put("/{bot_id}")
+@router.put("/{bot_id}", response_model=BotResponse)
 async def update_bot(bot_id: str, req: BotUpdateRequest):
     existing = await _repo.get_by_id(bot_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Bot not found")
-    updates = {k: v for k, v in req.model_dump().items() if v is not None}
+
+    # Filter out None and Swagger dummy placeholders
+    updates = {}
+    for k, v in req.model_dump().items():
+        if v is not None:
+            if isinstance(v, str) and v == "string":
+                continue
+            if isinstance(v, list) and v == ["string"]:
+                continue
+            updates[k] = v
+
+    # Convert empty provider IDs to None so SQLite doesn't fail foreign keys
+    for pid_field in ("llm_provider_id", "stt_provider_id", "tts_provider_id"):
+        if pid_field in updates and updates[pid_field] in ("", "null"):
+            updates[pid_field] = None
+
     # Prevent name changes once locked
     if existing.get("name_locked") and "name" in updates:
         del updates["name"]
-    await _repo.update(bot_id, updates)
-    await _repo.activate(bot_id)
-    return {"status": "updated"}
+
+    try:
+        await _repo.update(bot_id, updates)
+        await _repo.activate(bot_id)
+        updated_bot = await _repo.get_by_id(bot_id)
+        return updated_bot
+    except sqlite3.IntegrityError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Database constraint error: Check that llm_provider_id, stt_provider_id, and tts_provider_id are valid provider UUIDs. ({str(e)})"
+        )
 
 
 @router.delete("/{bot_id}")

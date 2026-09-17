@@ -32,9 +32,6 @@ class SessionSnapshot:
     stt_language: str = "en"
     tts_voice_id: str = ""
     tts_language: str = "en"
-    tts_custom_model: str = ""
-    tts_custom_voice_id: str = ""
-    tts_custom_endpoint: str = ""
     stt_languages: list = field(default_factory=lambda: ["en"])
     stt_primary_language: str = "en"
     tts_languages: list = field(default_factory=lambda: ["en"])
@@ -70,6 +67,9 @@ class LiveKitSession:
     _llm_bridge: Any = field(default=None, repr=False)
     _agent_session: Any = field(default=None, repr=False)
     _room: Any = field(default=None, repr=False)
+    _farewell_task: Any = field(default=None, repr=False)
+    _watchdog_task: Any = field(default=None, repr=False)
+    _last_voice_activity: float = field(default_factory=time.monotonic, repr=False)
     _is_destroyed: bool = False
     _started_at: Optional[float] = None
 
@@ -92,12 +92,14 @@ class LiveKitSession:
 
             timeout_sec = knobs.runtime.user_away_timeout
 
+            # Set user_away_timeout=None so LiveKit's internal opaque timer is disabled.
+            # Inactivity is governed by our transparent Silero VAD / STT / TTS watchdog.
             self._agent_session = AgentSession(
                 vad=self._vad_plugin,
                 stt=self._stt_plugin,
                 llm=self._llm_bridge,
                 tts=self._tts_plugin,
-                user_away_timeout=timeout_sec,
+                user_away_timeout=None,
                 turn_handling=cast(Any, knobs.to_turn_handling_dict()),
                 aec_warmup_duration=knobs.runtime.aec_warmup_duration,
                 transcription_timeout=knobs.runtime.transcription_timeout,
@@ -110,54 +112,29 @@ class LiveKitSession:
                 ivr_detection=knobs.runtime.ivr_detection,
             )
 
-            # Handle inactivity timeout (user away for timeout_sec)
+            def _mark_voice_activity():
+                self._last_voice_activity = time.monotonic()
+                if self._farewell_task and not self._farewell_task.done():
+                    logger.info("[SESSION] Voice activity detected — cancelling farewell disconnect for session=%s", self.snapshot.session_id)
+                    self._farewell_task.cancel()
+                    self._farewell_task = None
+
+            # Silero VAD state events: refresh on speech detection
             @self._agent_session.on("user_state_changed")
             def _on_user_state_changed(ev):
-                if getattr(ev, "new_state", None) == "away":
-                    logger.info("[SESSION] Inactivity timeout (%ss) reached for session=%s", timeout_sec, self.snapshot.session_id)
-                    import asyncio
+                new_state = getattr(ev, "new_state", None)
+                if new_state in ("speaking", "listening"):
+                    _mark_voice_activity()
 
-                    async def _farewell_then_disconnect():
-                        # 1. Play a farewell message via TTS (prompt-independent)
-                        try:
-                            if self._agent_session and not self._is_destroyed:
-                                self._agent_session.say(
-                                    knobs.llm.default_farewell_speech,
-                                    allow_interruptions=False,
-                                )
-                                # Give TTS time to synthesize + play the farewell
-                                await asyncio.sleep(knobs.runtime.farewell_drain_delay)
-                        except Exception as e:
-                            logger.warning("[SESSION] Farewell TTS failed: %s", e)
-
-                        # 2. Notify frontend before disconnecting
-                        try:
-                            target_room = self._room or (self._agent_session.room if self._agent_session else None)
-                            if target_room and target_room.local_participant:
-                                import json
-                                payload = json.dumps({
-                                    "event": "session_end",
-                                    "payload": {"reason": "inactivity_timeout"},
-                                }).encode("utf-8")
-                                await target_room.local_participant.publish_data(payload)
-                                logger.info("[SESSION] Published session_end event to room for session=%s", self.snapshot.session_id)
-                                await asyncio.sleep(knobs.runtime.farewell_publish_delay)  # brief pause for data delivery
-                        except Exception as e:
-                            logger.warning("[SESSION] Failed to publish session_end: %s", e)
-
-                        # 3. Tear down session
-                        await self.destroy()
-
-                    asyncio.create_task(_farewell_then_disconnect())
-
-            # Fast barge-in for short concrete words ("wait", "stop", "no no", etc.)
+            # STT input events: refresh on transcribed user speech
             @self._agent_session.on("user_input_transcribed")
             def _on_user_input_transcribed(ev):
+                _mark_voice_activity()
                 transcript = (getattr(ev, "transcript", None) or "").strip().lower()
                 if not transcript:
                     return
 
-                # If agent is currently speaking, check if the utterance contains urgent interruption words
+                # If agent is currently speaking, check for urgent interruption words
                 is_speaking = getattr(self._agent_session, "agent_state", None) == "speaking" or bool(getattr(self._agent_session, "current_speech", None))
                 if is_speaking:
                     urgent_words = knobs.policy.urgent_interruption_words
@@ -170,29 +147,99 @@ class LiveKitSession:
                         except Exception as e:
                             logger.warning("[SESSION] Urgent interruption failed: %s", e)
 
+            # Agent state events: refresh when agent is speaking or thinking
+            @self._agent_session.on("agent_state_changed")
+            def _on_agent_state_changed(ev):
+                new_state = getattr(ev, "new_state", None)
+                if new_state in ("speaking", "thinking"):
+                    _mark_voice_activity()
+
+            # Inactivity watchdog: monitors mutual silence across Silero VAD, STT, and TTS
+            if timeout_sec and timeout_sec > 0:
+                import asyncio
+
+                async def _inactivity_watchdog():
+                    try:
+                        while not self._is_destroyed:
+                            await asyncio.sleep(1.0)
+                            if self._is_destroyed:
+                                break
+
+                            user_state = getattr(self._agent_session, "user_state", None)
+                            agent_state = getattr(self._agent_session, "agent_state", None)
+                            has_speech = bool(getattr(self._agent_session, "current_speech", None))
+
+                            if user_state == "speaking" or agent_state in ("speaking", "thinking") or has_speech:
+                                self._last_voice_activity = time.monotonic()
+                                continue
+
+                            silence_sec = time.monotonic() - self._last_voice_activity
+                            if silence_sec >= timeout_sec:
+                                logger.info(
+                                    "[SESSION] Continuous silence for %.1fs (limit %ss) — triggering farewell for session=%s",
+                                    silence_sec, timeout_sec, self.snapshot.session_id,
+                                )
+
+                                async def _farewell_then_disconnect():
+                                    try:
+                                        try:
+                                            if self._agent_session and not self._is_destroyed:
+                                                self._agent_session.say(
+                                                    knobs.llm.default_farewell_speech,
+                                                    allow_interruptions=True,
+                                                )
+                                                await asyncio.sleep(knobs.runtime.farewell_drain_delay)
+                                        except asyncio.CancelledError:
+                                            raise
+                                        except Exception as e:
+                                            logger.warning("[SESSION] Farewell TTS failed: %s", e)
+
+                                        try:
+                                            target_room = self._room or (self._agent_session.room if self._agent_session else None)
+                                            if target_room and target_room.local_participant and not self._is_destroyed:
+                                                import json
+                                                payload = json.dumps({
+                                                    "event": "session_end",
+                                                    "payload": {"reason": "inactivity_timeout"},
+                                                }).encode("utf-8")
+                                                await target_room.local_participant.publish_data(payload)
+                                                logger.info("[SESSION] Published session_end event for session=%s", self.snapshot.session_id)
+                                                await asyncio.sleep(knobs.runtime.farewell_publish_delay)
+                                        except asyncio.CancelledError:
+                                            raise
+                                        except Exception as e:
+                                            logger.warning("[SESSION] Failed to publish session_end: %s", e)
+
+                                        if not self._is_destroyed:
+                                            await self.destroy()
+                                    except asyncio.CancelledError:
+                                        logger.info("[SESSION] Farewell disconnect cancelled — session remains active")
+
+                                if self._farewell_task and not self._farewell_task.done():
+                                    self._farewell_task.cancel()
+                                self._farewell_task = asyncio.create_task(_farewell_then_disconnect())
+                                break
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as e:
+                        logger.warning("[SESSION] Inactivity watchdog error: %s", e)
+
+                self._watchdog_task = asyncio.create_task(_inactivity_watchdog())
+
             # Build system instructions with bot identity and language (strictly from snapshot)
             bot_name = (self.snapshot.bot_name or "").strip()
             bot_desc = (self.snapshot.bot_description or "").strip()
             lang = self.snapshot.tts_primary_language or "en"
-            farewell_marker = knobs.llm.farewell_marker
 
+            identity_parts = []
             if bot_name:
-                identity = f"Your name is \"{bot_name}\". You MUST use this name when introducing yourself — never invent, guess, or substitute a different name."
-            else:
-                identity = ""
-
+                identity_parts.append(f"Your name is \"{bot_name}\". You MUST use this name when introducing yourself — never invent, guess, or substitute a different name.")
             if bot_desc:
-                identity = f"{identity} {bot_desc}".strip()
-
+                identity_parts.append(bot_desc)
             if lang and lang != "en":
-                identity += (
-                    f" You MUST ALWAYS respond in language '{lang}' and no other language."
-                    f" This is non-negotiable — every response, every word, must be in '{lang}'."
-                    f" When you need to end the conversation or say goodbye, append the marker {farewell_marker} at the very end of your response."
-                )
-            else:
-                identity += f" When you need to end the conversation or say goodbye, append the marker {farewell_marker} at the very end of your response."
-            
+                identity_parts.append(f"You MUST ALWAYS respond in language '{lang}' and no other language. This is non-negotiable — every response, every word, must be in '{lang}'.")
+
+            identity = " ".join(identity_parts).strip()
             instructions = f"{identity}\n\n{self.snapshot.system_prompt}" if self.snapshot.system_prompt else identity
 
             # Voice conversational guidelines
@@ -285,9 +332,6 @@ class LiveKitSession:
             "tts_model": self.snapshot.tts_model,
             "tts_voice_id": self.snapshot.tts_voice_id,
             "tts_language": self.snapshot.tts_language,
-            "tts_custom_model": self.snapshot.tts_custom_model,
-            "tts_custom_voice_id": self.snapshot.tts_custom_voice_id,
-            "tts_custom_endpoint": self.snapshot.tts_custom_endpoint,
             "credentials_enc": self.snapshot.encrypted_tts_credentials,
             "key_version": self.snapshot.tts_key_version,
         }
@@ -328,13 +372,18 @@ class LiveKitSession:
         }
 
         def _schedule_session_end():
-            """Schedule room disconnect 5 seconds after farewell."""
+            """Schedule room disconnect 5 seconds after explicit farewell command."""
             async def _delayed_disconnect():
-                await asyncio.sleep(5)
-                if not self._is_destroyed and self._room:
-                    logger.info("[SESSION] Farewell grace period ended — disconnecting room")
-                    await self._room.disconnect()
-            asyncio.create_task(_delayed_disconnect())
+                try:
+                    await asyncio.sleep(5)
+                    if not self._is_destroyed and self._room:
+                        logger.info("[SESSION] Farewell grace period ended — disconnecting room")
+                        await self._room.disconnect()
+                except asyncio.CancelledError:
+                    logger.info("[SESSION] Explicit farewell disconnect cancelled by new user activity")
+            if self._farewell_task and not self._farewell_task.done():
+                self._farewell_task.cancel()
+            self._farewell_task = asyncio.create_task(_delayed_disconnect())
 
         return CustomLLMBridge(
             bot=bot_config,
@@ -353,6 +402,13 @@ class LiveKitSession:
             return
         self._is_destroyed = True
         logger.info("[SESSION] Destroying session=%s", self.snapshot.session_id)
+
+        if self._watchdog_task and not self._watchdog_task.done():
+            self._watchdog_task.cancel()
+            self._watchdog_task = None
+        if self._farewell_task and not self._farewell_task.done():
+            self._farewell_task.cancel()
+            self._farewell_task = None
 
         # Mark session as completed in database
         try:

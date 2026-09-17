@@ -12,7 +12,6 @@ class BotResponse(BaseModel):
     id: str
     name: str
     description: str = ""
-    personality: str = ""
     system_prompt: str = ""
     llm_provider_id: Optional[str] = None
     llm_model: str = ""
@@ -25,9 +24,6 @@ class BotResponse(BaseModel):
     tts_languages: List[str] = ["en"]
     tts_primary_language: str = "en"
     greeting: str = ""
-    tts_custom_model: str = ""
-    tts_custom_voice_id: str = ""
-    tts_custom_endpoint: str = ""
     is_active: bool = False
     deploy_slug: Optional[str] = None
     is_deployed: bool = False
@@ -72,3 +68,32 @@ class BotDeployResponse(BaseModel):
     bot_id: str
     slug: str
     url: str
+
+
+class LLMProviderResponse(BaseModel):
+    """Response for GET /admin/api/llm-providers and GET /admin/api/llm-providers/{id}."""
+    id: str
+    name: str
+    provider_type: str
+    base_url: str = ""
+    credentials_enc: dict = {"encrypted": True}
+    key_version: int = 1
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class SpeechProviderResponse(BaseModel):
+    """Response for GET /admin/api/speech-providers and GET /admin/api/speech-providers/{id}."""
+    id: str
+    name: str
+    provider_type: str
+    credentials_enc: dict = {"encrypted": True}
+    key_version: int = 1
+    stt_model: str = ""
+    stt_language: str = "en"
+    stt_extra: dict = {}
+    tts_model: str = ""
+    tts_voice_id: str = ""
+    tts_extra: dict = {}
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

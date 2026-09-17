@@ -73,7 +73,7 @@ class DeepgramProvider(BaseSpeechProvider):
         from app.shared.config.knobs import knobs
 
         api_key: str = creds["api_key"]
-        model: str = config.get("tts_custom_model") or config.get("tts_model") or knobs.deepgram_tts.default_model
+        model: str = config.get("tts_model") or knobs.deepgram_tts.default_model
 
         # Map flux-* model names to valid Deepgram Aura voices for LiveKit
         if model.startswith("flux-"):

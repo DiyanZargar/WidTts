@@ -45,33 +45,69 @@ class TestGenerateSlug:
 
 
 class TestBotRequestSchemas:
-    def test_bot_create_request_preserves_custom_tts_and_greeting(self):
+    def test_bot_create_request_preserves_greeting_and_fields(self):
         from app.entrypoints.http.admin.bot_routes import BotCreateRequest
         data = {
             "name": "Custom Assistant",
             "greeting": "Hello, I am your assistant!",
-            "tts_custom_model": "s2.1-pro",
-            "tts_custom_voice_id": "78326a284931481283726154",
-            "tts_custom_endpoint": "https://api.fish.audio",
+            "system_prompt": "You are a helpful assistant.",
+            "stt_model": "nova-3",
+            "tts_model": "flux-rufus-en",
         }
         req = BotCreateRequest(**data)
         dump = req.model_dump()
+        assert dump["name"] == "Custom Assistant"
         assert dump["greeting"] == "Hello, I am your assistant!"
-        assert dump["tts_custom_model"] == "s2.1-pro"
-        assert dump["tts_custom_voice_id"] == "78326a284931481283726154"
-        assert dump["tts_custom_endpoint"] == "https://api.fish.audio"
+        assert dump["system_prompt"] == "You are a helpful assistant."
+        assert dump["stt_model"] == "nova-3"
+        assert dump["tts_model"] == "flux-rufus-en"
+        assert "personality" not in dump
+        assert "tts_custom_model" not in dump
+        assert "tts_custom_voice_id" not in dump
+        assert "tts_custom_endpoint" not in dump
 
-    def test_bot_update_request_preserves_custom_tts_and_greeting(self):
+    def test_bot_update_request_preserves_greeting_and_fields(self):
         from app.entrypoints.http.admin.bot_routes import BotUpdateRequest
         data = {
             "greeting": "Updated greeting!",
-            "tts_custom_model": "s2-pro",
-            "tts_custom_voice_id": "custom_voice_123",
-            "tts_custom_endpoint": "https://custom.endpoint",
+            "system_prompt": "Updated prompt",
         }
         req = BotUpdateRequest(**data)
-        dump = req.model_dump()
+        dump = req.model_dump(exclude_unset=True)
         assert dump["greeting"] == "Updated greeting!"
-        assert dump["tts_custom_model"] == "s2-pro"
-        assert dump["tts_custom_voice_id"] == "custom_voice_123"
-        assert dump["tts_custom_endpoint"] == "https://custom.endpoint"
+        assert dump["system_prompt"] == "Updated prompt"
+        assert "personality" not in dump
+        assert "tts_custom_model" not in dump
+        assert "tts_custom_voice_id" not in dump
+        assert "tts_custom_endpoint" not in dump
+
+    def test_bot_response_schema_excludes_unused_fields(self):
+        from app.shared.schemas import BotResponse
+        raw_db_record = {
+            "id": "bot-123",
+            "name": "Maya",
+            "description": "Receptionist",
+            "personality": "friendly",
+            "system_prompt": "You are Maya",
+            "speech_provider_id": "sp-123",
+            "name_locked": 1,
+            "tts_custom_model": "custom-m",
+            "tts_custom_voice_id": "custom-v",
+            "tts_custom_endpoint": "http://custom",
+            "is_active": 1,
+            "is_deployed": 1,
+            "deploy_slug": "maya",
+        }
+        resp = BotResponse(**raw_db_record)
+        dump = resp.model_dump()
+        assert dump["id"] == "bot-123"
+        assert dump["name"] == "Maya"
+        assert dump["system_prompt"] == "You are Maya"
+        assert dump["is_active"] is True
+        assert dump["is_deployed"] is True
+        assert "personality" not in dump
+        assert "tts_custom_model" not in dump
+        assert "tts_custom_voice_id" not in dump
+        assert "tts_custom_endpoint" not in dump
+        assert "speech_provider_id" not in dump
+        assert "name_locked" not in dump

@@ -12,14 +12,13 @@ class BotRepository(BotRepositoryInterface):
         bid = bot.get("id", str(uuid.uuid4()))
         async with get_connection() as conn:
             await conn.execute(
-                """INSERT INTO bots (id, name, description, personality, system_prompt,
+                """INSERT INTO bots (id, name, description, system_prompt,
                    llm_provider_id, llm_model, stt_provider_id, tts_provider_id,
                    stt_model, tts_model, stt_languages, stt_primary_language,
-                   tts_languages, tts_primary_language, greeting,
-                   tts_custom_model, tts_custom_voice_id, tts_custom_endpoint, is_active, name_locked)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   tts_languages, tts_primary_language, greeting, is_active, name_locked)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 bid, bot["name"], bot.get("description", ""),
-                bot.get("personality", ""), bot.get("system_prompt", ""),
+                bot.get("system_prompt", ""),
                 bot.get("llm_provider_id"), bot.get("llm_model", ""),
                 bot.get("stt_provider_id"), bot.get("tts_provider_id"),
                 bot.get("stt_model", ""), bot.get("tts_model", ""),
@@ -28,9 +27,6 @@ class BotRepository(BotRepositoryInterface):
                 json.dumps(bot.get("tts_languages", ["en"])),
                 bot.get("tts_primary_language", "en"),
                 bot.get("greeting", ""),
-                bot.get("tts_custom_model", ""),
-                bot.get("tts_custom_voice_id", ""),
-                bot.get("tts_custom_endpoint", ""),
                 bot.get("is_active", False),
                 bot.get("name_locked", False),
             )
@@ -50,11 +46,10 @@ class BotRepository(BotRepositoryInterface):
         sets = []
         vals = []
         scalar_keys = [
-            "name", "description", "personality", "system_prompt",
+            "name", "description", "system_prompt",
             "llm_provider_id", "llm_model", "stt_provider_id", "tts_provider_id",
             "stt_model", "tts_model", "stt_primary_language", "tts_primary_language",
-            "greeting", "tts_custom_model", "tts_custom_voice_id", "tts_custom_endpoint", "is_active",
-            "name_locked",
+            "greeting", "is_active", "name_locked",
         ]
         json_keys = ["stt_languages", "tts_languages"]
 

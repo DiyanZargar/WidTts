@@ -85,7 +85,7 @@ class TestFishAudioProviderStrategy:
 
     def test_build_tts_constructs_fish_audio_instance(self):
         provider = FishAudioProvider()
-        config = {"tts_model": "s2.1-pro", "tts_custom_voice_id": "1234567890abcdef12345678"}
+        config = {"tts_model": "s2.1-pro", "tts_voice_id": "1234567890abcdef12345678"}
         creds = {"api_key": "fa-key"}
         tts = provider.build_tts(config, creds)
         assert isinstance(tts, FishAudioTTS)

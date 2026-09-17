@@ -558,9 +558,9 @@ class CustomLLMStream(LLMStream):
                 classification=action.value,
             )
 
-            # Check if the response contains the farewell marker
-            if self._bridge._on_session_end and _FAREWELL_MARKER in full_response:
-                logger.info("[BRIDGE] Farewell detected — scheduling session end in 5s")
+            # Schedule session end only when explicit conversation end was requested
+            if action == PolicyAction.END_CONVERSATION and self._bridge._on_session_end:
+                logger.info("[BRIDGE] Explicit farewell complete — scheduling session end in 5s")
                 self._bridge._on_session_end()
 
         except asyncio.CancelledError:
